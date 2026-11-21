@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=630';
-import { CONFIG } from './config.js?v=630';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=630';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=630';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=630';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=630';
-import { Ragdoll } from './ragdoll.js?v=630';
-import { Audio } from './audio.js?v=630';
-import { initBrain, updateBots } from './bots.js?v=630';
+import * as THREE from '../vendor/three.module.min.js?v=640';
+import { CONFIG } from './config.js?v=640';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=640';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=640';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=640';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=640';
+import { Ragdoll } from './ragdoll.js?v=640';
+import { Audio } from './audio.js?v=640';
+import { initBrain, updateBots } from './bots.js?v=640';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -222,7 +222,7 @@ export class Game {
     this.items.clear();
     this.corpses = [];
     this.props.reset();
-    this.props.removeRandom(0.01, 0.1);       // a random 1-10% of the furniture is gone this round
+    this.props.removeRandom(0.05, 0.35);      // a random 5-35% of the furniture is gone this round
 
     // teams: about a third seekers (at least one), the rest props.
     // The round has seats: some seeker seats and some prop seats. Each real player takes one seat
