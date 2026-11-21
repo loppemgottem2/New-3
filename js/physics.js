@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=170';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=170';
+import { CONFIG } from './config.js?v=180';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=180';
 
 const P = CONFIG.PLAYER;
 

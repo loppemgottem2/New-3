@@ -26,6 +26,9 @@ export const CONFIG = {
   TEAMS: {
     SEEKER_SHARE: 0.34,     // about a third of the players are seekers (always at least 1)
     SEEKER_HP: 100,
+    PROP_HUMAN_HP: 100,     // a prop player who hasn't turned into furniture yet
+    // health of a prop player disguised as each piece of furniture (bigger = tougher)
+    PROP_HP: { bottle: 10, takeout: 15, box: 60, chair: 80, lamp: 80, trashcan: 100, barrel: 150, mattress: 180, crate: 220, table: 300 },
     WRONG_PROP_DAMAGE: 10,  // seekers lose this much health for shooting / stabbing real furniture
     DISGUISE_RANGE: 6,      // props can turn into furniture this close (meters)
     DISGUISE_COOLDOWN: 0.8,
@@ -74,6 +77,9 @@ export const CONFIG = {
     KNIFE_PICKUP_RADIUS: 1.2,
     GUN_RANGE: 90,
     GUN_COOLDOWN: 2.0,          // revolver fire rate
+    KNIFE_DAMAGE: 50,           // damage to props (seekers' health is only lost by hitting real furniture)
+    GUN_DAMAGE: 75,
+    THROW_DAMAGE: 75,           // a thrown knife
   },
 
   // ---------------- Bots ----------------
