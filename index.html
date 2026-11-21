@@ -11,13 +11,13 @@
   <title>Find the Things</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=160">
+  <link rel="stylesheet" href="css/style.css?v=170">
 </head>
 <body>
   <canvas id="c"></canvas>
 
   <!-- first screen: tap anywhere to play (goes fullscreen) -->
-  <div id="tapplay"><div class="tp-tap">Tap to play</div><div class="tp-ver" id="tp-ver">v1.0.0</div></div>
+  <div id="tapplay"><div class="tp-tap">Tap to play</div></div>
   <div id="menu-bg-shade"></div>
 
   <!-- ===================== MAIN MENU ===================== -->
@@ -40,7 +40,6 @@
       </div>
       <div id="menu-notice" class="notice hidden"></div>
     </div>
-    <div class="version" id="version"></div>
   </div>
 
   <!-- ===================== SERVER BROWSER ===================== -->
@@ -151,7 +150,6 @@
     <div id="hud-stamina"><div></div></div>
     <div id="toasts"></div>
     <div id="bigmsg" class="hidden"><div class="t"></div><div class="s"></div></div>
-    <div id="fps" class="hidden"></div>
   </div>
 
   <!-- seekers are blindfolded while props hide -->
@@ -200,7 +198,11 @@
 
   <div id="rotate" class="hidden"><div>⟳</div>Rotate your phone sideways for the best experience<button id="rotate-ok" class="btn small">Play anyway</button></div>
 
+  <!-- version (bottom-right on the start screen and menus) and FPS counter (top-right) -->
+  <div id="verbadge"><span id="ver-n">v1.0.0</span><span id="ver-info"></span></div>
+  <div id="fps" class="hidden"></div>
+
   <script src="vendor/peerjs.min.js"></script>
-  <script type="module" src="js/main.js?v=160"></script>
+  <script type="module" src="js/main.js?v=170"></script>
 </body>
 </html>

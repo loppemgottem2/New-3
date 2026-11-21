@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=160';
-import { CONFIG } from './config.js?v=160';
-import { store, makeCode, clamp } from './util.js?v=160';
-import { makeTextures } from './textures.js?v=160';
-import { GameMap } from './map.js?v=160';
-import { NavGrid } from './nav.js?v=160';
-import { Input, isTouchDevice } from './input.js?v=160';
-import { UI } from './ui.js?v=160';
-import { Audio } from './audio.js?v=160';
-import { Game } from './game.js?v=160';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=160';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=160';
+import * as THREE from '../vendor/three.module.min.js?v=170';
+import { CONFIG } from './config.js?v=170';
+import { store, makeCode, clamp } from './util.js?v=170';
+import { makeTextures } from './textures.js?v=170';
+import { GameMap } from './map.js?v=170';
+import { NavGrid } from './nav.js?v=170';
+import { Input, isTouchDevice } from './input.js?v=170';
+import { UI } from './ui.js?v=170';
+import { Audio } from './audio.js?v=170';
+import { Game } from './game.js?v=170';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=170';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=170';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -66,7 +66,7 @@ const SCHEMA = [
   { tab: 'HUD', key: 'crosshair', label: 'Crosshair', type: 'select', options: [['dot', 'Dot'], ['cross', 'Cross'], ['circle', 'Circle'], ['none', 'None']] },
   { tab: 'HUD', key: 'crossSize', label: 'Crosshair size', type: 'range', min: 2, max: 14, step: 1, fmt: (v) => `${v}px` },
   { tab: 'HUD', key: 'hudScale', label: 'HUD size', type: 'range', min: 0.7, max: 1.4, step: 0.05, fmt: pct },
-  { tab: 'HUD', key: 'fps', label: 'Show FPS', type: 'check' },
+  { tab: 'HUD', key: 'fps', label: 'Show FPS counter', note: 'top right: green = smooth, yellow = OK, red = slow', type: 'check' },
   { tab: 'HUD', key: 'hints', label: 'Show control hints', type: 'check' },
 ];
 
@@ -304,7 +304,8 @@ $('card-name').textContent = settings.name;
 const myName = () => (settings.name || DEFAULTS.name);
 
 // ---------------- menus ----------------
-$('version').textContent = `v${CONFIG.VERSION}${LOCAL_MODE ? ' · LOCAL TEST NETWORK' : ''}`;
+$('ver-n').textContent = `v${CONFIG.VERSION}`;
+$('ver-info').textContent = LOCAL_MODE ? 'local test build' : 'online build';
 let rotateDismissed = false;
 function checkRotate() {
   const portrait = window.innerHeight > window.innerWidth;
@@ -540,7 +541,6 @@ document.addEventListener('click', () => {
   goFullscreen();
 }, true);
 document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement) goFullscreen.ok = true; });
-$('tp-ver').textContent = `v${CONFIG.VERSION}`;
 $('tapplay').addEventListener('click', () => {
   if ($('tapplay').classList.contains('hidden')) return;
   goFullscreen();
@@ -635,9 +635,17 @@ function frame(now) {
   if (skyDome) { skyDome.position.copy(camera.position); skyDome.position.y -= camera.far * 0.06; skyDome.scale.setScalar(camera.far * 0.9); }
   renderer.render(scene, camera);
   if (settings.fps) {
-    fpsAcc += dt; fpsN++;
-    if (fpsAcc > 0.5) { $('fps').textContent = `${Math.round(fpsN / fpsAcc)} FPS`; fpsAcc = 0; fpsN = 0; }
+    // real frame time (not the capped game step), shown twice a second: green 50+, yellow 30-49, red under 30
+    fpsAcc += Math.min(1, (now - (frame.lastNow || now)) / 1000); fpsN++;
+    if (fpsAcc > 0.5) {
+      const f = Math.round(fpsN / fpsAcc), el = $('fps');
+      el.textContent = `${f} FPS`;
+      el.classList.toggle('ok', f >= 30 && f < 50);
+      el.classList.toggle('bad', f < 30);
+      fpsAcc = 0; fpsN = 0;
+    }
   }
+  frame.lastNow = now;
 }
 
 // ---------------- startup: build textures, bake the lighting ----------------
