@@ -19,8 +19,9 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=530';
-import { fbm } from './textures.js?v=530';
+import * as THREE from '../vendor/three.module.min.js?v=540';
+import { fbm } from './textures.js?v=540';
+import { furnish, DARK_ROOMS } from './furnish.js?v=540';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -221,22 +222,23 @@ export class GameMap {
       for (const [x, z] of crateCells) if (!done.has(x + ',' + z) && !(key.has((x - 1) + ',' + z) && same(x + ',' + z, (x - 1) + ',' + z)) && row(x, z, true) > 1) place(x, z, row(x, z, true), true);
       for (const [x, z] of crateCells) if (!done.has(x + ',' + z) && (done.has(x + ',' + (z - 1)) || !key.has(x + ',' + (z - 1)) || !same(x + ',' + z, x + ',' + (z - 1)))) place(x, z, row(x, z, false), false);
     }
-    // a creepy old baby doll lying on one of the beds (always the same bed for everyone)
-    const beds = this.propSpawns.filter((q) => q.type === 'mattress');
-    if (beds.length) {
-      const bed = beds[Math.floor(hash2(beds.length, 17) * beds.length)];
-      this.propSpawns.push({ type: 'babydoll', x: bed.x + 0.25, z: bed.z + 0.05, yaw: (bed.yaw || 0) + 0.4, tip: false });
-    }
+    // every room is furnished by hand in furnish.js (the letters in the layout only mark where the
+    // old furniture was; walls, floors, shelves and spawn points still come from the layout)
+    this.propSpawns = furnish();
     // ceiling lights
     this.lights = [];
     for (let z = 0; z < this.h; z++) for (let x = 0; x < this.w; x++) {
       const i = z * this.w + x;
       if (x % 3 === 1 && z % 3 === 1 && !this.outdoor[i] && this.heights[i] < WALL_H) {
-        this.lights.push({ x: (x + 0.5) * CELL, y: CEIL_H - 0.1, z: (z + 0.5) * CELL });
+        const L = { x: (x + 0.5) * CELL, y: CEIL_H - 0.1, z: (z + 0.5) * CELL };
+        // some rooms have their lights switched off (the fixture is still there, just dark)
+        L.off = DARK_ROOMS.some(([x0, z0, x1, z1]) => L.x > x0 && L.x < x1 && L.z > z0 && L.z < z1);
+        this.lights.push(L);
       }
     }
     this.lightBins = new Map();
     for (const L of this.lights) {
+      if (L.off) continue;
       const k = `${Math.floor(L.x / LAMP_RANGE)},${Math.floor(L.z / LAMP_RANGE)}`;
       if (!this.lightBins.has(k)) this.lightBins.set(k, []);
       this.lightBins.get(k).push(L);
@@ -622,13 +624,15 @@ export class GameMap {
     // ---- light fixtures ----
     {
       const fx = B('fixture', null);
-      const panel = new Builder(this);
+      const panel = new Builder(this), dark = new Builder(this);
       for (const L of this.lights) {
         fx.boxXZ(L.x - 0.72, L.z - 0.38, L.x + 0.72, L.z + 0.38, CEIL_H - 0.07, CEIL_H, [0.55, 0.55, 0.55]);
-        panel.flat(L.x - 0.64, L.z - 0.3, L.x + 0.64, L.z + 0.3, CEIL_H - 0.075);
+        (L.off ? dark : panel).flat(L.x - 0.64, L.z - 0.3, L.x + 0.64, L.z + 0.3, CEIL_H - 0.075);
       }
       const pm = new THREE.Mesh(panel.geometry(), new THREE.MeshBasicMaterial({ color: 0xfff6e2, toneMapped: false }));
       group.add(pm);
+      // switched-off lights: a dull grey panel (lit only by whatever light reaches the ceiling)
+      if (dark.pos.length) group.add(new THREE.Mesh(dark.geometry(), new THREE.MeshBasicMaterial({ color: 0x34342f, vertexColors: true })));
     }
 
     // ---- solid backing: every wall, pillar, shelf, counter and the roof slab is a closed box on the inside ----

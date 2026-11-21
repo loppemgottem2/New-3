@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=530';
-import { CONFIG } from './config.js?v=530';
-import { store, makeCode, clamp } from './util.js?v=530';
-import { makeTextures } from './textures.js?v=530';
-import { GameMap } from './map.js?v=530';
-import { NavGrid } from './nav.js?v=530';
-import { Input, isTouchDevice } from './input.js?v=530';
-import { UI } from './ui.js?v=530';
-import { Audio } from './audio.js?v=530';
-import { Game } from './game.js?v=530';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=530';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=530';
+import * as THREE from '../vendor/three.module.min.js?v=540';
+import { CONFIG } from './config.js?v=540';
+import { store, makeCode, clamp } from './util.js?v=540';
+import { makeTextures } from './textures.js?v=540';
+import { GameMap } from './map.js?v=540';
+import { NavGrid } from './nav.js?v=540';
+import { Input, isTouchDevice } from './input.js?v=540';
+import { UI } from './ui.js?v=540';
+import { Audio } from './audio.js?v=540';
+import { Game } from './game.js?v=540';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=540';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=540';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -31,7 +31,7 @@ const DEFAULTS = {
   fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
-  fps: false, blood: false, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
+  fps: false, blood: false, shadows: !touch, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
 };
 // (falls back to Killer Mystery's saved settings, so your character comes along)
 const settings = { ...DEFAULTS, ...store.get('findthethings-settings', store.get('killermystery-settings', {})) };
@@ -59,6 +59,7 @@ const SCHEMA = [
   { tab: 'Graphics', key: 'dynLights', label: 'Real-time lights', note: 'ceiling lights shine on people & furniture', type: 'select', options: [[0, 'Off (baked only)'], [4, '4'], [6, '6'], [8, '8'], [12, '12']] },
   { tab: 'Graphics', key: 'viewDist', label: 'View distance', type: 'range', min: 50, max: 250, step: 10, fmt: (v) => `${v} m` },
   { tab: 'Graphics', key: 'blood', label: 'Blood', note: 'blood splatter and drops when a prop is hit', type: 'check' },
+  { tab: 'Graphics', key: 'shadows', label: 'Shadows', note: 'people and furniture cast shadows under the ceiling lights', type: 'check' },
   { tab: 'Graphics', key: 'fog', label: 'Fog', type: 'check' },
   { tab: 'Graphics', key: 'glow', label: 'Light glow', type: 'check' },
   { tab: 'Graphics', key: 'antialias', label: 'Smooth edges (anti-aliasing)', note: 'applies after reloading the page', type: 'check' },
@@ -117,13 +118,74 @@ function setDynLights(n) {
   }
 }
 let lightT = 0;
+// ---------------- real shadows ----------------
+// The 3 ceiling lights nearest the camera get a shadow-casting spotlight (no extra light, intensity 0:
+// the level's lighting is baked). Their shadows land on an invisible "shadow catcher" over the floors.
+const shadowSpots = [];
+let shadowCatcher = null, shadowsOn = false, castT = 0;
+function buildShadowCatcher() {
+  const pos = [];
+  for (let z = 0; z < map.h; z++) {
+    let x = 0;
+    while (x < map.w) {
+      if (map.cellHeight(x, z) > 0) { x++; continue; }
+      let x1 = x; while (x1 + 1 < map.w && map.cellHeight(x1 + 1, z) === 0) x1++;
+      const X0 = x * 2, X1 = (x1 + 1) * 2, Z0 = z * 2, Z1 = (z + 1) * 2, y = 0.004;
+      pos.push(X0, y, Z0, X0, y, Z1, X1, y, Z1, X0, y, Z0, X1, y, Z1, X1, y, Z0);
+      x = x1 + 1;
+    }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  shadowCatcher = new THREE.Mesh(g, new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+  shadowCatcher.receiveShadow = true; shadowCatcher.renderOrder = 1; shadowCatcher.name = 'shadow-catcher';
+  scene.add(shadowCatcher);
+}
+function setShadows(on) {
+  on = !!on;
+  BLOB_SHADOWS.on = !on;
+  if (on === shadowsOn && (shadowCatcher || !map)) return;
+  shadowsOn = on;
+  renderer.shadowMap.enabled = on;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  if (on && map && !shadowCatcher) buildShadowCatcher();
+  if (shadowCatcher) shadowCatcher.visible = on;
+  while (shadowSpots.length < 3) {
+    const s = new THREE.SpotLight(0xffffff, 0, 14, 0.95, 0.5, 1);
+    s.castShadow = true; s.shadow.mapSize.set(512, 512); s.shadow.bias = -0.0006; s.shadow.camera.near = 0.3; s.shadow.camera.far = 14;
+    shadowSpots.push(s);
+  }
+  for (const s of shadowSpots) { if (on) { scene.add(s); scene.add(s.target); } else { scene.remove(s); scene.remove(s.target); } }
+  // every material has to be rebuilt with / without shadow support
+  scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
+}
+function updateShadows(dt) {
+  if (!shadowsOn || !map) return;
+  castT -= dt;
+  if (castT > 0) return;
+  castT = 0.25;
+  const p = camera.position;
+  const near = map.lights.filter((L) => !L.off).map((L) => [L, (L.x - p.x) ** 2 + (L.z - p.z) ** 2]).sort((a, b) => a[1] - b[1]);
+  shadowSpots.forEach((s, i) => {
+    const L = near[i] && near[i][0];
+    if (!L) return;
+    s.position.set(L.x, L.y - 0.1, L.z); s.target.position.set(L.x, 0, L.z); s.target.updateMatrixWorld();
+  });
+  // people, furniture and disguises cast shadows (marks, particles and tracers don't)
+  for (const top of scene.children) if (top !== camera) top.traverse((o) => {     // (not your own first-person arm)
+    if (!o.isMesh || o === shadowCatcher) return;
+    const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    o.castShadow = !!(m && !m.transparent && o.parent && o.parent !== scene && !o.userData.noShadow);
+  });
+}
+
 function updateDynLights(dt) {
+  updateShadows(dt);
   if (!lightPool.length || !map) return;
   lightT -= dt;
   if (lightT > 0) return;
   lightT = 0.2;
   const p = camera.position;
-  const near = map.lights.map((L) => [L, (L.x - p.x) ** 2 + (L.z - p.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, lightPool.length);
+  const near = map.lights.filter((L) => !L.off).map((L) => [L, (L.x - p.x) ** 2 + (L.z - p.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, lightPool.length);
   lightPool.forEach((l, i) => {
     const L = near[i] && near[i][0];
     if (!L) { l.intensity = 0; return; }
@@ -143,6 +205,7 @@ function applyAll() {
   camera.fov = settings.fov;
   if (glow) glow.visible = !!settings.glow;
   setDynLights(+settings.dynLights || 0);
+  setShadows(settings.shadows);
   // input
   input.touchSens = settings.touchLook ?? 1;
   input.fovDeg = settings.fov;
@@ -731,6 +794,7 @@ async function init() {
   map = new GameMap();
   const t0 = performance.now();
   const level = map.build(textures, () => {});
+  level.traverse((o) => { o.userData.noShadow = true; });   // the level's look is baked; it doesn't cast real shadows
   scene.add(level);
   ui.loading('Lighting the map…'); await tick();
   map.buildProbes();
@@ -745,8 +809,9 @@ async function init() {
   scene.add(skyDome);
   // soft glow around every ceiling light (one draw call)
   {
-    const pos = new Float32Array(map.lights.length * 3);
-    map.lights.forEach((L, i) => pos.set([L.x, L.y - 0.12, L.z], i * 3));
+    const lit = map.lights.filter((L) => !L.off);          // no glow around switched-off lights
+    const pos = new Float32Array(lit.length * 3);
+    lit.forEach((L, i) => pos.set([L.x, L.y - 0.12, L.z], i * 3));
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     glow = new THREE.Points(g, new THREE.PointsMaterial({ map: textures.glow, size: 2.6, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe9c8 }));
     scene.add(glow);

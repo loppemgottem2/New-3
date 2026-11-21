@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=530';
-import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=530';
+import { CONFIG } from './config.js?v=540';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=540';
 const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
 const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
 // Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the
@@ -184,7 +184,10 @@ export function moveCharacter(ch, input, dt, map) {
   ch.jumpBuf = input.jump ? 0.15 : Math.max(0, (ch.jumpBuf || 0) - dt);
   // props can climb walls: pushing into a wall in the air, each jump kicks you higher (up to a limit)
   if (ch.wallJumpT > 0) ch.wallJumpT -= dt;
-  const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0);   // no height limit: climb until the ceiling / wall top stops you
+  // pushing into furniture or another player works like a wall too (climbT is set by those collisions)
+  if (ch.climbT > 0) ch.climbT -= dt;
+  const touching = ch.onWall || ch.climbT > 0;
+  const wallJump = input.wallClimb && touching && !ch.onGround && moving && !(ch.wallJumpT > 0);   // no height limit: climb until the ceiling / wall top stops you
   if (ch.jumpBuf > 0 && (ch.onGround || wallJump)) {
     if (!ch.onGround) ch.wallJumpT = 0.3;
     ch.jumpBuf = 0;
@@ -227,7 +230,7 @@ export function moveCharacter(ch, input, dt, map) {
   const prevY = ch.y;
   const wasGround = ch.onGround;
   // friction against the wall: a prop pushing into a wall slides down slowly instead of falling
-  if (input.wallClimb && ch.onWall && !ch.onGround && ch.vy < -P.WALL_SLIDE) ch.vy = -P.WALL_SLIDE;
+  if (input.wallClimb && (ch.onWall || ch.climbT > 0) && !ch.onGround && ch.vy < -P.WALL_SLIDE) ch.vy = -P.WALL_SLIDE;
   ch.y += ch.vy * dt;
   // auto step-up onto ledges only when walking or falling, never while rising in a jump
   // (so jumping into a table bumps/pushes it instead of snapping you up on top)

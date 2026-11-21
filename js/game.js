@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=530';
-import { CONFIG } from './config.js?v=530';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=530';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=530';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=530';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=530';
-import { Ragdoll } from './ragdoll.js?v=530';
-import { Audio } from './audio.js?v=530';
-import { initBrain, updateBots } from './bots.js?v=530';
+import * as THREE from '../vendor/three.module.min.js?v=540';
+import { CONFIG } from './config.js?v=540';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=540';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=540';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=540';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=540';
+import { Ragdoll } from './ragdoll.js?v=540';
+import { Audio } from './audio.js?v=540';
+import { initBrain, updateBots } from './bots.js?v=540';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -1517,7 +1517,7 @@ export class Game {
       const oy = o.y; o.y = o.ry;
       const hit = footOverlap(me, me.x, me.z, o, o.rx, o.rz);
       o.y = oy;
-      if (hit) { me.x += hit.nx * hit.pen; me.z += hit.nz * hit.pen; }
+      if (hit) { me.x += hit.nx * hit.pen; me.z += hit.nz * hit.pen; me.climbT = 0.2; }   // (props can climb people too)
     }
     pushOutOfProps(me, this.map, 0.35, this.isHost); // the host pushes props right away for its own player
 

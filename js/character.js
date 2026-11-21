@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=530';
-import { CONFIG } from './config.js?v=530';
+import * as THREE from '../vendor/three.module.min.js?v=540';
+import { CONFIG } from './config.js?v=540';
 
 
 const L = CONFIG.LOOKS;
@@ -313,6 +313,9 @@ function faceMeshes(face, M) {
 }
 
 
+// round fake shadow under people (turned off when real shadows are on)
+export const BLOB_SHADOWS = { on: true };
+
 export class CharacterModel {
   constructor(textures, look = DEFAULT_LOOK) {
     this.T = textures;
@@ -426,7 +429,7 @@ export class CharacterModel {
 
   addTo(scene) { scene.add(this.root); scene.add(this.blob); }
   removeFrom(scene) { scene.remove(this.root); scene.remove(this.blob); }
-  setVisible(v) { this.root.visible = v; this.blob.visible = v; }
+  setVisible(v) { this.root.visible = v; this.blob.visible = v && BLOB_SHADOWS.on; }
 
   // recolor the shirt (keeps your own color unless something calls this)
   setColor(hex) {
