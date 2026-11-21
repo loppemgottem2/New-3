@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=210';
-import { CONFIG } from './config.js?v=210';
-import { store, makeCode, clamp } from './util.js?v=210';
-import { makeTextures } from './textures.js?v=210';
-import { GameMap } from './map.js?v=210';
-import { NavGrid } from './nav.js?v=210';
-import { Input, isTouchDevice } from './input.js?v=210';
-import { UI } from './ui.js?v=210';
-import { Audio } from './audio.js?v=210';
-import { Game } from './game.js?v=210';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=210';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=210';
+import * as THREE from '../vendor/three.module.min.js?v=220';
+import { CONFIG } from './config.js?v=220';
+import { store, makeCode, clamp } from './util.js?v=220';
+import { makeTextures } from './textures.js?v=220';
+import { GameMap } from './map.js?v=220';
+import { NavGrid } from './nav.js?v=220';
+import { Input, isTouchDevice } from './input.js?v=220';
+import { UI } from './ui.js?v=220';
+import { Audio } from './audio.js?v=220';
+import { Game } from './game.js?v=220';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=220';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=220';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -550,6 +550,7 @@ $('tapplay').addEventListener('click', () => {
 $('inv-x').onclick = () => ui.toggleInventory(null, false);
 $('sb-x').addEventListener('click', (e) => { e.preventDefault(); if (ui.game) ui.game.scoreOpen = false; ui.showScoreboard(false); });
 $('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleShiftLock(); });
+$('anchorbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleAnchor(); });
 
 // ---------------- the match ----------------
 function startGame(mode, net, opts) {
@@ -602,7 +603,7 @@ function step(dt, background = false) {
   if (inp.menu && !ui.overlayOpen) openSettings();
   game.update(dt, inp);
 }
-const emptyInput = () => ({ fwd: 0, strafe: 0, run: false, jump: false, attack: false, attackHeld: false, equip: false, throw: false, next: false, slot: -1, inv: false, tap: null, point: null, shiftLock: false, x: false, score: false, scoreUp: false, lookDX: 0, lookDY: 0, zoom: 0, toggleView: false, menu: false });
+const emptyInput = () => ({ fwd: 0, strafe: 0, run: false, jump: false, attack: false, attackHeld: false, equip: false, throw: false, next: false, slot: -1, inv: false, tap: null, point: null, shiftLock: false, anchor: false, x: false, score: false, scoreUp: false, lookDX: 0, lookDY: 0, zoom: 0, toggleView: false, menu: false });
 
 function frame(now) {
   requestAnimationFrame(frame);

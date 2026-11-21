@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=210';
-import { hexToCss, textColor } from './util.js?v=210';
+import { CONFIG } from './config.js?v=220';
+import { hexToCss, textColor } from './util.js?v=220';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,7 +25,7 @@ export class UI {
     $('gearbtn').classList.toggle('hidden', !inGame);
     $('settings').classList.remove('overlay');
     document.body.classList.toggle('ingame', inGame);
-    if (!inGame) { document.body.classList.remove('blinded', 'spectating'); $('slbtn').classList.add('hidden'); this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
+    if (!inGame) { document.body.classList.remove('blinded', 'spectating'); $('slbtn').classList.add('hidden'); $('anchorbtn').classList.add('hidden'); this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
   }
 
   // settings on top of a running match
@@ -127,7 +127,10 @@ export class UI {
     if (s.blind) this._set('blind-t', String(t));
 
     // identity panel (bottom-left, team colored)
-    const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? `Prop · ${s.disguise || 'humanoid'}` : '';
+    const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? `Prop · ${s.disguise || 'human'}` : '';
+    const ab = $('anchorbtn');
+    ab.classList.toggle('hidden', !(me.alive && prop));
+    ab.classList.toggle('on', !!s.anchored);
     // shift lock button
     const sl = $('slbtn');
     sl.classList.toggle('hidden', !me.alive);
@@ -179,7 +182,9 @@ export class UI {
 
     // spectate info
     let sp = '';
-    if (!me.alive) {
+    if (me.alive && s.anchored) {
+      sp = `Anchored<small>${this.isTouch ? 'Joystick = fly the camera · press anchor again to go back' : 'WASD = fly the camera · press K again to go back'}</small>`;
+    } else if (!me.alive) {
       if (s.spec) sp = `Watching <b style="color:${textColor(s.spec.color)}">${esc(s.spec.nick)}</b>`;
       else sp = 'Free camera';
       sp += `<small>${this.isTouch ? 'Joystick = fly · Tap ▶ to watch players · X = main menu' : 'WASD = fly · Click / F to watch players · X = main menu'}</small>`;
@@ -198,9 +203,10 @@ export class UI {
         if (label && el.dataset.label !== label) { el.dataset.label = label; el.textContent = label; }
       };
       const alive = me.alive;
-      tb('attack', alive && (seeker || prop), seeker ? (s.weapon === 1 ? 'STAB' : s.weapon === 2 ? 'SHOOT' : 'DRAW') : 'BECOME');
+      // the big button only shows with a weapon in hand (STAB / SHOOT), or BECOME for props
+      tb('attack', alive && !s.anchored && ((seeker && s.weapon) || prop), seeker ? (s.weapon === 1 ? 'STAB' : 'SHOOT') : 'BECOME');
       tb('throw', alive && seeker && s.weapon === 1, 'THROW');
-      tb('jump', alive);
+      tb('jump', alive && !s.anchored);
       tb('run', alive);
       tb('next', !alive);
     }

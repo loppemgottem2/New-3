@@ -1,8 +1,8 @@
 // Input: keyboard + mouse (pointer lock) on desktop, virtual joystick +
 // drag-to-look + buttons on touch screens. Each finger is tracked by its
 // touch identifier so moving, looking and pressing buttons all work at once.
-import { CONFIG } from './config.js?v=210';
-import { clamp } from './util.js?v=210';
+import { CONFIG } from './config.js?v=220';
+import { clamp } from './util.js?v=220';
 
 export const isTouchDevice = () =>
   ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
@@ -51,6 +51,7 @@ export class Input {
         if (k === 'KeyP' || k === 'Escape') this.press('menu');
         if (k === 'KeyI' || k === 'KeyB') this.press('inv');
         if (k === 'KeyL') this.press('shiftLock');
+        if (k === 'KeyK') this.press('anchor');
         if (/^Digit[1-9]$/.test(k)) this.slotKey = +k.slice(5) - 1;   // hotbar 1-5
       }
       this.keys.add(k);
@@ -276,6 +277,7 @@ export class Input {
       tap: this.tap || null,
       point: this.point || null,
       shiftLock: !!this.edges.shiftLock,
+      anchor: !!this.edges.anchor,
       x: !!this.edges.x,
       score: !!this.edges.score,
       zoom: this.zoom,

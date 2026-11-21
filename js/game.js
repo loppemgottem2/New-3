@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=210';
-import { CONFIG } from './config.js?v=210';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=210';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=210';
-import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=210';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape } from './props.js?v=210';
-import { Ragdoll } from './ragdoll.js?v=210';
-import { Audio } from './audio.js?v=210';
-import { initBrain, updateBots } from './bots.js?v=210';
+import * as THREE from '../vendor/three.module.min.js?v=220';
+import { CONFIG } from './config.js?v=220';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=220';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=220';
+import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=220';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=220';
+import { Ragdoll } from './ragdoll.js?v=220';
+import { Audio } from './audio.js?v=220';
+import { initBrain, updateBots } from './bots.js?v=220';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -39,7 +39,7 @@ export function newChar(id, nick, isBot, look) {
     onGround: true, speed: 0, running: false, stamina: P.STAMINA_MAX, exhausted: false,
     alive: false, spectator: true,
     team: 'none', hp: TM.SEEKER_HP, maxHp: TM.SEEKER_HP,
-    disguise: null, morphCd: 0,           // prop team: furniture type you look like (null = T-posing person)
+    disguise: null, morphCd: 0, anchored: false,   // anchored: a prop frozen in place (its player flies the camera)           // prop team: furniture type you look like (null = T-posing person)
     hasKnife: false, hasGun: false,       // seekers: knife can be thrown away, then picked back up
     hotbar: new Array(INV.HOTBAR).fill(null), backpack: new Array(INV.BACKPACK).fill(null),
     slot: -1, lastSlot: 0,                // selected hotbar slot (-1 = hands empty)
@@ -235,7 +235,7 @@ export class Game {
       if (seeker) INV.START.forEach((it, k) => { if (k < INV.HOTBAR) c.hotbar[k] = it; else c.backpack[k - INV.HOTBAR] = it; });
       c.slot = -1; c.lastSlot = 0;
       c.hp = c.maxHp = seeker ? TM.SEEKER_HP : TM.PROP_HUMAN_HP;
-      c.disguise = null; c.morphCd = 0;
+      c.disguise = null; c.morphCd = 0; c.anchored = false;
       c.attackCd = 0;
       c.alive = true; c.spectator = false;
       const s = spawns[i % spawns.length];
@@ -341,7 +341,7 @@ export class Game {
       if (c.cid == null) continue;
       this.net.send(c.cid, {
         t: 'snap', ph: this.phase, tl: r2(this.timeLeft), c: cs, it, pr,
-        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), mh: c.maxHp, cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
+        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), mh: c.maxHp, an: c.anchored ? 1 : 0, cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
       });
     }
   }
@@ -375,6 +375,7 @@ export class Game {
     if (!c) return;
     if (m.t === 'in') {
       if (!c.alive || !Array.isArray(m.p)) return;
+      if (c.anchored) return;                                   // anchored props stay frozen
       if (c.team === 'seeker' && this.phase === 'pre') return; // seekers are frozen while the props hide
       const [x, y, z] = m.p;
       if (![x, y, z].every(Number.isFinite)) return;
@@ -412,6 +413,13 @@ export class Game {
 
     // ---------- prop team ----------
     if (c.team === 'prop') {
+      if (a === 'anchor') {
+        // freeze in place (no gravity, can't be pushed) / let go again
+        c.anchored = !c.anchored;
+        c.vx = c.vy = c.vz = 0; c.speed = 0;
+        return;
+      }
+      if (c.anchored) return;          // can't change furniture while anchored
       if (a === 'disguise') {
         const p = this.props.list[n | 0];
         if (!p || c.morphCd > 0 || (this.phase !== 'pre' && this.phase !== 'play')) return;
@@ -581,6 +589,7 @@ export class Game {
     if (!target.alive) return;
     const wasObject = !!target.disguise;      // furniture vanishes; only a person (or human prop) ragdolls
     target.alive = false;
+    target.anchored = false;
     target.slot = -1;
     target.disguise = null;
     this.corpses.push({ id: target.id, x: target.x, y: target.y, z: target.z, t: this.time });
@@ -706,6 +715,7 @@ export class Game {
             if (m.me.hb) c.hotbar = m.me.hb;
             if (m.me.bp) c.backpack = m.me.bp;
             c.hp = m.me.hp; if (m.me.mh) c.maxHp = m.me.mh;
+            if (performance.now() - (this._anchorT || 0) > 600) c.anchored = !!m.me.an;
             if (!m.me.al && c.alive) { c.alive = false; } // safety
           }
           continue;
@@ -1014,6 +1024,19 @@ export class Game {
   // called by the hotbar / inventory UI
   selectSlot(k) { if (this.me?.alive) this.localAction('slot', k); }
   invSwap(i, j) { if (this.me?.alive) this.localAction('inv', [i, j]); }
+  // props: anchor = freeze your prop in place and fly the camera around; press again to go back
+  toggleAnchor() {
+    const me = this.me;
+    if (!me || !me.alive || me.team !== 'prop') return;
+    if (me.team === 'prop' && this.phase !== 'pre' && this.phase !== 'play') return;
+    if (this.isHost) this.hostAction(me, 'anchor');          // the host flips it directly
+    else { me.anchored = !me.anchored; this.net?.send({ t: 'act', a: 'anchor' }); }
+    me.vx = me.vy = me.vz = 0; me.speed = 0;
+    this._anchorT = performance.now();
+    this.flyPos = me.anchored ? this.camera.position.clone() : null;
+    this.specId = null;
+  }
+
   toggleShiftLock(on = !this.shiftLock) {
     this.shiftLock = on;
     this.settings.shiftLock = on;
@@ -1054,14 +1077,15 @@ export class Game {
     if (inp.shiftLock && !(me.alive && me.team === 'seeker' && this.phase === 'pre')) this.toggleShiftLock();
     this.camYaw = wrapAngle(this.camYaw - inp.lookDX);
     this.camPitch = clamp(this.camPitch - inp.lookDY, -1.5, 1.5);
-    if (!this.freeCam() || !me.alive) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
+    if ((!this.freeCam() || !me.alive) && !me.anchored) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
     // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
     const point = !this.freeCam() ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
-    if (!me.alive) {
+    if (inp.anchor) this.toggleAnchor();
+    if (!me.alive || me.anchored) {
       if (inp.inv) this.ui.toggleInventory?.(this);
-      if (inp.next || inp.attack) this.cycleSpectate();
-      // spectator free camera: fly with the joystick / WASD in the direction you look, through walls
+      if (!me.alive && (inp.next || inp.attack)) this.cycleSpectate();
+      // spectator / anchored free camera: fly with the joystick / WASD in the direction you look, through walls
       if (inp.fwd || inp.strafe) {
         if (this.specId != null) { this.specId = null; this.flyPos = this.camera.position.clone(); }  // moving stops watching
         if (!this.flyPos) this.flyPos = this.camera.position.clone();
@@ -1258,7 +1282,15 @@ export class Game {
     if (!me) return;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
     const sh = (this.settings.shake !== false ? this.shake || 0 : 0);
-    if (me.alive) {
+    if (me.alive && me.anchored) {
+      // anchored prop: free flying camera (the prop itself stays frozen where it is)
+      this.viewModel.update(dt, 0, 0, false);
+      if (!this.flyPos) this.flyPos = cam.position.clone();
+      cam.position.copy(this.flyPos);
+      cam.rotation.set(this.camPitch, this.camYaw, 0);
+      this._camActualDist = 9;
+      this._camPos = cam.position;
+    } else if (me.alive) {
       // view bobbing in first person only. In third person the camera stays smooth, so your
       // character / prop doesn't look like it bounces up and down on screen while moving.
       const bobOn = this.settings.viewBob !== false && !this.thirdPerson();
@@ -1347,7 +1379,7 @@ export class Game {
       if (!look && me.team === 'prop') {
         this._pickT = (this._pickT || 0) - dt;
         if (this._pickT <= 0) { this._pickT = 0.1; this._pick = this.pickProp(hover); }
-        if (this._pick) look = { nick: `${this.ui.isTouch ? 'Tap' : 'Click'} to become: ${this._pick.type}`, color: 0xffffff };
+        if (this._pick && !me.anchored) look = { nick: `${this.ui.isTouch ? 'Tap' : 'Click'} to become: ${propName(this._pick.type)}`, color: 0xffffff };
       }
       if (!look) {
         for (const rd of this.ragdolls.values()) {
@@ -1361,10 +1393,10 @@ export class Game {
     this.ui.updateHud({
       me, team: me.team, phase: this.phase, timeLeft: this.timeLeft,
       look, spec, weapon: weaponOf(me), hasKnife: me.hasKnife, hasGun: me.hasGun,
-      hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, maxHp: me.maxHp, disguise: me.disguise,
+      hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, maxHp: me.maxHp, disguise: me.disguise ? propName(me.disguise) : null,
       propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
       blind: me.alive && me.team === 'seeker' && this.phase === 'pre',
-      shiftLock: this.shiftLock, crosshair: !this.freeCam(),
+      shiftLock: this.shiftLock, crosshair: !this.freeCam() && !me.anchored, anchored: !!me.anchored,
       server: this.serverLabel, code: this.code, players: this.chars.size,
       deathT: this.deathT, third: this.thirdPerson(),
     });

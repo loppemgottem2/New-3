@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=210';
-import { CONFIG } from './config.js?v=210';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=210';
+import * as THREE from '../vendor/three.module.min.js?v=220';
+import { CONFIG } from './config.js?v=220';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=220';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -45,7 +45,13 @@ export const PROP_TYPES = {
   bottle:   { mass: 0.2, sound: 'glass', mu: 0.35, parts: [...cyl(0.115, 0.048, 0.115), [0, 0.29, 0, 0.02, 0.07, 0.02]] },
   trashcan: { mass: 1.1, sound: 'metal', mu: 0.4, parts: cyl(0.32, 0.235, 0.32) },
   takeout:  { mass: 0.25, sound: 'cardboard', mu: 0.5, parts: [[0, 0.13, 0, 0.125, 0.13, 0.1]] },
+  // an old, broken baby doll lying on its back: head, body, legs, one arm (the other is missing)
+  babydoll: { mass: 0.3, sound: 'soft', mu: 0.6, parts: [[0.2, 0.075, 0, 0.075, 0.075, 0.07], [0, 0.055, 0, 0.12, 0.055, 0.075], [-0.2, 0.035, 0.045, 0.09, 0.035, 0.032], [-0.2, 0.035, -0.045, 0.09, 0.035, 0.032], [0.06, 0.03, 0.11, 0.07, 0.025, 0.025]] },
 };
+
+// names shown to players ("Tap to become: baby doll")
+export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can' };
+export const propName = (type) => PROP_NAMES[type] || type;
 
 // ---------------- shared temps ----------------
 const t1 = new V(), t2 = new V(), t3 = new V(), t4 = new V(), t5 = new V(), t6 = new V();
@@ -137,6 +143,27 @@ function buildGeometry() {
     ]);
     GEO.takeout.scale(1.4, 1.4, 1.4);
   }
+  {
+    // creepy broken baby doll lying on its back (head toward +x): cracked head, sunken dark eyes,
+    // one arm torn off (just a stub), a dirty stained dress
+    const S = (r, w = 12, h = 10) => new THREE.SphereGeometry(r, w, h);
+    const head = S(0.075); head.scale(1, 0.95, 1.05);
+    const body = Cyl(0.07, 0.06, 0.24, 12); body.rotateZ(Math.PI / 2); body.scale(1, 0.85, 1.15);
+    const leg = Cyl(0.032, 0.026, 0.18, 8); leg.rotateZ(Math.PI / 2);
+    const arm = Cyl(0.024, 0.02, 0.14, 8); arm.rotateZ(Math.PI / 2);
+    const stub = Cyl(0.026, 0.026, 0.035, 8); stub.rotateX(Math.PI / 2);
+    GEO.babydoll = mergeParts([
+      { geo: head, mat: 0, m: M4(0.2, 0.075, 0, 0, 0, 0.15) },
+      { geo: S(0.016, 8, 6), mat: 2, m: M4(0.24, 0.13, 0.026) }, { geo: S(0.016, 8, 6), mat: 2, m: M4(0.24, 0.128, -0.028) },   // empty eye sockets
+      { geo: Box(0.004, 0.005, 0.06), mat: 2, m: M4(0.2, 0.149, 0.0, 0, 0.5, 0.3) },                                           // crack on the head
+      { geo: Box(0.004, 0.005, 0.035), mat: 2, m: M4(0.17, 0.142, 0.03, 0, -0.7, 0.4) },
+      { geo: body, mat: 1, m: M4(0, 0.055, 0) },
+      { geo: Box(0.07, 0.004, 0.06), mat: 3, m: M4(-0.02, 0.105, 0.01, 0, 0.3, 0) },                                            // stain on the dress
+      { geo: leg, mat: 0, m: M4(-0.2, 0.035, 0.045, 0, 0.08, 0) }, { geo: leg, mat: 0, m: M4(-0.19, 0.035, -0.05, 0, -0.25, 0) },
+      { geo: arm, mat: 0, m: M4(0.06, 0.03, 0.11, 0, -0.5, 0) },
+      { geo: stub, mat: 2, m: M4(0.1, 0.06, -0.085) },                                                                         // torn-off arm
+    ]);
+  }
   return GEO;
 }
 
@@ -156,6 +183,8 @@ function propMaterials(T, type, i = 0) {
     case 'bottle': return [new THREE.MeshLambertMaterial({ color: 0x8a4a16, transparent: true, opacity: 0.9 }), new THREE.MeshLambertMaterial({ color: 0xc9a227 }), new THREE.MeshLambertMaterial({ color: i % 2 ? 0xe8dcc0 : 0xd8c070 })];
     case 'trashcan': return [new THREE.MeshLambertMaterial({ map: T.metal, color: 0x8a8f86, side: THREE.DoubleSide }), new THREE.MeshLambertMaterial({ color: 0x2a2620 }), new THREE.MeshLambertMaterial({ map: T.cardboard })];
     case 'takeout': return [new THREE.MeshLambertMaterial({ map: T.takeout }), new THREE.MeshLambertMaterial({ color: 0x999999 })];
+    // grimy pale plastic, a stained old dress, dark empty eyes / cracks
+    case 'babydoll': return [new THREE.MeshLambertMaterial({ color: 0xc9b9a0 }), new THREE.MeshLambertMaterial({ color: 0x7d7262 }), new THREE.MeshLambertMaterial({ color: 0x140f0c }), new THREE.MeshLambertMaterial({ color: 0x5a4a3a })];
     default: return [new THREE.MeshLambertMaterial({ color: 0x888888 })];
   }
 }
