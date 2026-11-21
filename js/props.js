@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=620';
-import { CONFIG } from './config.js?v=620';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=620';
-import { footWorld } from './physics.js?v=620';
+import * as THREE from '../vendor/three.module.min.js?v=630';
+import { CONFIG } from './config.js?v=630';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=630';
+import { footWorld } from './physics.js?v=630';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -498,6 +498,7 @@ export class PropSystem {
 
   reset() {
     for (const p of this.list) {
+      p.removed = false;
       p.pos.copy(p.home.pos); p.quat.copy(p.home.quat); p.vel.set(0, 0, 0); p.ang.set(0, 0, 0);
       p.asleep = true; p.sleepT = 0; p.rpos.copy(p.pos); p.rquat.copy(p.quat); p.lightT = 0;
       this.updateBounds(p);
@@ -505,8 +506,29 @@ export class PropSystem {
     this.fullT = 0;
   }
 
+  // Each new round a random 1-10% of the furniture is taken away (dropped far under the map, where nothing
+  // can touch it), so the rooms change a little and there are new hiding spots. Positions reach the
+  // players through the normal prop sync. Whatever was resting on a removed piece falls down.
+  removeRandom(minFrac = 0.01, maxFrac = 0.1) {
+    const n = Math.max(1, Math.round(this.list.length * (minFrac + Math.random() * (maxFrac - minFrac))));
+    const pool = this.list.slice();
+    for (let k = 0; k < n && pool.length; k++) {
+      const p = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+      for (const q of this.list) {
+        if (q === p || q.removed || Math.abs(q.y - p.top) > 0.15) continue;
+        const reach = p.r + q.r;
+        if ((q.x - p.x) ** 2 + (q.z - p.z) ** 2 < reach * reach) this.wake(q);
+      }
+      p.removed = true; p.asleep = true; p.vel.set(0, 0, 0); p.ang.set(0, 0, 0);
+      p.pos.set(p.home.pos.x, -60, p.home.pos.z);
+      this.updateBounds(p);
+    }
+    this.fullT = 0;
+    return n;
+  }
+
   // ---------------- math helpers ----------------
-  wake(p) { p.asleep = false; p.sleepT = 0; }
+  wake(p) { if (p.removed) return; p.asleep = false; p.sleepT = 0; }
   invIWorld(p, v, out) {
     tq.copy(p.quat).invert();
     out.copy(v).applyQuaternion(tq);
@@ -849,6 +871,7 @@ export class PropSystem {
       if (p.rpos.distanceToSquared(p.pos) > 9) { p.rpos.copy(p.pos); p.rquat.copy(p.quat); }
       p.rpos.lerp(p.pos, k); p.rquat.slerp(p.quat, k);
       p.mesh.position.copy(p.rpos); p.mesh.quaternion.copy(p.rquat);
+      p.mesh.visible = p.pos.y > -20;                    // taken away this round
       p.lightT -= dt;
       if (p.lightT <= 0) {
         p.lightT = 0.4 + Math.random() * 0.3;

@@ -55,15 +55,18 @@ export function furnish() {
   };
   const stack = (type, x, z, n, yaw = 0) => { for (let k = 0; k < n; k++) add(type, x + j(0.06), z + j(0.06), yaw + j(0.2)); };
 
-  // ------------------------------------------------------------------ office (carpet)
-  // open-plan office: two rows of workstations, a lounge corner, archive boxes, plants
-  for (const x of [8, 13.5, 19, 24.5]) workstation(x, 12, 0);
-  for (const x of [8, 13.5, 19, 24.5]) workstation(x, 20.5, 0, { chairOut: 0.1 });
-  add('trashcan', 27.5, 13, 0); add('trashcan', 5.4, 21.5, 0);
-  add('couch', 9, 30.2, 0); add('table', 9, 28.2, 0); add('lamp', 5, 30.5, 0); add('plant', 13, 30.6, 0);
-  add('takeout', 8.7, 28.1, 1.1); add('bottle', 9.4, 28.3, 0);
-  add('plant', 30.5, 5.5, 0); add('plant', 30.5, 30.5, 0); add('plant', 16, 5.2, 0);
-  stack('box', 29.8, 9, 3); add('box', 29.7, 10.1, 0.3); add('box', 28.7, 9.1, 1.4);
+  // ------------------------------------------------------------------ old office (carpet)
+  // cleared out: a big open lounge / crash space with couches round the walls, mattresses on the floor,
+  // cardboard boxes and crates left from the move, a few floor lamps
+  add('couch', 9, 30.3, 0); add('crate', 9, 28.1, 0.15); add('bottle', 8.8, 28.0, 0); add('takeout', 9.3, 28.2, 0.6);
+  add('couch', 5.0, 18, E); add('couch', 22, 5.2, Math.PI); add('couch', 27.2, 24, W + 0.2);
+  add('mattress', 14.5, 12, 0.3); add('mattress', 20.5, 10, 1.4); add('mattress', 24.5, 16.5, 0.15); add('mattress', 12, 22.5, 2.0);
+  add('mattress', 12.1, 22.6, 2.05);                                              // two stacked
+  add('lamp', 5, 29.6, 0); add('lamp', 29.8, 21.8, 0); add('lamp', 16.5, 6.2, 0); add('lamp', 19.5, 19.5, 1.1, true);
+  stack('box', 29.6, 6, 3); add('box', 28.6, 6.3, 0.4); add('box', 29.5, 7.2, 1.2);
+  pile('box', 5.8, 25.5, 3, 0.45, 0.4); add('box', 17.5, 25, 0.7, true);
+  add('crate', 28.6, 29, 0); add('crate', 29.6, 29, 0.1); add('crate', 29.1, 29, 0.05);   // little pyramid
+  add('crate', 6, 9.2, 0.3); add('trashcan', 27.5, 13, 0);
 
   // ------------------------------------------------------------------ cafeteria (tile)
   // serving counter along the north wall, six dining tables, bins by the doors, plants
