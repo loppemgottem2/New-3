@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=640';
-import { CONFIG } from './config.js?v=640';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=640';
-import { footWorld } from './physics.js?v=640';
+import * as THREE from '../vendor/three.module.min.js?v=660';
+import { CONFIG } from './config.js?v=660';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=660';
+import { footWorld } from './physics.js?v=660';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -506,11 +506,12 @@ export class PropSystem {
     this.fullT = 0;
   }
 
-  // Each new round a random 5-35% of the furniture is taken away (dropped far under the map, where nothing
+  // Each new round a random 10-35% of the furniture is taken away (dropped far under the map, where nothing
   // can touch it), so the rooms change a little and there are new hiding spots. Positions reach the
   // players through the normal prop sync. Whatever was resting on a removed piece falls down.
   removeRandom(minFrac = 0.01, maxFrac = 0.1) {
-    const n = Math.max(1, Math.round(this.list.length * (minFrac + Math.random() * (maxFrac - minFrac))));
+    const N = this.list.length, lo = Math.ceil(N * minFrac), hi = Math.floor(N * maxFrac);   // never outside the range
+    const n = Math.max(1, Math.min(hi, Math.max(lo, Math.round(N * (minFrac + Math.random() * (maxFrac - minFrac))))));
     const pool = this.list.slice();
     for (let k = 0; k < n && pool.length; k++) {
       const p = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
