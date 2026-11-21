@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=200';
-import { CONFIG } from './config.js?v=200';
-import { store, makeCode, clamp } from './util.js?v=200';
-import { makeTextures } from './textures.js?v=200';
-import { GameMap } from './map.js?v=200';
-import { NavGrid } from './nav.js?v=200';
-import { Input, isTouchDevice } from './input.js?v=200';
-import { UI } from './ui.js?v=200';
-import { Audio } from './audio.js?v=200';
-import { Game } from './game.js?v=200';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=200';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=200';
+import * as THREE from '../vendor/three.module.min.js?v=210';
+import { CONFIG } from './config.js?v=210';
+import { store, makeCode, clamp } from './util.js?v=210';
+import { makeTextures } from './textures.js?v=210';
+import { GameMap } from './map.js?v=210';
+import { NavGrid } from './nav.js?v=210';
+import { Input, isTouchDevice } from './input.js?v=210';
+import { UI } from './ui.js?v=210';
+import { Audio } from './audio.js?v=210';
+import { Game } from './game.js?v=210';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=210';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=210';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -548,6 +548,7 @@ $('tapplay').addEventListener('click', () => {
   $('tapplay').classList.add('hidden');
 });
 $('inv-x').onclick = () => ui.toggleInventory(null, false);
+$('sb-x').addEventListener('click', (e) => { e.preventDefault(); if (ui.game) ui.game.scoreOpen = false; ui.showScoreboard(false); });
 $('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleShiftLock(); });
 
 // ---------------- the match ----------------

@@ -11,7 +11,7 @@
   <title>Find the Things</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=200">
+  <link rel="stylesheet" href="css/style.css?v=210">
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -69,13 +69,13 @@
 
   <!-- ===================== SETTINGS (filled by main.js) ===================== -->
   <div id="settings" class="screen hidden">
-    <div class="panel wide scroll">
+    <div class="panel wide scroll settings-panel">
+      <button id="btn-settings-back" class="close-x" title="Close">✕</button>
       <h2>Settings</h2>
       <div class="tabs" id="settings-tabs"></div>
       <div id="settings-body"></div>
       <div class="row">
         <button id="btn-settings-reset" class="btn small">Reset to defaults</button>
-        <button id="btn-settings-back" class="btn small primary-sm">Done</button>
       </div>
     </div>
   </div>
@@ -174,7 +174,8 @@
   </div>
 
   <div id="scoreboard" class="hidden">
-    <div class="panel wide">
+    <div class="panel sb-panel">
+      <button id="sb-x" class="close-x" title="Close">✕</button>
       <h2 id="sb-title">Players</h2>
       <div id="sb-rows" class="list"></div>
     </div>
@@ -203,6 +204,6 @@
   <div id="fps" class="hidden"></div>
 
   <script src="vendor/peerjs.min.js"></script>
-  <script type="module" src="js/main.js?v=200"></script>
+  <script type="module" src="js/main.js?v=210"></script>
 </body>
 </html>

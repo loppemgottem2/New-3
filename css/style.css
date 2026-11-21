@@ -126,7 +126,7 @@ input[type=range] { padding: 0; accent-color: var(--accent-2); }
 #bigmsg .t { font-size: clamp(28px, 6vw, 54px); font-weight: 900; font-family: Georgia, serif; }
 #bigmsg .s { font-size: clamp(14px, 2.4vw, 20px); margin-top: 6px; }
 
-#scoreboard { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; pointer-events: none; padding: 16px; }
+#scoreboard { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; pointer-events: none; padding: calc(10px + var(--sa-t)) calc(10px + var(--sa-r)) calc(10px + var(--sa-b)) calc(10px + var(--sa-l)); }
 .sb-row { display: flex; justify-content: space-between; padding: 7px 10px; background: rgba(255,255,255,0.05); border-radius: 3px; font-size: 15px; }
 .sb-row.me { background: rgba(68,170,255,0.18); }
 .sb-row i { font-style: normal; font-size: 11px; color: var(--muted); margin-left: 6px; }
@@ -187,7 +187,7 @@ body.touch #hud-stamina { bottom: calc(28px + var(--sa-b)); }
 .set-row input[type=range] { width: 46%; }
 .set-row select { width: 46%; padding: 6px; }
 .set-row b { min-width: 46px; text-align: right; font-weight: normal; color: #ccc; font-size: 13px; }
-#settings.overlay { background: rgba(0,0,0,0.35); z-index: 40; }
+#settings.overlay { background: rgba(0,0,0,0.35); z-index: 70; }
 
 /* character editor */
 #editor { justify-content: flex-start; align-items: stretch; touch-action: none; cursor: grab; }
@@ -346,3 +346,20 @@ body.ingame.touch #fps { right: calc(176px + var(--sa-r)); }
 #settings-body { gap: 16px; padding: 4px 2px 10px; }
 .set-row { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); min-height: 40px; }
 .set-row .lab small { margin-top: 2px; }
+
+/* ☰ scoreboard button: exactly like the settings (gear) button */
+#tb-score { width: 44px; height: 44px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.25); background: rgba(30,30,30,0.7); transform: none; font-size: 24px; font-weight: normal; text-shadow: none; }
+/* red X close buttons (scoreboard, settings) */
+.close-x { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 6px; border: 1px solid rgba(255,140,140,0.6); background: rgba(160,20,20,0.85); color: #fff; font-size: 17px; font-weight: bold; line-height: 1; cursor: pointer; z-index: 2; touch-action: manipulation; }
+.close-x:active { background: #e53935; }
+/* scoreboard: small, always fits the screen (sideways phones too), scrolls */
+.sb-panel { position: relative; pointer-events: auto; width: min(400px, 100%); max-height: 100%; padding: 12px 12px 10px; gap: 6px; }
+.sb-panel h2 { font-size: 15px; margin: 2px 44px 4px 0; }
+#scoreboard .list { max-height: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; gap: 4px; }
+#scoreboard .sb-row { padding: 5px 8px; font-size: 13px; }
+/* settings: X in the corner instead of a Done button, always fits */
+.settings-panel { position: relative; }
+.settings-panel h2 { margin-right: 44px; }
+#settings .panel > .row:last-child { justify-content: flex-start; }
+#settings .panel > .row:last-child .btn { flex: 0 0 auto; }
+#settings .panel > .row:last-child { position: static; margin: 4px 0 0; padding: 0; background: none; }

@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=200';
-import { hexToCss, textColor } from './util.js?v=200';
+import { CONFIG } from './config.js?v=210';
+import { hexToCss, textColor } from './util.js?v=210';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -54,13 +54,22 @@ export class UI {
 
   toast(html, color = '#fff', dur = 4) {
     const box = $('toasts');
+    // the same message never stacks: if it's already showing, just keep it up a bit longer
+    for (const old of box.children) {
+      if (old.dataset.msg === html && !old.classList.contains('fade')) {
+        clearTimeout(old._t);
+        old._t = setTimeout(() => { old.classList.add('fade'); setTimeout(() => old.remove(), 600); }, dur * 1000);
+        return;
+      }
+    }
     const d = document.createElement('div');
     d.className = 'toast';
     d.style.color = color;
     d.innerHTML = html;
+    d.dataset.msg = html;
     box.appendChild(d);
     while (box.children.length > 5) box.removeChild(box.firstChild);
-    setTimeout(() => { d.classList.add('fade'); setTimeout(() => d.remove(), 600); }, dur * 1000);
+    d._t = setTimeout(() => { d.classList.add('fade'); setTimeout(() => d.remove(), 600); }, dur * 1000);
   }
 
   bigMessage(title, sub, color, dur = 3) {

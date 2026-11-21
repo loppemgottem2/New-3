@@ -1,8 +1,8 @@
 // Input: keyboard + mouse (pointer lock) on desktop, virtual joystick +
 // drag-to-look + buttons on touch screens. Each finger is tracked by its
 // touch identifier so moving, looking and pressing buttons all work at once.
-import { CONFIG } from './config.js?v=200';
-import { clamp } from './util.js?v=200';
+import { CONFIG } from './config.js?v=210';
+import { clamp } from './util.js?v=210';
 
 export const isTouchDevice = () =>
   ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
@@ -147,7 +147,9 @@ export class Input {
         if (name === 'attack') this.lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY, btn: true });
         continue;
       }
-      const onJoySide = !this.noJoy && (this.lefty ? t.clientX > window.innerWidth * 0.58 : t.clientX < window.innerWidth * 0.42);
+      // only touches on (or just around) the joystick move you; anywhere else looks around
+      const jr = this.joyBase.getBoundingClientRect();
+      const onJoySide = jr.width > 0 && Math.hypot(t.clientX - (jr.left + jr.width / 2), t.clientY - (jr.top + jr.height / 2)) < jr.width * 0.8;
       if (onJoySide && this.joy.id === null) {
         // the joystick stays where it is: the finger steers relative to its fixed center
         const j = this.joy;
