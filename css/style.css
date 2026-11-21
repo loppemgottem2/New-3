@@ -53,7 +53,8 @@ p { margin: 0; line-height: 1.45; font-size: 14px; }
   line-height: 1;
 }
 .logo-sub { color: #ccc; letter-spacing: 9px; font-size: 18px; font-weight: bold; text-transform: uppercase; margin-top: 4px; }
-.version { text-align: center; color: #666; font-size: 11px; }
+/* version: bottom-right corner of the screen (menu and Tap to play), bright white */
+.version, #tapplay .tp-ver { position: fixed; right: calc(14px + var(--sa-r)); bottom: calc(10px + var(--sa-b)); color: #fff; font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none; }
 .notice { background: rgba(198, 40, 40, 0.18); border: 1px solid rgba(229, 57, 53, 0.4); padding: 8px 10px; border-radius: 4px; font-size: 13px; }
 
 .btn {
@@ -299,7 +300,6 @@ body.lefty #joy-base { left: auto; right: calc(140px + var(--sa-r)); margin: 0 -
 body.blinded #hud-id, body.blinded #hud-count, body.blinded #hud-stamina, body.blinded #hud-look, body.blinded #crosshair,
 body.blinded #hotbar, body.blinded #inventory, body.blinded #slbtn,
 body.blinded #joy-base, body.blinded #touch .tbtn:not(#tb-score), body.blinded .touch-hint { display: none !important; }
-#tapplay .tp-ver { position: absolute; bottom: calc(10px + var(--sa-b)); right: calc(14px + var(--sa-r)); font-size: 11px; color: rgba(255,255,255,0.45); }
 /* spectating (dead): no joystick, the whole screen turns the camera */
 body.spectating #joy-base { display: none !important; }
 
@@ -318,5 +318,17 @@ body.spectating #joy-base { display: none !important; }
   .menu-panel .player-card .btn { min-height: 28px; padding: 4px 10px; }
   .menu-panel .player-card .muted { font-size: 11px; }
   .menu-panel #card-name { font-size: 15px; }
-  .menu-panel .version { font-size: 10px; }
 }
+@media (max-height: 380px) {
+  /* phone sideways with the browser bar still showing (before Tap to play goes fullscreen) */
+  .screen#menu { padding-top: calc(8px + var(--sa-t)); padding-bottom: calc(8px + var(--sa-b)); }
+  .menu-panel { padding: 8px 12px; gap: 4px; }
+  .menu-panel .logo-title { font-size: clamp(18px, 7vh, 26px); }
+  .menu-panel .btn { min-height: 29px; padding: 4px 12px; font-size: 13px; }
+  .menu-panel .btn.small { min-height: 27px; padding: 3px 10px; font-size: 12px; }
+  .menu-panel .player-card { padding: 3px 10px; }
+  .menu-panel .player-card .btn { min-height: 24px; padding: 2px 10px; }
+  .menu-panel #card-name { font-size: 14px; }
+}
+/* only one version label: the menu one is hidden while Tap to play is showing */
+#tapplay:not(.hidden) ~ #menu .version { visibility: hidden; }
