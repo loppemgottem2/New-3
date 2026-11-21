@@ -498,6 +498,9 @@ function netErrorText(e) {
 function goFullscreen() {
   const el = document.documentElement;
   if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  if (goFullscreen.pending) return;                 // one request at a time (two in one tap would fail)
+  goFullscreen.pending = true;
+  setTimeout(() => { goFullscreen.pending = false; }, 1000);
   const fail = (why) => { ui.notice(why); if (game && !goFullscreen.told) ui.toast(why, '#fd6', 7); goFullscreen.told = true; };
   const inFrame = (() => { try { return window.self !== window.top; } catch { return true; } })();
   const iPhone = /iPhone|iPod/.test(navigator.userAgent);
@@ -521,11 +524,20 @@ function goFullscreen() {
   try {
     let p;
     try { p = fs.call(el, { navigationUI: 'hide' }); } catch { p = fs.call(el); }   // older browsers don't take the options
-    if (p && p.then) p.then(done).catch(() => { try { const p2 = fs.call(el); if (p2 && p2.then) p2.then(done).catch(() => done()); else done(); } catch { done(); } });
+    if (p && p.then) p.then(done).catch((err) => {
+      try { const p2 = fs.call(el); if (p2 && p2.then) p2.then(done).catch((e2) => fail(`Fullscreen was refused by the browser (${(e2 || err)?.message || e2 || err}).`)); else done(); } catch { done(); }
+    });
     else done();
   } catch { done(); }
 }
 // (a plain click, exactly like the menu buttons, which every phone browser accepts for fullscreen)
+// backup: on phones, the first taps anywhere (menu buttons included) also go fullscreen until it works
+document.addEventListener('click', () => {
+  if (!touch || goFullscreen.ok || document.fullscreenElement || document.webkitFullscreenElement) return;
+  goFullscreen();
+}, true);
+document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement) goFullscreen.ok = true; });
+$('tp-ver').textContent = `v${CONFIG.VERSION}`;
 $('tapplay').addEventListener('click', () => {
   if ($('tapplay').classList.contains('hidden')) return;
   goFullscreen();
