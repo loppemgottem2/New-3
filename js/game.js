@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=380';
-import { CONFIG } from './config.js?v=380';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=380';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=380';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=380';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=380';
-import { Ragdoll } from './ragdoll.js?v=380';
-import { Audio } from './audio.js?v=380';
-import { initBrain, updateBots } from './bots.js?v=380';
+import * as THREE from '../vendor/three.module.min.js?v=390';
+import { CONFIG } from './config.js?v=390';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=390';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=390';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=390';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=390';
+import { Ragdoll } from './ragdoll.js?v=390';
+import { Audio } from './audio.js?v=390';
+import { initBrain, updateBots } from './bots.js?v=390';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -268,20 +268,20 @@ export class Game {
   }
 
   // Seekers start together on the path crossing in the middle of the grass courtyard,
-  // spread out at random (at least 1.3 m apart, on open asphalt, clear of furniture)
+  // bunched up close to the centre (within ~2 m, at least 0.9 m apart, clear of furniture)
   seekerSpawns(n) {
     const map = this.map, cx = map.worldW / 2, cz = map.worldD / 2, out = [];
     const free = (x, z) => map.floorTypeAt(x, z) === 'asphalt' && map.heightAt(x, z) === 0 &&
       !this.props.list.some((p) => Math.hypot(p.pos.x - x, p.pos.z - z) < p.r + 0.5) &&
-      out.every((o) => Math.hypot(o.x - x, o.z - z) >= 1.3);
+      out.every((o) => Math.hypot(o.x - x, o.z - z) >= 0.9);
     for (let k = 0; k < n; k++) {
       let spot = null;
-      for (let t = 0; t < 200 && !spot; t++) {
-        const r = 6 * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+      for (let t = 0; t < 300 && !spot; t++) {
+        const r = 2.2 * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
         const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
         if (free(x, z)) spot = { x, z };
       }
-      out.push(spot || { x: cx + (k % 3 - 1) * 1.4, z: cz + Math.floor(k / 3) * 1.4 });
+      out.push(spot || { x: cx + (k % 3 - 1) * 0.9, z: cz + (Math.floor(k / 3) - 1) * 0.9 });
     }
     return out;
   }

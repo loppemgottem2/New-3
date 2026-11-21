@@ -1,9 +1,9 @@
 // Navigation grid + A* pathfinding for bots.
 // The nav grid is 2x finer than the map grid (1 m nodes), so bots keep
 // a margin from walls and can walk around crates / pillars.
-import { CELL } from './map.js?v=380';
-import { CONFIG } from './config.js?v=380';
-import { circleFree } from './physics.js?v=380';
+import { CELL } from './map.js?v=390';
+import { CONFIG } from './config.js?v=390';
+import { circleFree } from './physics.js?v=390';
 
 const SUB = 2;                   // nav nodes per map cell (each axis)
 const NODE = CELL / SUB;         // 1 meter
