@@ -53,8 +53,6 @@ p { margin: 0; line-height: 1.45; font-size: 14px; }
   line-height: 1;
 }
 .logo-sub { color: #ccc; letter-spacing: 9px; font-size: 18px; font-weight: bold; text-transform: uppercase; margin-top: 4px; }
-/* version: bottom-right corner of the screen (menu and Tap to play), bright white */
-.version, #tapplay .tp-ver { position: fixed; right: calc(14px + var(--sa-r)); bottom: calc(10px + var(--sa-b)); color: #fff; font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none; }
 .notice { background: rgba(198, 40, 40, 0.18); border: 1px solid rgba(229, 57, 53, 0.4); padding: 8px 10px; border-radius: 4px; font-size: 13px; }
 
 .btn {
@@ -127,7 +125,6 @@ input[type=range] { padding: 0; accent-color: var(--accent-2); }
 #bigmsg { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; width: 92vw; }
 #bigmsg .t { font-size: clamp(28px, 6vw, 54px); font-weight: 900; font-family: Georgia, serif; }
 #bigmsg .s { font-size: clamp(14px, 2.4vw, 20px); margin-top: 6px; }
-#fps { position: absolute; right: calc(64px + var(--sa-r)); top: calc(12px + var(--sa-t)); font-size: 12px; color: #9f9; }
 
 #scoreboard { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; pointer-events: none; padding: 16px; }
 .sb-row { display: flex; justify-content: space-between; padding: 7px 10px; background: rgba(255,255,255,0.05); border-radius: 3px; font-size: 15px; }
@@ -330,5 +327,15 @@ body.spectating #joy-base { display: none !important; }
   .menu-panel .player-card .btn { min-height: 24px; padding: 2px 10px; }
   .menu-panel #card-name { font-size: 14px; }
 }
-/* only one version label: the menu one is hidden while Tap to play is showing */
-#tapplay:not(.hidden) ~ #menu .version { visibility: hidden; }
+
+/* version: bottom-right corner on the start screen and every menu (fullscreen too), hidden during a match */
+#verbadge { position: fixed; z-index: 400; right: calc(14px + var(--sa-r)); bottom: calc(10px + var(--sa-b)); display: flex; align-items: baseline; gap: 6px; color: #fff; font-size: 14px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.85); pointer-events: none; }
+#ver-info { font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 1px; }
+body.ingame #verbadge { display: none; }
+/* FPS counter: top right, next to the settings button (menus: next to the X) */
+#fps { position: fixed; z-index: 60; top: calc(22px + var(--sa-t)); right: calc(66px + var(--sa-r)); font: 700 13px/1 system-ui, sans-serif; padding: 4px 7px; border-radius: 4px; background: rgba(0,0,0,0.45); color: #6f6; pointer-events: none; font-variant-numeric: tabular-nums; }
+#fps.ok { color: #fd5; }
+#fps.bad { color: #f55; }
+body.ingame #fps { right: calc(120px + var(--sa-r)); }
+body.ingame.touch #fps { right: calc(176px + var(--sa-r)); }
+#fps.hidden { display: none; }
