@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=420';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=420';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=420';
+import { CONFIG } from './config.js?v=440';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=440';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=440';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -60,7 +60,13 @@ function canSee(game, c, o, maxDist = B.VIEW_DISTANCE) {
     const a = Math.abs(angleDiff(c.yaw, yawTo(dx, dz)));
     if (a > (B.FOV_DEG * DEG) / 2) return false;
   }
-  return hasLOS(game.map, c.x, c.y + P.EYE, c.z, o.x, (o.y ?? 0) + 0.5, o.z);
+  if (!hasLOS(game.map, c.x, c.y + P.EYE, c.z, o.x, (o.y ?? 0) + 0.5, o.z)) return false;
+  // people can also hide behind furniture (not for checking furniture itself)
+  if (o.team) {
+    const ex = c.x, ey = c.y + P.EYE, ez = c.z, lx = o.x - ex, ly = (o.y ?? 0) + (o.disguise ? 0.4 : 1.1) - ey, lz = o.z - ez, ll = Math.hypot(lx, ly, lz) || 1;
+    if (game.props.raycast(ex, ey, ez, lx / ll, ly / ll, lz / ll, ll - 0.4)) return false;
+  }
+  return true;
 }
 
 function reactTime(b) {
@@ -303,8 +309,39 @@ function act(game, c, b, dt) {
 
   if (b.state === 'engage' && ((target && target.alive) || tp)) {
     // ----- seeker attacking a prop (player or real furniture) -----
-    const realX = tp ? tp.pos.x : target.x, realZ = tp ? tp.pos.z : target.z;
-    const realY = tp ? tp.pos.y : target.y + (target.disguise ? 0.35 : 1.15);
+    let realX = tp ? tp.pos.x : target.x, realZ = tp ? tp.pos.z : target.z;
+    let realY = tp ? tp.pos.y : target.y + (target.disguise ? 0.35 : 1.15);
+    // ----- can it actually see the person right now? (walls and furniture both hide you) -----
+    let sees = true;
+    if (target && !tp) {
+      b.seeT = (b.seeT || 0) - dt;
+      if (b.seeT <= 0 || b.seesKey !== target.id) { b.seeT = 0.15; b.seesKey = target.id; b.sees = canSee(game, c, target, B.VIEW_DISTANCE * 1.2) || Math.hypot(target.x - c.x, target.z - c.z) < 1.2; }
+      sees = b.sees;
+      if (sees) { b.lastSeen = { x: target.x, y: target.y, z: target.z, vx: target.vx || 0, vz: target.vz || 0 }; b.lostT = 0; b.searchT = 0; b.guess = null; }
+      else if (b.lastSeen) {
+        // lost sight: head for where it last saw you (skilled bots guess a little further along your path)
+        // and give up after a while, sooner the farther away you get
+        if (!b.guess) {
+          const ahead = 0.9 * b.skill;
+          const gx = b.lastSeen.x + b.lastSeen.vx * ahead, gz = b.lastSeen.z + b.lastSeen.vz * ahead;
+          b.guess = circleFree(game.map, gx, gz, P.RADIUS) ? { x: gx, z: gz } : { x: b.lastSeen.x, z: b.lastSeen.z };
+          b.path = null;
+        }
+        const far = Math.hypot(target.x - c.x, target.z - c.z);
+        b.lostT = (b.lostT || 0) + dt * (1 + far / 12);
+        realX = b.guess.x; realZ = b.guess.z; realY = b.lastSeen.y + 1.1;
+        const atGuess = Math.hypot(b.guess.x - c.x, b.guess.z - c.z) < 1.3;
+        if (atGuess) b.searchT = (b.searchT || 0) + dt;
+        if (b.lostT > 3 + 4 * b.skill || b.searchT > 1.2 + b.skill) {
+          // lost you: forget it (it has to spot you all over again)
+          b.susp.set(target.id, target.disguise ? 30 : 0);
+          b.state = 'wander'; b.targetId = null; b.lastSeen = null; b.guess = null; b.path = null; b.waitT = 0;
+          b.lookYaw = c.yaw + rand(-2, 2); b.lookT = rand(1, 2);
+          moveCharacter(c, { mx: 0, mz: 0, run: false, jump: false }, dt, game.map);
+          return;
+        }
+      }
+    }
     // Tracking: the bot aims at where it THINKS the target is. That point trails behind the real one,
     // catching up faster for skilled bots. Fast, jumpy, zig-zag movement leaves it behind -> misses.
     const key = tp ? 'p' + tp.id : 'c' + target.id;
@@ -323,7 +360,7 @@ function act(game, c, b, dt) {
     const tx = tk.x, ty = tk.y, tz = tk.z;
     const dx = realX - c.x, dz = realZ - c.z;
     const d = Math.hypot(dx, dz) || 0.01;
-    const visible = hasLOS(game.map, c.x, c.y + P.EYE, c.z, realX, realY, realZ);
+    const visible = sees && hasLOS(game.map, c.x, c.y + P.EYE, c.z, realX, realY, realZ);
     // furniture in the way: don't waste a shot (and health) on it, move to get a clear line instead
     let blocked = false;
     if (target && !tp && visible) {
@@ -363,7 +400,13 @@ function act(game, c, b, dt) {
       if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; }   // tested it, move on
     }
     // positioning: get closer if far / no sight
-    if (!visible || blocked || d > 14) {
+    if (!sees && Math.hypot(realX - c.x, realZ - c.z) < 1.3) {
+      // reached the last place it saw you: stand and look around
+      b.path = null;
+      b.lookT = (b.lookT || 0) - dt;
+      if (b.lookT <= 0) { b.lookYaw = c.yaw + rand(-2.2, 2.2); b.lookT = rand(0.4, 0.8); }
+      c.yaw = turnToward(c.yaw, b.lookYaw, 4 * dt);
+    } else if (!visible || blocked || d > 14) {
       b.repathT -= dt;
       if (!b.path || b.repathT <= 0) setPath(game, c, b, realX, realZ);
       const v = followPath(game, c, b);
@@ -373,7 +416,7 @@ function act(game, c, b, dt) {
       mx = dx / d; mz = dz / d; b.path = null;          // walk in for a stab
     } else b.path = null;
     // give up on a furniture test that takes too long
-    b.engageT = (b.engageT || 0) + dt;
+    b.engageT = tp ? (b.engageT || 0) + dt : 0;     // (only furniture tests time out; people are chased until lost)
     if (b.engageT > 8) { b.engageT = 0; b.state = 'wander'; b.targetProp = null; b.targetId = null; }
   } else {
     b.engageT = 0;

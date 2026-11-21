@@ -192,7 +192,28 @@ body.touch #hud-stamina { bottom: calc(28px + var(--sa-b)); }
 /* character editor */
 #editor { justify-content: flex-start; align-items: stretch; touch-action: none; cursor: grab; }
 #editor .editor-panel { cursor: auto; touch-action: pan-y; }
-.editor-panel { width: min(380px, 52vw); max-height: 100%; }
+/* the panel never gets taller than the screen: title + tabs + buttons stay put, the middle scrolls */
+.editor-panel { width: min(380px, 52vw); max-height: 100%; min-height: 0; overflow: hidden; }
+.editor-panel h2 { margin: 0; }
+.ed-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+#editor-fields { display: flex; flex-direction: column; gap: 6px; }
+.ed-buttons { flex: 0 0 auto; }
+#editor-tabs { flex-wrap: nowrap; overflow-x: auto; flex: 0 0 auto; scrollbar-width: none; }
+#editor-tabs .tab { padding: 5px 10px; white-space: nowrap; flex: 0 0 auto; }
+/* short screens (phones sideways): tighter */
+@media (max-height: 480px) {
+  .editor-panel { padding: 10px 12px; gap: 6px; width: min(360px, 48vw); }
+  .editor-panel h2 { font-size: 18px; }
+  #editor-tabs .tab { padding: 4px 8px; font-size: 12px; }
+  .ed-arrow { min-height: 30px; width: 34px; }
+  .sw { width: 26px; height: 26px; }
+  .ed-buttons .btn { min-height: 34px; padding: 6px 10px; }
+}
+/* phones upright: panel along the bottom so the character stays visible above it */
+@media (orientation: portrait) and (max-width: 700px) {
+  #editor { align-items: flex-end; justify-content: center; }
+  .editor-panel { width: 100%; max-height: 56%; }
+}
 .ed-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
 .ed-row .val { flex: 1; text-align: center; text-transform: capitalize; }
 .ed-arrow { width: 40px; min-height: 36px; justify-content: center; padding: 0; }
@@ -201,7 +222,7 @@ body.touch #hud-stamina { bottom: calc(28px + var(--sa-b)); }
 .sw.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent-2); }
 .ed-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .small-note { font-size: 11px; }
-@media (max-width: 560px) { .editor-panel { width: 58vw; padding: 10px; } }
+@media (max-width: 560px) and (orientation: landscape) { .editor-panel { width: 58vw; padding: 10px; } }
 
 /* gear button */
 #gearbtn {
@@ -230,7 +251,7 @@ body.lefty #tb-run { left: auto; right: calc(42px + var(--sa-r)); }
 #crosshair.circle { width: calc(var(--cross, 4px) * 3); height: calc(var(--cross, 4px) * 3); background: none; border: 2px solid rgba(255,255,255,0.85); }
 #crosshair.none { display: none !important; }
 #hud-role.prop { color: #5cb8ff; font-weight: bold; }
-.editor-panel > .row:last-child, #settings .panel > .row:last-child { position: sticky; bottom: -18px; background: var(--panel); padding: 8px 0 4px; margin-bottom: -8px; }
+#settings .panel > .row:last-child { position: sticky; bottom: -18px; background: var(--panel); padding: 8px 0 4px; margin-bottom: -8px; }
 .editor-panel { gap: 6px; }
 
 /* ============ prop hunt HUD ============ */

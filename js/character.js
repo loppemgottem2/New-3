@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=420';
-import { CONFIG } from './config.js?v=420';
+import * as THREE from '../vendor/three.module.min.js?v=440';
+import { CONFIG } from './config.js?v=440';
 
 
 const L = CONFIG.LOOKS;
@@ -21,17 +21,20 @@ const pickR = (a, rng = Math.random) => a[Math.floor(rng() * a.length)];
 export const DEFAULT_LOOK = {
   hair: 'short', hairColor: 0x3b2716, face: 'smile', skin: WHITE_SKIN,
   shirt: 'tshirt', shirtColor: 0x2f6fd8, pants: 'jeans', pantsColor: 0x2c3e66,
+  acc: 'none', accColor: 0x2f8a3a,
 };
 export function randomLook(rng = Math.random) {
   return {
     hair: pickR(L.HAIR, rng), hairColor: pickR(L.HAIR_COLORS.slice(0, 6), rng), face: pickR(FACES, rng), skin: pickR(L.SKINS, rng),
     shirt: pickR(L.SHIRTS, rng), shirtColor: pickR(L.SHIRT_COLORS, rng), pants: pickR(L.PANTS, rng), pantsColor: pickR(L.PANTS_COLORS, rng),
+    acc: (() => { const r = rng(); return r < 0.75 ? 'none' : r < 0.93 ? 'cap' : 'dragon'; })(), accColor: pickR(L.ACC_COLORS, rng),
   };
 }
 // Validate a look received over the network
 export function sanitizeLook(l) {
   l = l || {};
   const col = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : d);
+  const oldCap = l.hair === 'cap';         // the cap used to be a hairstyle: now it's an accessory
   return {
     hair: L.HAIR.includes(l.hair) ? l.hair : DEFAULT_LOOK.hair,
     hairColor: col(l.hairColor, DEFAULT_LOOK.hairColor),
@@ -41,6 +44,8 @@ export function sanitizeLook(l) {
     shirtColor: col(l.shirtColor, DEFAULT_LOOK.shirtColor),
     pants: L.PANTS.includes(l.pants) ? l.pants : DEFAULT_LOOK.pants,
     pantsColor: col(l.pantsColor, DEFAULT_LOOK.pantsColor),
+    acc: L.ACCESSORIES.includes(l.acc) ? l.acc : oldCap ? 'cap' : DEFAULT_LOOK.acc,
+    accColor: col(l.accColor, oldCap ? col(l.hairColor, DEFAULT_LOOK.accColor) : DEFAULT_LOOK.accColor),
   };
 }
 
@@ -240,16 +245,41 @@ function hairMeshes(style, hairMat) {
       add(new THREE.SphereGeometry(0.205, 18, 14), 0, 0.265, 0.07, 0, 0, 0, 1.02, 0.86, 1);
       add(new THREE.SphereGeometry(0.19, 16, 12), 0, 0.17, 0.11, 0, 0, 0, 1.0, 0.95, 0.9);   // volume at the back / sides
       break;
-    case 'cap':
-      add(new THREE.SphereGeometry(0.168, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), 0, 0.165, 0.005, 0.12, 0, 0, 0.96, 1.0, 1.04);
-      add(new THREE.CylinderGeometry(0.105, 0.105, 0.012, 18), 0, 0.2, -0.165, -0.1, 0, 0, 1, 1, 0.8);
-      add(new THREE.SphereGeometry(0.014, 6, 4), 0, 0.335, 0.005);
-      break;
     case 'beanie':
       add(new THREE.SphereGeometry(0.172, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), 0, 0.15, 0.005, 0.12, 0, 0, 0.96, 1.16, 1.05);
       add(new THREE.TorusGeometry(0.162, 0.024, 6, 22), 0, 0.17, 0.0, Math.PI / 2 + 0.12, 0, 0, 0.96, 1.05, 1);
       break;
     default: break; // bald
+  }
+  return out;
+}
+
+// ---------------- accessories ----------------
+// Head center is at (0, 0.15, 0); the face looks toward -Z. Geometry is made per character (freed in dispose()).
+function accessoryMeshes(kind, M) {
+  const out = [];
+  const add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.set(sx, sy, sz); out.push(m); return m;
+  };
+  if (kind === 'cap') {
+    add(new THREE.SphereGeometry(0.168, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), M.acc, 0, 0.165, 0.005, 0.12, 0, 0, 0.96, 1.0, 1.04);
+    add(new THREE.CylinderGeometry(0.105, 0.105, 0.012, 18), M.acc, 0, 0.2, -0.165, -0.1, 0, 0, 1, 1, 0.8);
+    add(new THREE.SphereGeometry(0.014, 6, 4), M.acc, 0, 0.335, 0.005);
+  } else if (kind === 'dragon') {
+    // a dragon head worn over the whole head: scaly skull, long snout, teeth, yellow slit eyes, horns and spikes
+    add(new THREE.SphereGeometry(0.19, 20, 14), M.acc, 0, 0.17, 0.01, 0, 0, 0, 1, 1.02, 1.1);              // skull
+    add(new THREE.SphereGeometry(0.11, 16, 10), M.acc, 0, 0.11, -0.2, 0.08, 0, 0, 0.95, 0.72, 1.55);       // upper snout
+    add(new THREE.SphereGeometry(0.09, 14, 8), M.accDark, 0, 0.045, -0.17, -0.12, 0, 0, 0.9, 0.5, 1.45);   // lower jaw
+    for (const sx of [-1, 1]) {
+      add(new THREE.SphereGeometry(0.012, 6, 4), M.accEye2, sx * 0.035, 0.145, -0.355);                    // nostrils
+      add(new THREE.SphereGeometry(0.036, 10, 8), M.accEye, sx * 0.085, 0.22, -0.13);                       // eyes
+      add(new THREE.BoxGeometry(0.008, 0.05, 0.01), M.accEye2, sx * 0.087, 0.22, -0.163);                   // slit pupils
+      add(new THREE.BoxGeometry(0.075, 0.022, 0.06), M.accDark, sx * 0.085, 0.262, -0.13, 0.15, 0, sx * -0.25);   // brow ridges
+      add(new THREE.ConeGeometry(0.038, 0.24, 8), M.accHorn, sx * 0.1, 0.37, 0.1, -0.85, 0, sx * -0.4);   // horns
+      add(new THREE.ConeGeometry(0.045, 0.1, 4), M.accDark, sx * 0.175, 0.18, 0.04, 0, 0, sx * -1.35, 1, 1, 0.35);  // side frills
+      for (let k = 0; k < 4; k++) add(new THREE.ConeGeometry(0.011, 0.045, 4), M.accHorn, sx * (0.07 - k * 0.006), 0.07, -0.3 + k * 0.045, Math.PI); // teeth
+    }
+    for (const [y, z, a] of [[0.37, 0.0, -0.15], [0.35, 0.11, -0.7], [0.29, 0.19, -1.15], [0.2, 0.23, -1.55]]) add(new THREE.ConeGeometry(0.03, 0.1, 4), M.accDark, 0, y, z, a);  // spikes down the back
   }
   return out;
 }
@@ -308,6 +338,8 @@ export class CharacterModel {
       brow: mat({ color: lk.hairColor === 0x9a9a9a ? 0x777777 : lk.hairColor }),
       hair: mat({ color: lk.hairColor }),
       shoes: mat({ color: 0x1e1c1b }),
+      acc: mat({ color: lk.accColor }),
+      accDark: mat({ color: new THREE.Color(lk.accColor).multiplyScalar(0.6).getHex() }),
     };
     this.skinColor = lk.skin;
     // eyes / mouth are not tinted by the room light as much (keeps faces readable)
@@ -330,8 +362,15 @@ export class CharacterModel {
     // head
     this.head = seg(this.torso.joint, 0, 0.6, 0);
     this.headMesh = mk(this.head.vis, g.head, M.skin);
-    for (const f of faceMeshes(lk.face, M)) this.head.vis.add(f);
-    for (const h of hairMeshes(lk.hair, M.hair)) this.head.vis.add(h);
+    this.mats.accEye = shared('dragonEye', () => new THREE.MeshLambertMaterial({ color: 0xf5c518, emissive: 0x403000 }));
+    this.mats.accEye2 = shared('dragonPupil', () => new THREE.MeshBasicMaterial({ color: 0x120c06 }));
+    this.mats.accHorn = shared('dragonHorn', () => new THREE.MeshLambertMaterial({ color: 0xeee4c8 }));
+    // a dragon head covers the whole head (no face / hair poking through); a cap goes over short hair
+    const covered = lk.acc === 'dragon';
+    const hairStyle = lk.acc === 'cap' && ['afro', 'mohawk', 'spiky', 'bun', 'beanie'].includes(lk.hair) ? 'short' : lk.hair;
+    if (!covered) for (const f of faceMeshes(lk.face, M)) this.head.vis.add(f);
+    if (!covered) for (const h of hairMeshes(hairStyle, M.hair)) this.head.vis.add(h);
+    for (const a of accessoryMeshes(lk.acc, M)) this.head.vis.add(a);
     // arms
     const longSleeve = lk.shirt === 'dressshirt' || lk.shirt === 'sweater';
     const noSleeve = false;

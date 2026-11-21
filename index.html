@@ -11,7 +11,7 @@
   <title>Find the Things</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=420">
+  <link rel="stylesheet" href="css/style.css?v=440">
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -82,14 +82,17 @@
 
   <!-- ===================== CHARACTER EDITOR ===================== -->
   <div id="editor" class="screen hidden">
-    <div class="panel editor-panel scroll">
+    <div class="panel editor-panel">
       <h2>Character</h2>
-      <label class="field">
-        <span>Your name</span>
-        <input id="name-input" maxlength="20" autocomplete="off" spellcheck="false">
-      </label>
-      <div id="editor-body"></div>
-      <div class="row">
+      <div id="editor-tabs" class="tabs"></div>
+      <div id="editor-body" class="ed-body">
+        <label class="field" id="name-field">
+          <span>Your name</span>
+          <input id="name-input" maxlength="20" autocomplete="off" spellcheck="false">
+        </label>
+        <div id="editor-fields"></div>
+      </div>
+      <div class="row ed-buttons">
         <button id="btn-editor-random" class="btn small">Randomize</button>
         <button id="btn-editor-done" class="btn small primary-sm">Done</button>
       </div>
@@ -206,6 +209,6 @@
   <div id="fps" class="hidden"></div>
 
   <script src="vendor/peerjs.min.js"></script>
-  <script type="module" src="js/main.js?v=420"></script>
+  <script type="module" src="js/main.js?v=440"></script>
 </body>
 </html>

@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=420';
-import { CONFIG } from './config.js?v=420';
-import { store, makeCode, clamp } from './util.js?v=420';
-import { makeTextures } from './textures.js?v=420';
-import { GameMap } from './map.js?v=420';
-import { NavGrid } from './nav.js?v=420';
-import { Input, isTouchDevice } from './input.js?v=420';
-import { UI } from './ui.js?v=420';
-import { Audio } from './audio.js?v=420';
-import { Game } from './game.js?v=420';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=420';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=420';
+import * as THREE from '../vendor/three.module.min.js?v=440';
+import { CONFIG } from './config.js?v=440';
+import { store, makeCode, clamp } from './util.js?v=440';
+import { makeTextures } from './textures.js?v=440';
+import { GameMap } from './map.js?v=440';
+import { NavGrid } from './nav.js?v=440';
+import { Input, isTouchDevice } from './input.js?v=440';
+import { UI } from './ui.js?v=440';
+import { Audio } from './audio.js?v=440';
+import { Game } from './game.js?v=440';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=440';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=440';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -229,20 +229,34 @@ document.addEventListener('pointerlockchange', () => {
 // ---------------- character editor ----------------
 const L = CONFIG.LOOKS;
 const ED = [
-  { key: 'hair', label: 'Hairstyle', list: L.HAIR },
-  { key: 'hairColor', label: 'Hair / hat color', colors: L.HAIR_COLORS },
-  { key: 'face', label: 'Face', list: FACES },
-  { key: 'skin', label: 'Skin tone', colors: L.SKINS },
-  { key: 'shirt', label: 'Shirt', list: L.SHIRTS },
-  { key: 'shirtColor', label: 'Shirt color (menu preview)', colors: L.SHIRT_COLORS },
-  { key: 'pants', label: 'Pants', list: L.PANTS },
-  { key: 'pantsColor', label: 'Pants color', colors: L.PANTS_COLORS },
+  { tab: 'Look', key: 'face', label: 'Face', list: FACES },
+  { tab: 'Look', key: 'skin', label: 'Skin tone', colors: L.SKINS },
+  { tab: 'Hair', key: 'hair', label: 'Hairstyle', list: L.HAIR },
+  { tab: 'Hair', key: 'hairColor', label: 'Hair color', colors: L.HAIR_COLORS },
+  { tab: 'Clothes', key: 'shirt', label: 'Shirt', list: L.SHIRTS },
+  { tab: 'Clothes', key: 'shirtColor', label: 'Shirt color (menu preview)', colors: L.SHIRT_COLORS },
+  { tab: 'Clothes', key: 'pants', label: 'Pants', list: L.PANTS },
+  { tab: 'Clothes', key: 'pantsColor', label: 'Pants color', colors: L.PANTS_COLORS },
+  { tab: 'Accessories', key: 'acc', label: 'Accessory', list: L.ACCESSORIES },
+  { tab: 'Accessories', key: 'accColor', label: 'Accessory color', colors: L.ACC_COLORS },
 ];
-const NICE = { tshirt: 'T-shirt', dressshirt: 'Dress shirt', sweater: 'Sweater', sidepart: 'Side part' };
+const NICE = { tshirt: 'T-shirt', dressshirt: 'Dress shirt', sweater: 'Sweater', sidepart: 'Side part', none: 'None', dragon: 'Dragon head' };
+let edTab = 'Look';
 function buildEditor() {
-  const body = $('editor-body');
+  // tabs
+  const tabs = $('editor-tabs');
+  tabs.innerHTML = '';
+  for (const t of [...new Set(ED.map((e) => e.tab))]) {
+    const b = document.createElement('button');
+    b.className = 'tab' + (t === edTab ? ' on' : ''); b.textContent = t;
+    b.onclick = () => { edTab = t; buildEditor(); $('editor-body').scrollTop = 0; };
+    tabs.appendChild(b);
+  }
+  $('name-field').style.display = edTab === 'Look' ? '' : 'none';
+  const body = $('editor-fields');
   body.innerHTML = '';
   for (const e of ED) {
+    if (e.tab !== edTab) continue;
     if (e.list) {
       const row = document.createElement('div'); row.className = 'ed-row';
       const i = e.list.indexOf(settings.look[e.key]);
@@ -668,8 +682,14 @@ function frame(now) {
     preview.model.update(dt, { x: PREVIEW.x, y: 0, z: PREVIEW.z, yaw: preview.yaw, pitch: Math.sin(preview.t * 0.7) * 0.08, speed: 0, onGround: true, weapon: 0 }, 0);
     const wide = window.innerWidth / window.innerHeight;
     camera.rotation.order = 'YXZ';
-    camera.position.set(PREVIEW.x - 0.1, 1.3, PREVIEW.z + 2.3 + (wide < 1.4 ? 0.7 : 0));
-    camera.lookAt(PREVIEW.x - 0.62 * Math.min(1.2, wide / 1.6), 1.05, PREVIEW.z);
+    if (wide < 1 && window.innerWidth <= 700) {
+      // phone upright: the editor sits along the bottom, so show the character centred in the top part
+      camera.position.set(PREVIEW.x, 1.25, PREVIEW.z + 4.4);
+      camera.lookAt(PREVIEW.x, -0.15, PREVIEW.z);
+    } else {
+      camera.position.set(PREVIEW.x - 0.1, 1.3, PREVIEW.z + 2.3 + (wide < 1.4 ? 0.7 : 0));
+      camera.lookAt(PREVIEW.x - 0.62 * Math.min(1.2, wide / 1.6), 1.05, PREVIEW.z);
+    }
     input.read();
   } else {
     // menu background: slow walk through the courtyard
