@@ -106,10 +106,8 @@ export class Game {
     this.scene.add(this.root);
     this.viewModel = new ViewModel(this.camera, this.T);
     this.props = new PropSystem(this.map, this.root, this.T, this.isHost);
-    // zoom: camDist = where you zoomed to (0 = first person … 8 m), zoomCur glides toward it smoothly.
-    // Works the same with shift lock on or off.
+    // zoom: 0 = first person … 8 m behind you. Same range with shift lock on or off.
     this.camDist = this.settings.camDist ?? 3;
-    this.zoomCur = this.camDist;
     // camera angles are separate from where your character faces:
     //  shift lock ON  = you always face where the camera looks, aim with the crosshair in the middle
     //  shift lock OFF = the camera orbits freely, you face where you walk, aim where you tap / click
@@ -931,10 +929,8 @@ export class Game {
   //  LOCAL PLAYER
   // ---------------------------------------------------------------
   // free camera (shift lock off) and props are always third person
-  thirdPerson() { return this.zoomCur > 0.35; }
-  camDistance() { return this.zoomCur; }
-  // props always see themselves from a little behind
-  minZoom() { const me = this.me; return me && me.alive && me.team === 'prop' ? 1.6 : 0; }
+  thirdPerson() { return this.camDist > 0.25; }
+  camDistance() { return this.camDist; }
   // shift lock, or zoomed all the way into first person: you face where the camera looks + crosshair aim
   lockedView() { return this.shiftLock || !this.thirdPerson(); }
   eyeHeight(c) { return c.disguise ? Math.max(0.6, propHeight(c.disguise) + 0.35) : P.EYE; }
@@ -994,7 +990,8 @@ export class Game {
     this.o.onSettings?.();
     this.ui.input?.setLockMode?.(on);
     const me = this.me;
-    if (on && me) { this.camYaw = me.yaw; }
+    // keep the camera where it is; your character turns to face the same way
+    if (on && me && me.alive) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
   }
 
   // which real prop is under the crosshair (or under a tap on the screen)?
@@ -1021,13 +1018,9 @@ export class Game {
     if (inp.score) { this.scoreOpen = !this.scoreOpen || !this.ui.isTouch; this.ui.showScoreboard(this.scoreOpen, this); }
     if (inp.scoreUp && !this.ui.isTouch) { this.scoreOpen = false; this.ui.showScoreboard(false, this); }
     // camera zoom (mouse wheel, +/- buttons, V toggles)
-    if (inp.zoom) {
-      this.camDist = clamp(this.camDist + inp.zoom, 0, 8);
-      if (inp.zoom < 0 && this.camDist < 0.6) this.camDist = 0;   // close enough: go to first person
-    }
-    if (inp.toggleView) { if (this.camDist > 0.35) { this._lastDist = this.camDist; this.camDist = 0; } else this.camDist = this._lastDist || 3; }
-    this.zoomCur += (Math.max(this.camDist, this.minZoom()) - this.zoomCur) * (1 - Math.exp(-dt * 12));
-    if (Math.abs(this.zoomCur - Math.max(this.camDist, this.minZoom())) < 0.005) this.zoomCur = Math.max(this.camDist, this.minZoom());
+    if (inp.zoom) this.camDist = clamp(this.camDist + inp.zoom, 0, 8);
+    if (inp.toggleView) { if (this.camDist > 0.25) { this._lastDist = this.camDist; this.camDist = 0; } else this.camDist = this._lastDist || 2.5; }
+    if (this.camDist < 0.25 && inp.zoom < 0) this.camDist = 0;
     const locked = this.lockedView();
 
     if (inp.shiftLock && !(me.alive && me.team === 'seeker' && this.phase === 'pre')) this.toggleShiftLock();
@@ -1236,10 +1229,9 @@ export class Game {
         const d = dirFromAngles(this.camYaw, this.camPitch);
         const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
         // shift lock + weapon out -> tighter over-the-right-shoulder view for aiming
-        // (the zoom distance itself is never changed here, so zooming feels the same in every mode)
         const aiming = this.shiftLock && weaponOf(me) !== 0;
         const cd = this.camDistance();
-        const tSide = (aiming ? 0.68 : me.team === 'prop' || !this.shiftLock ? 0 : 0.38) * Math.min(1, cd / 1.5);
+        const tSide = aiming ? 0.68 : me.team === 'prop' || !this.shiftLock ? 0 : 0.38 * Math.min(1, cd / 1.5);
         const kk = Math.min(1, dt * 8);
         this._side = (this._side ?? tSide) + (tSide - (this._side ?? tSide)) * kk;
         const side = this._side;
@@ -1249,11 +1241,6 @@ export class Game {
         const spx = sideHit < side + 0.2 ? ex + rx * Math.max(0, sideHit - 0.2) : px, spz = sideHit < side + 0.2 ? ez + rz * Math.max(0, sideHit - 0.2) : pz;
         const hit = raycastMap(this.map, spx, py, spz, -d.x, -d.y, -d.z, dist + 0.3);
         dist = Math.max(0.1, Math.min(dist, hit - 0.25));
-        const ph = this.props.raycast(spx, py, spz, -d.x, -d.y, -d.z, dist + 0.2);
-        if (ph && ph.t > 0.3) dist = Math.max(0.3, Math.min(dist, ph.t - 0.2));
-        // pull in at once when a wall gets in the way, but glide back out (no jumpy camera)
-        const prev = this._camActualDist ?? dist;
-        if (dist > prev) dist = prev + (dist - prev) * Math.min(1, dt * 8);
         this._camActualDist = dist;
         cam.position.set(spx - d.x * dist, py - d.y * dist, spz - d.z * dist);
       } else {
