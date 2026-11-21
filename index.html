@@ -99,13 +99,14 @@
     <div class="panel wide scroll">
       <h2>How to play</h2>
       <p>Every round the players are split into two teams.</p>
-      <p><b style="color:#4af">Props</b> spawn as stiff, T-posing people. During the hiding time, find a good spot and <b>tap / click any piece of furniture</b> to turn into it. Then keep still: furniture that moves around gets noticed! Tap the HUMAN button (Q) to turn back into a person.</p>
+      <p><b style="color:#4af">Props</b> spawn as stiff, T-posing people. During the hiding time, find a good spot and <b>tap / click any piece of furniture</b> to turn into it (tap another piece to change). Then keep still: furniture that moves around gets noticed!</p>
+      <p><b>Shift lock</b> (🔒 button or L): ON = you always face where the camera looks and aim with the crosshair in the middle. OFF = the camera moves freely around you, you face where you walk, and you aim / shoot wherever you tap or click on the screen.</p>
       <p><b style="color:#f55">Seekers</b> are blindfolded while the props hide. Then they spawn with a <b>knife</b> and a <b>revolver</b> in their hotbar. Find the props and take them out — but hitting real furniture costs you health.</p>
       <p>Seekers win when every prop is found. Props win if at least one survives until the time runs out (or every seeker is down).</p>
       <h3>Phone controls</h3>
-      <p>Left thumb: move (push to the edge to sprint). Right thumb: drag to look. Props: tap furniture on the screen to turn into it. Seekers: tap a hotbar slot to hold that item, 🎒 opens the inventory, STAB/SHOOT attacks (drag on it to aim too), THROW throws the knife. Pinch with two fingers to zoom the camera, ⚙ settings.</p>
+      <p>Left thumb: move (push to the edge to sprint). Right thumb: drag to look. Props: tap furniture on the screen to turn into it. Seekers: tap a hotbar slot to hold that item (tap it again to put it away), 🎒 opens the inventory. With shift lock off, tap the screen to stab / shoot that spot; STAB/SHOOT attacks where the camera points. THROW throws the knife. Pinch with two fingers to zoom the camera, ⚙ settings.</p>
       <h3>Computer controls</h3>
-      <p>WASD move · Mouse look (click to lock) · Shift sprint · Space jump · Left click attack (props: click furniture to become it) · 1–5 hotbar · Q holster / turn back into a person · I inventory · Right click / G throw knife · Mouse wheel zoom / V third person · Tab scoreboard · F next spectate · Esc / P settings</p>
+      <p>WASD move · Mouse look (click to lock) · Shift sprint · Space jump · Left click attack the spot under the cursor (props: click furniture to become it) · Right-drag turn the camera · L shift lock (mouse look + crosshair) · 1–5 hotbar · Q put item away · I inventory · G throw knife (right click in shift lock) · Mouse wheel zoom · Tab scoreboard · F next spectate · Esc / P settings</p>
       <h3>The X button</h3>
       <p>In a match: X = give up and spectate (you die). Press X again = back to the main menu. X on the main menu = leave the game.</p>
       <button id="btn-help-back" class="btn">Back</button>
@@ -153,12 +154,16 @@
   <!-- seekers are blindfolded while props hide -->
   <div id="blind" class="hidden"><div>The props are hiding…</div><div id="blind-t" class="blind-t"></div><small>You will be released when the timer runs out</small></div>
 
+  <!-- shift lock: always face where the camera looks + crosshair aim (L key) -->
+  <button id="slbtn" class="hidden" title="Shift lock (L)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3H9zm3 3.5a2 2 0 0 1 1 3.73V19h-2v-1.77a2 2 0 0 1 1-3.73z"/></svg><span>SHIFT LOCK</span></button>
+
   <!-- seeker hotbar (filled by ui.js) -->
   <div id="hotbar" class="hidden"></div>
 
   <!-- seeker inventory -->
   <div id="inventory" class="hidden">
     <div class="panel wide">
+      <button id="inv-x" class="inv-x" title="Close">✕</button>
       <h2>Inventory</h2>
       <p class="muted">Tap an item, then tap another slot to move or swap it.</p>
       <div class="inv-label">Hotbar</div>
@@ -182,8 +187,6 @@
     <div class="tbtn" data-btn="score" id="tb-score">☰</div>
     <div class="tbtn" data-btn="run" id="tb-run">RUN</div>
     <div class="tbtn" data-btn="jump" id="tb-jump">JUMP</div>
-    <div class="tbtn" data-btn="equip" id="tb-equip">HIDE</div>
-    <div class="tbtn" data-btn="inv" id="tb-inv">🎒</div>
     <div class="tbtn" data-btn="throw" id="tb-throw">THROW</div>
     <div class="tbtn big" data-btn="attack" id="tb-attack">STAB</div>
     <div class="tbtn" data-btn="next" id="tb-next">▶</div>

@@ -26,6 +26,10 @@ export class Input {
     this.touchSens = CONFIG.CONTROLS.TOUCH_SENS;
     this.invertY = false;
     this.locked = false;
+    this.lockMode = false;   // shift lock: mouse is captured (pointer lock). Off: free cursor, right-drag turns the camera
+    this.mouse = null;       // cursor position on screen (free cursor mode)
+    this.point = null;       // where the last click happened (free cursor mode)
+    this.canvas = canvas;
     this.isTouch = isTouchDevice();
     this.zoom = 0;
     this.lefty = false;     // left-handed: joystick on the right
@@ -46,6 +50,7 @@ export class Input {
         if (k === 'KeyV') this.press('toggleView');
         if (k === 'KeyP' || k === 'Escape') this.press('menu');
         if (k === 'KeyI' || k === 'KeyB') this.press('inv');
+        if (k === 'KeyL') this.press('shiftLock');
         if (/^Digit[1-9]$/.test(k)) this.slotKey = +k.slice(5) - 1;   // hotbar 1-5
       }
       this.keys.add(k);
@@ -58,22 +63,32 @@ export class Input {
 
     // ---------- mouse ----------
     canvas.addEventListener('click', () => {
-      if (this.active && !this.isTouch && !this.locked) canvas.requestPointerLock?.();
+      if (this.active && !this.isTouch && !this.locked && this.lockMode) canvas.requestPointerLock?.();
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.active || !this.locked) return;
-      this.lookDX += e.movementX * this.mouseSens;
-      this.lookDY += e.movementY * this.mouseSens;
+      if (!this.active) return;
+      if (this.locked || this.dragR) {
+        this.lookDX += e.movementX * this.mouseSens;
+        this.lookDY += e.movementY * this.mouseSens;
+      }
+      if (!this.locked) this.mouse = { x: e.clientX, y: e.clientY };
     });
     document.addEventListener('mousedown', (e) => {
-      if (!this.active || !this.locked) return;
-      if (e.button === 0) { this.press('attack'); this.held.attack = true; }
-      if (e.button === 2) this.press('throw');
+      if (!this.active || this.isTouch) return;
+      if (this.locked) {
+        if (e.button === 0) { this.press('attack'); this.held.attack = true; }
+        if (e.button === 2) this.press('throw');
+        return;
+      }
+      // free cursor (shift lock off): left click acts on the spot under the cursor, right-drag turns the camera
+      if (e.target !== canvas) return;
+      if (e.button === 0) { this.press('attack'); this.held.attack = true; this.point = { x: e.clientX, y: e.clientY }; }
+      if (e.button === 2) this.dragR = true;
     });
-    document.addEventListener('mouseup', (e) => { if (e.button === 0) this.held.attack = false; });
+    document.addEventListener('mouseup', (e) => { if (e.button === 0) this.held.attack = false; if (e.button === 2) this.dragR = false; });
     document.addEventListener('contextmenu', (e) => { if (this.active) e.preventDefault(); });
     // mouse wheel = zoom camera in/out
     window.addEventListener('wheel', (e) => {
@@ -93,6 +108,14 @@ export class Input {
   }
 
   press(name) { this.edges[name] = true; }
+
+  // shift lock on = capture the mouse; off = release it so the cursor can aim
+  setLockMode(on) {
+    this.lockMode = on;
+    if (this.isTouch) return;
+    if (!on && this.locked) document.exitPointerLock?.();
+    if (on && this.active && !this.locked) { try { const r = this.canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch { /* needs a click */ } }
+  }
 
   onTouchStart(e) {
     if (!this.active) return;
@@ -246,6 +269,8 @@ export class Input {
       slot: this.slotKey ?? -1,
       inv: !!this.edges.inv,
       tap: this.tap || null,
+      point: this.point || null,
+      shiftLock: !!this.edges.shiftLock,
       x: !!this.edges.x,
       score: !!this.edges.score,
       zoom: this.zoom,
@@ -256,7 +281,7 @@ export class Input {
       lookDY: clamp(this.lookDY, -2, 2) * (this.invertY ? -1 : 1),
     };
     this.edges = {};
-    this.slotKey = null; this.tap = null;
+    this.slotKey = null; this.tap = null; this.point = null;
     this.lookDX = 0; this.lookDY = 0; this.zoom = 0;
     return out;
   }
