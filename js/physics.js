@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=270';
-import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=270';
+import { CONFIG } from './config.js?v=280';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=280';
 const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
 const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
 // Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the
@@ -309,6 +309,16 @@ export function rayVsCapsules(ox, oy, oz, dx, dy, dz, caps, pad = 0, offX = 0, o
   }
   return best;
 }
+// which capsule a ray hits first: { t, i } (or null)
+export function rayCapsuleIndex(ox, oy, oz, dx, dy, dz, caps, maxT = Infinity) {
+  let best = null;
+  caps.forEach((c, i) => {
+    const t = rayCapsule(ox, oy, oz, dx, dy, dz, c[0], c[1], c[2], c[3], c[4], c[5], c[6]);
+    if (t >= 0 && t < maxT && (!best || t < best.t)) best = { t, i };
+  });
+  return best;
+}
+
 // standard ray-vs-capsule test (segment a-b, radius r); ray direction must be normalized
 function rayCapsule(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, r) {
   const sx = bx - ax, sy = by - ay, sz = bz - az;

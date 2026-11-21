@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=270';
-import { CONFIG } from './config.js?v=270';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=270';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=270';
-import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=270';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=270';
-import { Ragdoll } from './ragdoll.js?v=270';
-import { Audio } from './audio.js?v=270';
-import { initBrain, updateBots } from './bots.js?v=270';
+import * as THREE from '../vendor/three.module.min.js?v=280';
+import { CONFIG } from './config.js?v=280';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=280';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=280';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=280';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=280';
+import { Ragdoll } from './ragdoll.js?v=280';
+import { Audio } from './audio.js?v=280';
+import { initBrain, updateBots } from './bots.js?v=280';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -30,9 +30,11 @@ const MAX_DECALS = 160;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // Flags packed into snapshots
-const F_ALIVE = 1, F_KNIFE = 2, F_GUN = 4, F_GROUND = 8, F_RUN = 16, F_SEEKER = 32, F_PROP = 64;
+const F_ALIVE = 1, F_KNIFE = 2, F_GUN = 4, F_GROUND = 8, F_RUN = 16, F_SEEKER = 32, F_PROP = 64, F_CROWBAR = 128;
 
-export const ITEM_NAMES = { knife: 'Knife', revolver: 'Revolver' };
+export const ITEM_NAMES = { knife: 'Knife', revolver: 'Revolver', crowbar: 'Crowbar' };
+// melee weapons (the crowbar works exactly like the knife)
+const isMelee = (w) => w === 1 || w === 3;
 
 export function newChar(id, nick, isBot, look) {
   return {
@@ -43,7 +45,7 @@ export function newChar(id, nick, isBot, look) {
     alive: false, spectator: true,
     team: 'none', hp: TM.SEEKER_HP, maxHp: TM.SEEKER_HP,
     disguise: null, morphCd: 0, anchored: false,   // anchored: a prop frozen in place (its player flies the camera)           // prop team: furniture type you look like (null = T-posing person)
-    hasKnife: false, hasGun: false,       // seekers: knife can be thrown away, then picked back up
+    hasKnife: false, hasGun: false, hasCrowbar: false,   // seekers: knife / crowbar can be thrown away, then picked back up
     hotbar: new Array(INV.HOTBAR).fill(null), backpack: new Array(INV.BACKPACK).fill(null),
     slot: -1, lastSlot: 0,                // selected hotbar slot (-1 = hands empty)
     attackCd: 0,
@@ -60,6 +62,7 @@ export function weaponOf(c) {
   const it = c.hotbar[c.slot];
   if (it === 'knife' && c.hasKnife) return 1;
   if (it === 'revolver' && c.hasGun) return 2;
+  if (it === 'crowbar' && c.hasCrowbar) return 3;
   return 0;
 }
 
@@ -233,7 +236,7 @@ export class Game {
       const seeker = teamOf.get(c) === 'seeker';
       c.team = seeker ? 'seeker' : 'prop';
       c.color = CONFIG.TEAM_COLORS[c.team];
-      c.hasKnife = seeker; c.hasGun = seeker;
+      c.hasKnife = seeker; c.hasGun = seeker; c.hasCrowbar = seeker;
       c.hotbar = new Array(INV.HOTBAR).fill(null);
       c.backpack = new Array(INV.BACKPACK).fill(null);
       if (seeker) INV.START.forEach((it, k) => { if (k < INV.HOTBAR) c.hotbar[k] = it; else c.backpack[k - INV.HOTBAR] = it; });
@@ -296,7 +299,7 @@ export class Game {
       // live knife slash: keep checking for a short moment after the swing
       if (c.slashT > 0) {
         c.slashT -= dt;
-        if (c.alive && weaponOf(c) === 1 && this.phase === 'play') this.knifeHitCheck(c); else c.slashT = 0;
+        if (c.alive && isMelee(weaponOf(c)) && this.phase === 'play') this.knifeHitCheck(c); else c.slashT = 0;
       }
     }
 
@@ -332,6 +335,7 @@ export class Game {
       if (c.alive) f |= F_ALIVE;
       const w = weaponOf(c);
       if (w === 1) f |= F_KNIFE;
+      if (w === 3) f |= F_CROWBAR;
       if (w === 2) f |= F_GUN;
       if (c.onGround) f |= F_GROUND;
       if (c.running) f |= F_RUN;
@@ -339,13 +343,13 @@ export class Game {
       if (c.team === 'prop') f |= F_PROP;
       cs.push([c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.yaw), r2(c.pitch), f, r2(c.speed), c.disguise ? PROP_LIST.indexOf(c.disguise) : -1]);
     }
-    const it = [...this.items.values()].map((i) => [i.id, 1, r2(i.x), r2(i.y), r2(i.z), i.flying ? 1 : 0]);
+    const it = [...this.items.values()].map((i) => [i.id, i.type === 'crowbar' ? 3 : 1, r2(i.x), r2(i.y), r2(i.z), i.flying ? 1 : 0]);
     const pr = this.props.snapshot(1 / CONFIG.NET.SNAPSHOT_RATE);
     for (const c of this.humans()) {
       if (c.cid == null) continue;
       this.net.send(c.cid, {
         t: 'snap', ph: this.phase, tl: r2(this.timeLeft), c: cs, it, pr,
-        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), mh: c.maxHp, an: c.anchored ? 1 : 0, cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
+        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, cb: c.hasCrowbar ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), mh: c.maxHp, an: c.anchored ? 1 : 0, cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
       });
     }
   }
@@ -467,23 +471,24 @@ export class Game {
       const w = weaponOf(c);
       if (w === 0) {
         // nothing in hand: take out the first weapon in the hotbar
-        const k = c.hotbar.findIndex((it) => (it === 'knife' && c.hasKnife) || (it === 'revolver' && c.hasGun));
+        const k = c.hotbar.findIndex((it) => (it === 'knife' && c.hasKnife) || (it === 'revolver' && c.hasGun) || (it === 'crowbar' && c.hasCrowbar));
         if (k >= 0) c.slot = k;
         return;
       }
       if (this.phase !== 'play' || c.attackCd > 0) return;
-      if (w === 1) this.knifeAttack(c);
+      if (isMelee(w)) this.knifeAttack(c);
       else this.gunAttack(c);
       return;
     }
     if (a === 'throw') {
-      if (weaponOf(c) !== 1 || this.phase !== 'play' || c.attackCd > 0) return;
+      const tw = weaponOf(c);
+      if (!isMelee(tw) || this.phase !== 'play' || c.attackCd > 0) return;
       c.attackCd = W.KNIFE_THROW_COOLDOWN;
-      c.hasKnife = false;
+      if (tw === 3) c.hasCrowbar = false; else c.hasKnife = false;
       const d = dirFromAngles(c.yaw, c.pitch + 0.03);
       const id = this.nextItem++;
       this.items.set(id, {
-        id, type: 'knife', flying: true, owner: c.id,
+        id, type: tw === 3 ? 'crowbar' : 'knife', flying: true, owner: c.id,
         x: c.x + d.x * 0.5, y: c.y + P.EYE - 0.1, z: c.z + d.z * 0.5,
         vx: d.x * W.KNIFE_THROW_SPEED + c.vx * 0.5, vy: d.y * W.KNIFE_THROW_SPEED + 1, vz: d.z * W.KNIFE_THROW_SPEED + c.vz * 0.5,
       });
@@ -532,22 +537,23 @@ export class Game {
     c.slashT = W.KNIFE_SLASH_WINDOW;
     this.emit({ e: 'swing', id: c.id });
     if (this.knifeHitCheck(c)) return;
+    const mk = weaponOf(c) === 3 ? 'c' : 's';     // crowbar scratches / knife cut
     // stabbed a real piece of furniture?
     const d = dirFromAngles(c.yaw, c.pitch);
     const ph = this.props.raycast(c.x, c.y + P.EYE, c.z, d.x, d.y, d.z, W.KNIFE_RANGE);
     if (ph) {
       this.props.impulseAt(ph.prop, ph.point, new THREE.Vector3(d.x * 2, d.y * 2, d.z * 2));
       this.emit({ e: 'clink', p: [r2(ph.point.x), r2(ph.point.y), r2(ph.point.z)] });
-      this.markImpact('s', ph.point, ph.normal, ph.prop.id);
+      this.markImpact(mk, ph.point, ph.normal, ph.prop.id);
       c.slashT = 0;
       this.wrongProp(c);
       return;
     }
-    // a cut in the wall / floor
+    // a cut (knife) or scratches (crowbar) in the wall / floor
     const tw = raycastMap(this.map, c.x, c.y + P.EYE, c.z, d.x, d.y, d.z, W.KNIFE_RANGE);
     if (tw < W.KNIFE_RANGE) {
       const hp = { x: c.x + d.x * tw, y: c.y + P.EYE + d.y * tw, z: c.z + d.z * tw };
-      this.markImpact('s', hp, this.mapNormal(hp, d));
+      this.markImpact(mk, hp, this.mapNormal(hp, d));
     }
   }
 
@@ -573,10 +579,10 @@ export class Game {
 
   // host: a prop player was hit -> blood splatters on the surfaces around (more / bigger / farther for gunshots)
   bleed(target, p, d, gun) {
-    this.emit({ e: 'blood', p: [r2(p.x), r2(p.y), r2(p.z)], d: [r2(d.x), r2(d.y), r2(d.z)], g: gun ? 1 : 0 });
+    this.emit({ e: 'blood', id: target.id, p: [r2(p.x), r2(p.y), r2(p.z)], d: [r2(d.x), r2(d.y), r2(d.z)], g: gun ? 1 : 0 });
   }
 
-  addDecal(tex, p, n, w, h, life, prop = null) {
+  addDecal(tex, p, n, w, h, life, prop = null, parentObj = null) {
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const l = this.map.probe(p.x, p.z, true, [0, 0, 0]);
     const lum = Math.min(1.25, 0.3 * l[0] + 0.55 * l[1] + 0.15 * l[2]);
@@ -588,23 +594,61 @@ export class Game {
     m.lookAt(pos.x + n.x, pos.y + n.y, pos.z + n.z);
     m.rotateZ(Math.random() * Math.PI * 2);
     m.renderOrder = 2;
-    if (prop) {
-      // stick to the furniture so the mark moves with it
-      prop.mesh.updateMatrixWorld(true);
-      const inv = prop.mesh.matrixWorld.clone().invert();
+    const parent = parentObj || (prop ? prop.mesh : null);
+    if (parent) {
+      // stick to the furniture / body part so the mark moves with it
+      parent.updateMatrixWorld(true);
+      const inv = parent.matrixWorld.clone().invert();
       m.updateMatrix();
       m.matrix.premultiply(inv);
       m.matrix.decompose(m.position, m.quaternion, m.scale);
-      prop.mesh.add(m);
+      parent.add(m);
     } else this.root.add(m);
     this.decals.push({ m, life, max: life });
     while (this.decals.length > MAX_DECALS) this.removeDecal(this.decals.shift());
   }
   removeDecal(dc) { dc.m.parent?.remove(dc.m); dc.m.material.dispose(); }
 
-  // client: splash blood onto nearby walls / floor / furniture
-  spawnBlood(p, d, gun) {
-    const T = this.T, n = gun ? 9 : 4, range = gun ? 4.5 : 1.8;
+  // A ray against the people standing around (excluding `skip`): body part hit + surface normal
+  rayChars(p, dir, maxT, skip) {
+    let best = null;
+    for (const c of this.chars.values()) {
+      if (!c.alive || c === skip) continue;
+      if (c.disguise) {
+        if (!c.dmesh) continue;
+        const t = rayVsPropShape(c.disguise, c.rx, c.ry, c.rz, c.ryaw, p.x, p.y, p.z, dir.x, dir.y, dir.z);
+        if (t >= 0 && t < maxT && (!best || t < best.t)) best = { t, obj: c.dmesh.mesh, n: { x: -dir.x, y: -dir.y, z: -dir.z } };
+        continue;
+      }
+      if (!c.model.root.visible && c !== this.me) continue;
+      const caps = c.model.hitCapsules();
+      const h = rayCapsuleIndex(p.x, p.y, p.z, dir.x, dir.y, dir.z, caps, maxT);
+      if (h && (!best || h.t < best.t)) {
+        const cp = caps[h.i], hx = p.x + dir.x * h.t, hy = p.y + dir.y * h.t, hz = p.z + dir.z * h.t;
+        // normal = from the closest point on the body part's center line out to the hit point
+        const sx = cp[3] - cp[0], sy = cp[4] - cp[1], sz = cp[5] - cp[2], ss = sx * sx + sy * sy + sz * sz || 1;
+        const u = Math.max(0, Math.min(1, ((hx - cp[0]) * sx + (hy - cp[1]) * sy + (hz - cp[2]) * sz) / ss));
+        let nx = hx - (cp[0] + sx * u), ny = hy - (cp[1] + sy * u), nz = hz - (cp[2] + sz * u);
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        const M = c.model, bones = [M.head.joint, M.torso.joint, M.armL.sh, M.armL.el, M.armR.sh, M.armR.el, M.legL.hip, M.legL.kn, M.legR.hip, M.legR.kn];
+        best = { t: h.t, obj: bones[h.i] || M.root, n: { x: nx / nl, y: ny / nl, z: nz / nl } };
+      }
+    }
+    return best;
+  }
+
+  // client: splash blood onto nearby walls / floor / furniture / people (and a wound on the one who was hit)
+  spawnBlood(p, d, gun, victim = null) {
+    const T = this.T, n = gun ? 10 : 5, range = gun ? 4.5 : 1.8;
+    // the wound: blood on the hit player's own body / furniture shape where the hit landed
+    if (victim) {
+      const back = { x: p.x - d.x * 1.2, y: p.y - d.y * 1.2, z: p.z - d.z * 1.2 };
+      const own = this.rayChars(back, d, 2.4, null);
+      if (own) {
+        const sz = gun ? rand(0.35, 0.5) : rand(0.25, 0.4);
+        this.addDecal(T.blood[(Math.random() * T.blood.length) | 0], { x: back.x + d.x * own.t, y: back.y + d.y * own.t, z: back.z + d.z * own.t }, own.n, sz, sz, rand(35, 45), null, own.obj);
+      }
+    }
     for (let i = 0; i < n; i++) {
       let dir;
       if (i === 0) dir = new THREE.Vector3((Math.random() - 0.5) * 0.3, -1, (Math.random() - 0.5) * 0.3);   // drips on the floor below
@@ -613,13 +657,17 @@ export class Game {
       dir.normalize();
       const tw = raycastMap(this.map, p.x, p.y, p.z, dir.x, dir.y, dir.z, range);
       const ph = this.props.raycast(p.x, p.y, p.z, dir.x, dir.y, dir.z, Math.min(tw, range));
-      const t = ph ? ph.t : tw;
+      let t = ph ? ph.t : tw;
+      // people standing nearby get splattered too (not the one who was hit: that's the wound above)
+      const pc = this.rayChars(p, dir, Math.min(t, range), victim);
+      if (pc) t = pc.t;
       if (t >= range) continue;
       const hp = { x: p.x + dir.x * t, y: p.y + dir.y * t, z: p.z + dir.z * t };
-      const nrm = ph ? ph.normal : this.mapNormal(hp, dir);
-      const size = (gun ? rand(0.35, 0.85) : rand(0.18, 0.42)) * (0.8 + Math.min(1, t / range) * 0.5);
+      const nrm = pc ? pc.n : ph ? ph.normal : this.mapNormal(hp, dir);
+      let size = (gun ? rand(0.6, 1.35) : rand(0.32, 0.7)) * (0.8 + Math.min(1, t / range) * 0.5);
+      if (pc) size *= 0.45;                        // smaller on a body
       const set = gun && i > 0 ? T.bloodSpray : T.blood;
-      this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, rand(35, 45), ph ? ph.prop : null);
+      this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, rand(35, 45), pc ? null : ph ? ph.prop : null, pc ? pc.obj : null);
     }
   }
 
@@ -641,6 +689,7 @@ export class Game {
       const d = Math.hypot(best.x - c.x, best.z - c.z) || 1;
       const hy = best.y + (best.disguise ? (best.shapeH || 0.5) * 0.6 : 1.2);
       this.bleed(best, { x: best.x, y: hy, z: best.z }, { x: (best.x - c.x) / d, y: 0, z: (best.z - c.z) / d }, false);
+      c.lastMeleeCause = weaponOf(c) === 3 ? 'crowbar' : 'knife';
       this.damage(best, c, W.KNIFE_DAMAGE, 'knife', { x: ((best.x - c.x) / d) * 3, y: 0.5, z: ((best.z - c.z) / d) * 3 });
       return true;
     }
@@ -717,7 +766,7 @@ export class Game {
           hit = null;
           this.props.impulseAt(ph.prop, ph.point, new THREE.Vector3(dx * 3, dy * 3, dz * 3));
           if (owner) this.wrongProp(owner);              // a thrown knife into real furniture costs health too
-          this.markImpact('s', ph.point, ph.normal, ph.prop.id);
+          this.markImpact(it.type === 'crowbar' ? 'c' : 's', ph.point, ph.normal, ph.prop.id);
           it.x += dx * Math.max(0, ph.t - 0.1); it.y += dy * Math.max(0, ph.t - 0.1); it.z += dz * Math.max(0, ph.t - 0.1);
           it.flying = false;
           it.y = groundHeight(this.map, it.x, it.z, 0.1, it.y + 0.3) + 0.05;
@@ -732,7 +781,7 @@ export class Game {
           break;
         }
         if (wall < len) {
-          { const hp = { x: it.x + dx * wall, y: it.y + dy * wall, z: it.z + dz * wall }; this.markImpact('s', hp, this.mapNormal(hp, { x: dx, y: dy, z: dz })); }
+          { const hp = { x: it.x + dx * wall, y: it.y + dy * wall, z: it.z + dz * wall }; this.markImpact(it.type === 'crowbar' ? 'c' : 's', hp, this.mapNormal(hp, { x: dx, y: dy, z: dz })); }
           it.x += dx * Math.max(0, wall - 0.15); it.y += dy * Math.max(0, wall - 0.15); it.z += dz * Math.max(0, wall - 0.15);
           it.flying = false;
           it.y = groundHeight(this.map, it.x, it.z, 0.1, it.y + 0.3) + 0.05;
@@ -747,18 +796,20 @@ export class Game {
   hostPickups() {
     if (this.phase !== 'play' && this.phase !== 'pre') return;
     for (const c of this.chars.values()) {
-      if (!c.alive || c.team !== 'seeker' || c.hasKnife) continue;
+      if (!c.alive || c.team !== 'seeker' || (c.hasKnife && c.hasCrowbar)) continue;
       // seekers pick thrown knives back up
       for (const it of this.items.values()) {
         if (it.flying) continue;
         if (Math.abs(it.y - c.y) > 1.5 || Math.hypot(it.x - c.x, it.z - c.z) > W.KNIFE_PICKUP_RADIUS) continue;
+        const kind = it.type === 'crowbar' ? 'crowbar' : 'knife';
+        if (kind === 'crowbar' ? c.hasCrowbar : c.hasKnife) continue;
         this.items.delete(it.id);
-        c.hasKnife = true;
-        if (!c.hotbar.includes('knife') && !c.backpack.includes('knife')) {
+        if (kind === 'crowbar') c.hasCrowbar = true; else c.hasKnife = true;
+        if (!c.hotbar.includes(kind) && !c.backpack.includes(kind)) {
           const k = c.hotbar.indexOf(null);
-          if (k >= 0) c.hotbar[k] = 'knife'; else { const b = c.backpack.indexOf(null); if (b >= 0) c.backpack[b] = 'knife'; }
+          if (k >= 0) c.hotbar[k] = kind; else { const b = c.backpack.indexOf(null); if (b >= 0) c.backpack[b] = kind; }
         }
-        this.emit({ e: 'msg', text: 'You picked your knife back up.', color: '#f66', snd: 'pickup' }, [c.id]);
+        this.emit({ e: 'msg', text: `You picked your ${kind} back up.`, color: '#f66', snd: 'pickup' }, [c.id]);
         break;
       }
     }
@@ -797,12 +848,12 @@ export class Game {
         const c = this.chars.get(s[0]);
         if (!c) continue;
         const f = s[6];
-        c.weaponVis = f & F_KNIFE ? 1 : f & F_GUN ? 2 : 0;
+        c.weaponVis = f & F_KNIFE ? 1 : f & F_GUN ? 2 : f & F_CROWBAR ? 3 : 0;
         c.team = f & F_SEEKER ? 'seeker' : f & F_PROP ? 'prop' : 'none';
         c.disguise = s[8] >= 0 ? PROP_LIST[s[8]] || null : null;
         if (c.id === this.localId) {
           if (m.me) {
-            c.hasKnife = !!m.me.k; c.hasGun = !!m.me.g; c.slot = m.me.sl;
+            c.hasKnife = !!m.me.k; c.hasGun = !!m.me.g; c.hasCrowbar = !!m.me.cb; c.slot = m.me.sl;
             if (m.me.hb) c.hotbar = m.me.hb;
             if (m.me.bp) c.backpack = m.me.bp;
             c.hp = m.me.hp; if (m.me.mh) c.maxHp = m.me.mh;
@@ -822,7 +873,7 @@ export class Game {
       for (const [id, type, x, y, z, fl] of m.it) {
         seen.add(id);
         let it = this.items.get(id);
-        if (!it) { it = { id, type: 'knife', x, y, z }; this.items.set(id, it); }
+        if (!it) { it = { id, type: type === 3 ? 'crowbar' : 'knife', x, y, z }; this.items.set(id, it); }
         it.x = x; it.y = y; it.z = z; it.flying = !!fl;
       }
       for (const id of [...this.items.keys()]) if (!seen.has(id)) this.items.delete(id);
@@ -924,10 +975,11 @@ export class Game {
         const p = { x: ev.p[0], y: ev.p[1], z: ev.p[2] }, n = { x: ev.n[0], y: ev.n[1], z: ev.n[2] };
         const prop = ev.pid >= 0 ? this.props.list[ev.pid] : null;
         if (ev.k === 'b') this.addDecal(this.T.bulletHole, p, n, 0.11, 0.11, 30, prop);
+        else if (ev.k === 'c') { const sz = rand(0.28, 0.4); this.addDecal(this.T.scratch[(Math.random() * this.T.scratch.length) | 0], p, n, sz, sz, 30, prop); }
         else { const sz = rand(0.32, 0.5); this.addDecal(this.T.slash[(Math.random() * this.T.slash.length) | 0], p, n, sz, sz * 0.25, 30, prop); }
         break;
       }
-      case 'blood': this.spawnBlood({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }, { x: ev.d[0], y: ev.d[1], z: ev.d[2] }, !!ev.g); break;
+      case 'blood': this.spawnBlood({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }, { x: ev.d[0], y: ev.d[1], z: ev.d[2] }, !!ev.g, this.chars.get(ev.id)); break;
       case 'hit': Audio.thud({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }); break;
       case 'shot': {
         this.addTracer(ev.f, ev.t);
@@ -1001,7 +1053,7 @@ export class Game {
     for (const [id, it] of this.items) {
       let m = this.itemMeshes.get(id);
       if (!m) {
-        const inner = makeKnifeMesh();
+        const inner = it.type === 'crowbar' ? makeCrowbarMesh() : makeKnifeMesh();
         inner.scale.setScalar(1.6);
         m = new THREE.Group(); m.add(inner); m.userData.inner = inner;
         m.rotation.order = 'YXZ';
@@ -1218,14 +1270,14 @@ export class Game {
       if (inp.slot >= 0) this.localAction('slot', inp.slot);
       if (inp.equip) this.localAction('equip');
     }
-    if (inp.throw && this.localWeapon() === 1) this.localAction('throw', undefined, point);
+    if (inp.throw && isMelee(this.localWeapon())) this.localAction('throw', undefined, point);
     // free camera: tapping the world with a weapon in hand attacks that spot
     const tapAttack = this.freeCam() && inp.tap && this.localWeapon() !== 0;
     if (me.team === 'seeker' && (inp.attack || tapAttack || (inp.attackHeld && this.localWeapon() === 2))) {
       const w = this.localWeapon();
       if (w === 0) this.localAction('attack');
       else if (this.phase === 'play' && this.localGunCd <= 0) {
-        if (w === 1) {
+        if (isMelee(w)) {
           this.localGunCd = W.KNIFE_COOLDOWN;
           this.viewModel.swing(); me.model.swing(); Audio.swing(null);
           this.localAction('attack', undefined, point);
@@ -1511,7 +1563,7 @@ export class Game {
     const spec = !me.alive ? this.chars.get(this.specId) : null;
     this.ui.updateHud({
       me, team: me.team, phase: this.phase, timeLeft: this.timeLeft,
-      look, spec, weapon: weaponOf(me), hasKnife: me.hasKnife, hasGun: me.hasGun,
+      look, spec, weapon: weaponOf(me), hasKnife: me.hasKnife, hasGun: me.hasGun, hasCrowbar: me.hasCrowbar,
       hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, maxHp: me.maxHp, disguise: me.disguise ? propName(me.disguise) : null,
       propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
       blind: me.alive && me.team === 'seeker' && this.phase === 'pre',

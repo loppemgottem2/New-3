@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=270';
-import { CONFIG } from './config.js?v=270';
+import * as THREE from '../vendor/three.module.min.js?v=280';
+import { CONFIG } from './config.js?v=280';
 
 
 const L = CONFIG.LOOKS;
@@ -99,6 +99,25 @@ const shared = (k, make) => (SHARED[k] ||= make());
 
 // Knife: the origin is the middle of the handle (where the fist holds it); blade points to -Z.
 let KNIFE_GEO = null;
+// a crowbar: long dark-red painted steel bar, hooked claw at the top end, flat chisel at the bottom.
+// Same orientation as the knife (held in the fist, working end pointing along -Z).
+let CROWBAR_GEO = null;
+export function makeCrowbarMesh() {
+  if (!CROWBAR_GEO) {
+    const bar = new THREE.CylinderGeometry(0.009, 0.009, 0.42, 8); bar.rotateX(Math.PI / 2); bar.translate(0, 0, -0.12);
+    const hook = new THREE.TorusGeometry(0.035, 0.009, 6, 12, Math.PI * 1.1); hook.rotateY(Math.PI / 2); hook.translate(0, 0.035, -0.33);
+    const claw = new THREE.BoxGeometry(0.008, 0.012, 0.03); claw.translate(0, 0.07, -0.31);
+    const chisel = new THREE.BoxGeometry(0.02, 0.006, 0.04); chisel.rotateX(0.35); chisel.translate(0, -0.006, 0.105);
+    CROWBAR_GEO = { bar, hook, claw, chisel };
+  }
+  const G2 = CROWBAR_GEO;
+  const g = new THREE.Group();
+  const paint = shared('crowbarPaint', () => new THREE.MeshLambertMaterial({ color: 0x8c1d16 }));
+  const steel = shared('crowbarSteel', () => new THREE.MeshLambertMaterial({ color: 0x6d7076 }));
+  g.add(new THREE.Mesh(G2.bar, paint), new THREE.Mesh(G2.hook, paint), new THREE.Mesh(G2.claw, steel), new THREE.Mesh(G2.chisel, steel));
+  return g;
+}
+
 export function makeKnifeMesh() {
   if (!KNIFE_GEO) {
     // blade outline (x = along the blade, y = height): straight spine, curved edge up to a sharp tip
@@ -329,8 +348,9 @@ export class CharacterModel {
     this.knife = makeKnifeMesh(); this.knife.position.set(0, -0.005, 0); this.knife.scale.setScalar(1.15);
     // revolver held by its grip, barrel along the arm
     this.gun = makeGunMesh(); this.gun.rotation.x = -Math.PI / 2; this.gun.position.set(0, -0.005, 0.0); this.gun.scale.setScalar(1.4);
-    this.armR.hand.add(this.knife, this.gun);
-    this.knife.visible = false; this.gun.visible = false;
+    this.crowbar = makeCrowbarMesh(); this.crowbar.position.set(0, -0.005, 0); this.crowbar.scale.setScalar(1.15);
+    this.armR.hand.add(this.knife, this.gun, this.crowbar);
+    this.knife.visible = false; this.gun.visible = false; this.crowbar.visible = false;
 
     // blob shadow
     this.blob = new THREE.Mesh(g.blob, new THREE.MeshBasicMaterial({ map: T.blob, transparent: true, depthWrite: false }));
@@ -365,7 +385,7 @@ export class CharacterModel {
     }
   }
 
-  setWeapon(w) { this.weapon = w; this.knife.visible = w === 1; this.gun.visible = w === 2; }
+  setWeapon(w) { this.weapon = w; this.knife.visible = w === 1; this.gun.visible = w === 2; this.crowbar.visible = w === 3; }
   swing() { this.swingT = 0.35; }
   recoil() { this.recoilT = 0.25; }
 
@@ -426,7 +446,7 @@ export class CharacterModel {
       this.armR.el.rotation.x = 0.6;
       // left hand reaches over to the revolver grip (2-bone IK)
       this.leftHandToGrip();
-    } else if (s.weapon === 1) {
+    } else if (s.weapon === 1 || s.weapon === 3) {
       const k = this.swingT > 0 ? Math.sin((1 - this.swingT / 0.35) * Math.PI) : 0;
       this.armR.sh.rotation.set(0.9 + k * 1.4 + s.pitch * 0.5, 0, 0.1 - k * 0.3);
       this.armR.el.rotation.x = 0.9 - k * 0.8;
@@ -540,7 +560,8 @@ export class ViewModel {
     this.knife = makeKnifeMesh(); this.knife.scale.setScalar(1.3); this.knife.rotation.x = KNIFE_REST; this.knife.position.set(0, 0.0, 0.0);
     // revolver held by the grip (bigger), with the left hand supporting it
     this.gun = makeGunMesh(); this.gun.scale.setScalar(1.55); this.gun.position.set(0, -0.005, 0.0);
-    this.arm.add(this.knife, this.gun);
+    this.crowbar = makeCrowbarMesh(); this.crowbar.scale.setScalar(0.72); this.crowbar.position.set(0, -0.015, 0.03); this.crowbar.rotation.x = KNIFE_REST;
+    this.arm.add(this.knife, this.gun, this.crowbar);
     this.support = new THREE.Group();
     const sFore = new THREE.Mesh(g.foreArm, this.skin); sFore.rotation.x = Math.PI / 2; sFore.position.z = 0.375; sFore.scale.set(1.15, 1.5, 1.15);
     const sHand = new THREE.Mesh(g.hand, this.skin); sHand.rotation.x = Math.PI / 2; sHand.position.set(0, -0.01, 0.31); sHand.scale.set(1.3, 1.05, 1.3);
@@ -568,6 +589,7 @@ export class ViewModel {
   update(dt, weapon, speed, visible) {
     this.group.visible = visible && weapon !== 0;
     this.knife.visible = weapon === 1 && this.throwT <= 0;
+    this.crowbar.visible = weapon === 3 && this.throwT <= 0;
     this.gun.visible = weapon === 2;
     this.support.visible = weapon === 2;
     this.base.x = weapon === 2 ? 0.17 : 0.24; // two-handed: hold it more in the middle
@@ -588,8 +610,9 @@ export class ViewModel {
       this.arm.position.y += Math.abs(e) * 0.04;
       this.arm.rotation.x = e * 0.12;                         // forearm dips a little as it extends
       this.knife.rotation.x = KNIFE_REST - e * 0.8;           // blade tips forward to point at the target
+      this.crowbar.rotation.x = KNIFE_REST - e * 0.8;
     }
-    else this.knife.rotation.x = KNIFE_REST;
+    else { this.knife.rotation.x = KNIFE_REST; this.crowbar.rotation.x = KNIFE_REST; }
     if (this.recoilT > 0) {
       this.recoilT -= dt;
       const k = this.recoilT / 0.3;

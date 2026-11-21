@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=270';
-import { hexToCss, textColor } from './util.js?v=270';
+import { CONFIG } from './config.js?v=280';
+import { hexToCss, textColor } from './util.js?v=280';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -156,7 +156,7 @@ export class UI {
     }
     let info = '';
     if (me.alive && prop) info = s.disguise ? (this.isTouch ? 'Tap other furniture to change' : 'Click other furniture to change') : (this.isTouch ? 'Tap furniture to turn into it' : 'Click furniture to turn into it');
-    if (me.alive && seeker && !s.hasKnife) info = 'Knife thrown — go pick it up!';
+    if (me.alive && seeker && (!s.hasKnife || !s.hasCrowbar)) info = `${!s.hasKnife ? 'Knife' : 'Crowbar'} thrown — go pick it up!`;
     this._set('hud-weapon', info);
 
     // hotbar (seekers)
@@ -205,8 +205,8 @@ export class UI {
       };
       const alive = me.alive;
       // the big button only shows with a weapon in hand (STAB / SHOOT), or BECOME for props
-      tb('attack', alive && !s.anchored && ((seeker && s.weapon) || prop), seeker ? (s.weapon === 1 ? 'STAB' : 'SHOOT') : 'BECOME');
-      tb('throw', alive && seeker && s.weapon === 1, 'THROW');
+      tb('attack', alive && !s.anchored && ((seeker && s.weapon) || prop), seeker ? (s.weapon === 1 ? 'STAB' : s.weapon === 3 ? 'HIT' : 'SHOOT') : 'BECOME');
+      tb('throw', alive && seeker && (s.weapon === 1 || s.weapon === 3), 'THROW');
       tb('jump', alive && !s.anchored);
       tb('run', alive);
       tb('next', !alive);
@@ -217,7 +217,7 @@ export class UI {
   // ---------- hotbar + inventory ----------
   renderHotbar(s) {
     const el = $('hotbar');
-    const key = s ? `${s.hotbar.join(',')}|${s.slot}|${s.hasKnife}|${s.hasGun}|${this.isTouch}` : '';
+    const key = s ? `${s.hotbar.join(',')}|${s.slot}|${s.hasKnife}|${s.hasGun}|${s.hasCrowbar}|${this.isTouch}` : '';
     if (this.lastHud.hb === key) return;
     this.lastHud.hb = key;
     el.classList.toggle('hidden', !s);
@@ -238,7 +238,7 @@ export class UI {
     }
     [...el.querySelectorAll('.hb-slot:not(.hb-small)')].forEach((d, k) => {
       const it = s.hotbar[k];
-      const gone = (it === 'knife' && !s.hasKnife) || (it === 'revolver' && !s.hasGun);
+      const gone = (it === 'knife' && !s.hasKnife) || (it === 'revolver' && !s.hasGun) || (it === 'crowbar' && !s.hasCrowbar);
       d.classList.toggle('sel', s.slot === k);
       d.classList.toggle('gone', gone);
       d.innerHTML = `<span class="hb-n">${k + 1}</span>${it ? itemIcon(it) : ''}`;
@@ -258,13 +258,13 @@ export class UI {
   renderInventory(s) {
     if (!s.me.alive || s.team !== 'seeker') { this.toggleInventory(null, false); return; }
     const all = [...s.hotbar, ...s.backpack];
-    const key = `${all.join(',')}|${this.invPick}|${s.hasKnife}|${s.hasGun}`;
+    const key = `${all.join(',')}|${this.invPick}|${s.hasKnife}|${s.hasGun}|${s.hasCrowbar}`;
     if (this.lastHud.inv === key) return;
     this.lastHud.inv = key;
     const H = CONFIG.INVENTORY.HOTBAR;
     const cell = (k) => {
       const it = all[k];
-      const gone = (it === 'knife' && !s.hasKnife) || (it === 'revolver' && !s.hasGun);
+      const gone = (it === 'knife' && !s.hasKnife) || (it === 'revolver' && !s.hasGun) || (it === 'crowbar' && !s.hasCrowbar);
       return `<div class="inv-slot${this.invPick === k ? ' pick' : ''}${gone ? ' gone' : ''}" data-k="${k}">${it ? itemIcon(it) + `<small>${CONFIG_ITEM(it)}</small>` : ''}</div>`;
     };
     $('inv-hotbar').innerHTML = all.slice(0, H).map((_, k) => cell(k)).join('');
@@ -293,10 +293,11 @@ export class UI {
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
-const CONFIG_ITEM = (it) => ({ knife: 'Knife', revolver: 'Revolver' }[it] || it);
+const CONFIG_ITEM = (it) => ({ knife: 'Knife', revolver: 'Revolver', crowbar: 'Crowbar' }[it] || it);
 // small inline icons for inventory items
 function itemIcon(it) {
   if (it === 'knife') return '<svg class="ico" viewBox="0 0 32 32"><path d="M6 26 L9 23 L11 25 L8 28 Z" fill="#6b4524"/><path d="M9 23 L24 6 Q27 4 26 8 L11 25 Z" fill="#d8dde3" stroke="#889" stroke-width="0.8"/><rect x="7.5" y="21.5" width="5" height="1.6" transform="rotate(-45 10 22)" fill="#333"/></svg>';
   if (it === 'revolver') return '<svg class="ico" viewBox="0 0 32 32"><rect x="6" y="10" width="20" height="4" rx="1" fill="#4a4d52"/><rect x="11" y="9" width="7" height="7" rx="2" fill="#5c6066"/><path d="M8 14 L13 14 L11 25 L6 25 Z" fill="#6b4524"/><path d="M13 15 q2 4 4 0" stroke="#333" stroke-width="1.4" fill="none"/></svg>';
+  if (it === 'crowbar') return '<svg class="ico" viewBox="0 0 32 32"><path d="M8 27 L23 9" stroke="#8c1d16" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M23 9 Q27 4 23 3 Q20 3 20 6" stroke="#8c1d16" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M6 29 L9 26" stroke="#9a9ea4" stroke-width="3" stroke-linecap="round"/></svg>';
   return `<b>${it}</b>`;
 }
