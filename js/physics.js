@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=240';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=240';
+import { CONFIG } from './config.js?v=250';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=250';
 
 const P = CONFIG.PLAYER;
 
@@ -134,11 +134,10 @@ export function moveCharacter(ch, input, dt, map) {
   const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0) && ch.y < P.WALL_CLIMB_MAX;
   // props "fluttering" (spamming the joystick) can jump again in the air, at most every FLUTTER_JUMP_DELAY
   if (ch.airJumpT > 0) ch.airJumpT -= dt;
-  if (ch.onGround) ch.airJumps = 0;
-  const airJump = input.flutter && !ch.onGround && !wallJump && !(ch.airJumpT > 0) && (ch.airJumps || 0) < P.FLUTTER_MAX_JUMPS && ch.y < P.WALL_CLIMB_MAX;
+  const airJump = input.flutter && !ch.onGround && !wallJump && !(ch.airJumpT > 0);
   if (ch.jumpBuf > 0 && (ch.onGround || wallJump || airJump)) {
     if (!ch.onGround && wallJump) ch.wallJumpT = 0.3;
-    if (!ch.onGround && !wallJump) { ch.airJumpT = P.FLUTTER_JUMP_DELAY; ch.airJumps = (ch.airJumps || 0) + 1; }
+    if (!ch.onGround && !wallJump) ch.airJumpT = P.FLUTTER_JUMP_DELAY;
     ch.jumpBuf = 0;
     ch.vy = ch.onGround ? P.JUMP_SPEED : P.JUMP_SPEED * 0.85; ch.onGround = false; ch.jumped = true;
     // small forward boost when jumping while running (momentum)
@@ -174,6 +173,9 @@ export function moveCharacter(ch, input, dt, map) {
     if (Math.abs(realVx) < Math.abs(ch.vx) - 0.3) ch.vx = realVx;
     if (Math.abs(realVz) < Math.abs(ch.vz) - 0.3) ch.vz = realVz;
   }
+  // never leave the map area (e.g. fluttering props flying over the outer walls)
+  pos.x = Math.max(r + 0.5, Math.min(map.worldW - r - 0.5, pos.x));
+  pos.z = Math.max(r + 0.5, Math.min(map.worldD - r - 0.5, pos.z));
   ch.x = pos.x; ch.z = pos.z;
 
   // Vertical
