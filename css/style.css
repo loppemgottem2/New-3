@@ -297,8 +297,6 @@ body.lefty #joy-base { left: auto; right: calc(140px + var(--sa-r)); margin: 0 -
 body.blinded #hud-id, body.blinded #hud-count, body.blinded #hud-stamina, body.blinded #hud-look, body.blinded #crosshair,
 body.blinded #hotbar, body.blinded #inventory, body.blinded #slbtn,
 body.blinded #joy-base, body.blinded #touch .tbtn:not(#tb-score), body.blinded .touch-hint { display: none !important; }
-/* spectating (dead): no joystick, the whole screen turns the camera */
-body.spectating #joy-base { display: none !important; }
 
 /* main menu: everything stays inside the gray box (compact on short / phone screens, scrolls inside if needed) */
 .menu-panel { overflow-y: auto; gap: 7px; }
@@ -339,3 +337,12 @@ body.ingame #verbadge { display: none; }
 body.ingame #fps { right: calc(120px + var(--sa-r)); }
 body.ingame.touch #fps { right: calc(176px + var(--sa-r)); }
 #fps.hidden { display: none; }
+
+#hud-hp { transition: width 0.25s; max-width: 100%; }
+#hud-hp.prop div { background: linear-gradient(#4aa8ff, #1f6fc2); }
+/* settings: roomier rows, and the list scrolls all the way to its last option */
+#settings .panel { max-height: 100%; overflow-y: auto; }
+#settings .panel > * { flex-shrink: 0; }
+#settings-body { gap: 16px; padding: 4px 2px 10px; }
+.set-row { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); min-height: 40px; }
+.set-row .lab small { margin-top: 2px; }

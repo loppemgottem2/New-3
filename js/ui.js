@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=170';
-import { hexToCss, textColor } from './util.js?v=170';
+import { CONFIG } from './config.js?v=180';
+import { hexToCss, textColor } from './util.js?v=180';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -118,7 +118,7 @@ export class UI {
     if (s.blind) this._set('blind-t', String(t));
 
     // identity panel (bottom-left, team colored)
-    const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? (s.disguise ? `Prop · ${s.disguise}` : 'Prop · person (T-pose)') : '';
+    const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? `Prop · ${s.disguise || 'Human'}` : '';
     // shift lock button
     const sl = $('slbtn');
     sl.classList.toggle('hidden', !me.alive);
@@ -129,13 +129,17 @@ export class UI {
     if (this.lastHud.col !== col) { $('hud-id').style.borderColor = me.alive ? hexToCss(me.color) : '#888'; $('hud-name').style.color = col; this.lastHud.col = col; }
     $('hud-role').className = me.alive && seeker ? 'seeker' : me.alive && prop ? 'prop' : '';
 
-    // health (seekers)
+    // health bar (seekers and props). Props: bigger furniture = more health = a longer bar
     const hpEl = $('hud-hp');
-    hpEl.style.display = me.alive && seeker ? 'block' : 'none';
-    if (me.alive && seeker) {
-      const k = clamp01(s.hp / CONFIG.TEAMS.SEEKER_HP);
+    const showHp = me.alive && (seeker || prop);
+    hpEl.style.display = showHp ? 'block' : 'none';
+    if (showHp) {
+      const max = s.maxHp || CONFIG.TEAMS.SEEKER_HP;
+      const k = clamp01(s.hp / max);
       hpEl.firstElementChild.style.width = `${(k * 100).toFixed(1)}%`;
-      this._set('hud-hp-t', `${Math.max(0, Math.round(s.hp))} HP`);
+      hpEl.style.width = `${prop ? Math.round(Math.max(60, Math.min(230, 50 + max * 0.6))) : 150}px`;
+      hpEl.classList.toggle('prop', prop);
+      this._set('hud-hp-t', prop ? `${Math.max(0, Math.round(s.hp))} / ${max} HP` : `${Math.max(0, Math.round(s.hp))} HP`);
     }
     let info = '';
     if (me.alive && prop) info = s.disguise ? (this.isTouch ? 'Tap other furniture to change' : 'Click other furniture to change') : (this.isTouch ? 'Tap furniture to turn into it' : 'Click furniture to turn into it');
@@ -167,8 +171,9 @@ export class UI {
     // spectate info
     let sp = '';
     if (!me.alive) {
-      if (s.spec) sp = `Spectating <b style="color:${textColor(s.spec.color)}">${esc(s.spec.nick)}</b>`;
-      sp += `<small>${this.isTouch ? 'Tap ▶ to switch · X = main menu' : 'Click / F to switch · X = main menu'}</small>`;
+      if (s.spec) sp = `Watching <b style="color:${textColor(s.spec.color)}">${esc(s.spec.nick)}</b>`;
+      else sp = 'Free camera';
+      sp += `<small>${this.isTouch ? 'Joystick = fly · Tap ▶ to watch players · X = main menu' : 'WASD = fly · Click / F to watch players · X = main menu'}</small>`;
     }
     this._setHtml('hud-spec', sp);
 

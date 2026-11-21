@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=170';
-import { CONFIG } from './config.js?v=170';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=170';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=170';
-import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=170';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape } from './props.js?v=170';
-import { Ragdoll } from './ragdoll.js?v=170';
-import { Audio } from './audio.js?v=170';
-import { initBrain, updateBots } from './bots.js?v=170';
+import * as THREE from '../vendor/three.module.min.js?v=180';
+import { CONFIG } from './config.js?v=180';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=180';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=180';
+import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=180';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape } from './props.js?v=180';
+import { Ragdoll } from './ragdoll.js?v=180';
+import { Audio } from './audio.js?v=180';
+import { initBrain, updateBots } from './bots.js?v=180';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -38,7 +38,7 @@ export function newChar(id, nick, isBot, look) {
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0,
     onGround: true, speed: 0, running: false, stamina: P.STAMINA_MAX, exhausted: false,
     alive: false, spectator: true,
-    team: 'none', hp: TM.SEEKER_HP,
+    team: 'none', hp: TM.SEEKER_HP, maxHp: TM.SEEKER_HP,
     disguise: null, morphCd: 0,           // prop team: furniture type you look like (null = T-posing person)
     hasKnife: false, hasGun: false,       // seekers: knife can be thrown away, then picked back up
     hotbar: new Array(INV.HOTBAR).fill(null), backpack: new Array(INV.BACKPACK).fill(null),
@@ -234,7 +234,7 @@ export class Game {
       c.backpack = new Array(INV.BACKPACK).fill(null);
       if (seeker) INV.START.forEach((it, k) => { if (k < INV.HOTBAR) c.hotbar[k] = it; else c.backpack[k - INV.HOTBAR] = it; });
       c.slot = -1; c.lastSlot = 0;
-      c.hp = TM.SEEKER_HP;
+      c.hp = c.maxHp = seeker ? TM.SEEKER_HP : TM.PROP_HUMAN_HP;
       c.disguise = null; c.morphCd = 0;
       c.attackCd = 0;
       c.alive = true; c.spectator = false;
@@ -341,7 +341,7 @@ export class Game {
       if (c.cid == null) continue;
       this.net.send(c.cid, {
         t: 'snap', ph: this.phase, tl: r2(this.timeLeft), c: cs, it, pr,
-        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
+        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), mh: c.maxHp, cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
       });
     }
   }
@@ -418,7 +418,11 @@ export class Game {
         const d = Math.hypot(p.pos.x - c.x, p.pos.z - c.z);
         if (d > TM.DISGUISE_RANGE + p.r + 1) return;
         c.morphCd = TM.DISGUISE_COOLDOWN;
+        // health follows the furniture's size, keeping the same fraction (half health stays half)
+        const frac = c.hp / (c.maxHp || 1);
         c.disguise = p.type;
+        c.maxHp = TM.PROP_HP[p.type] || TM.PROP_HUMAN_HP;
+        c.hp = Math.max(1, Math.round(frac * c.maxHp));
         this.emit({ e: 'morph', id: c.id, type: p.type });
       }
       return;
@@ -485,6 +489,15 @@ export class Game {
     return rayVsCharacter(ox, oy, oz, dx, dy, dz, { x, y, z }, 0.36 + pad);
   }
 
+  // A seeker hits a prop player: take health off, die at 0
+  damage(target, attacker, amount, cause, impulse) {
+    if (!target.alive) return;
+    target.hp -= amount;
+    if (target.hp <= 0) { target.hp = 0; this.kill(target, attacker, cause, impulse); return; }
+    this.emit({ e: 'hit', id: target.id, p: [r2(target.x), r2(target.y + 0.6), r2(target.z)] });
+    this.emit({ e: 'msg', text: `−${amount} HP`, color: '#f66' }, [target.id]);
+  }
+
   // Seekers lose health for attacking real furniture (so they can't just shoot everything)
   wrongProp(c) {
     if (!c.alive || c.team !== 'seeker') return;
@@ -527,7 +540,7 @@ export class Game {
     if (best) {
       c.slashT = 0;
       const d = Math.hypot(best.x - c.x, best.z - c.z) || 1;
-      this.kill(best, c, 'knife', { x: ((best.x - c.x) / d) * 3, y: 0.5, z: ((best.z - c.z) / d) * 3 });
+      this.damage(best, c, W.KNIFE_DAMAGE, 'knife', { x: ((best.x - c.x) / d) * 3, y: 0.5, z: ((best.z - c.z) / d) * 3 });
       return true;
     }
     return false;
@@ -552,13 +565,14 @@ export class Game {
       this.props.impulseAt(ph.prop, ph.point, new THREE.Vector3(d.x * 7, d.y * 7 + 1, d.z * 7));
     }
     this.emit({ e: 'shot', id: c.id, f: [r2(ox), r2(oy - 0.15), r2(oz)], t: [r2(ox + d.x * ht), r2(oy + d.y * ht), r2(oz + d.z * ht)] });
-    if (hit) this.kill(hit, c, 'gun', { x: d.x * 7, y: d.y * 7 + 1, z: d.z * 7 });
+    if (hit) this.damage(hit, c, W.GUN_DAMAGE, 'gun', { x: d.x * 7, y: d.y * 7 + 1, z: d.z * 7 });
     else if (ph) this.wrongProp(c);
     return hit;
   }
 
   kill(target, killer, cause, impulse) {
     if (!target.alive) return;
+    const wasObject = !!target.disguise;      // furniture vanishes; only a person (or human prop) ragdolls
     target.alive = false;
     target.slot = -1;
     target.disguise = null;
@@ -568,6 +582,7 @@ export class Game {
       i: [r2(impulse.x), r2(impulse.y), r2(impulse.z)],
       v: [r2(target.vx), r2(target.vy), r2(target.vz)],
       p: [r2(target.x), r2(target.y), r2(target.z)],
+      obj: wasObject ? 1 : 0,
     });
     if (killer && killer !== target) {
       this.emit({ e: 'msg', text: `${killer.nick} found ${target.nick}`, color: '#ccc' });
@@ -597,6 +612,7 @@ export class Game {
         if (ph) {
           hit = null;
           this.props.impulseAt(ph.prop, ph.point, new THREE.Vector3(dx * 3, dy * 3, dz * 3));
+          if (owner) this.wrongProp(owner);              // a thrown knife into real furniture costs health too
           it.x += dx * Math.max(0, ph.t - 0.1); it.y += dy * Math.max(0, ph.t - 0.1); it.z += dz * Math.max(0, ph.t - 0.1);
           it.flying = false;
           it.y = groundHeight(this.map, it.x, it.z, 0.1, it.y + 0.3) + 0.05;
@@ -604,7 +620,7 @@ export class Game {
           break;
         }
         if (hit) {
-          this.kill(hit, owner || null, 'knife', { x: dx * 5, y: 1, z: dz * 5 });
+          this.damage(hit, owner || null, W.THROW_DAMAGE, 'knife', { x: dx * 5, y: 1, z: dz * 5 });
           it.flying = false;
           it.x = hit.x; it.z = hit.z; it.y = groundHeight(this.map, it.x, it.z, 0.1, hit.y + 0.5) + 0.05;
           break;
@@ -682,7 +698,7 @@ export class Game {
             c.hasKnife = !!m.me.k; c.hasGun = !!m.me.g; c.slot = m.me.sl;
             if (m.me.hb) c.hotbar = m.me.hb;
             if (m.me.bp) c.backpack = m.me.bp;
-            c.hp = m.me.hp;
+            c.hp = m.me.hp; if (m.me.mh) c.maxHp = m.me.mh;
             if (!m.me.al && c.alive) { c.alive = false; } // safety
           }
           continue;
@@ -776,17 +792,25 @@ export class Game {
         const vel = { x: ev.v[0], y: ev.v[1], z: ev.v[2] };
         if (c.id !== this.localId) { c.x = ev.p[0]; c.y = ev.p[1]; c.z = ev.p[2]; }
         c.disguise = null; this.setDisguiseMesh(c, null);
-        this.spawnRagdoll(c, vel, { x: ev.i[0], y: ev.i[1], z: ev.i[2] });
         const pos = { x: ev.p[0], y: ev.p[1] + 1, z: ev.p[2] };
+        if (ev.obj) {
+          // a prop that was furniture just disappears
+          c.model.setVisible(false);
+          Audio.prop(pos, 'wood', 0.8);
+        } else {
+          this.spawnRagdoll(c, vel, { x: ev.i[0], y: ev.i[1], z: ev.i[2] });
+          if (ev.cause !== 'suicide' && Math.random() < 0.6) Audio.scream(pos);
+        }
         if (ev.cause === 'knife') Audio.stab(pos);
         Audio.thud(pos);
-        if (ev.cause !== 'suicide' && Math.random() < 0.6) Audio.scream(pos);
         if (c.id === this.localId) {
           this.deathT = 0;
+          this.specId = null; this.flyPos = null;   // start in the free flying camera
           this.ui.toast(ev.cause === 'suicide' ? 'You are now spectating. Press X again for the menu.' : ev.cause === 'penalty' ? 'You hit too much real furniture! Press X for the main menu.' : 'You were found! Press X for the main menu.', '#f66', 3);
         }
         break;
       }
+      case 'hit': Audio.thud({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }); break;
       case 'shot': {
         this.addTracer(ev.f, ev.t);
         const c = this.chars.get(ev.id);
@@ -1027,10 +1051,21 @@ export class Game {
     // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
     const point = !this.freeCam() ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
-    if (this.ui.input) this.ui.input.noJoy = !me.alive;   // spectating: the whole screen turns the camera
     if (!me.alive) {
       if (inp.inv) this.ui.toggleInventory?.(this);
       if (inp.next || inp.attack) this.cycleSpectate();
+      // spectator free camera: fly with the joystick / WASD in the direction you look, through walls
+      if (inp.fwd || inp.strafe) {
+        if (this.specId != null) { this.specId = null; this.flyPos = this.camera.position.clone(); }  // moving stops watching
+        if (!this.flyPos) this.flyPos = this.camera.position.clone();
+        const f = dirFromAngles(this.camYaw, this.camPitch);
+        const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
+        const sp = (inp.run ? 18 : 9) * dt;
+        this.flyPos.x += (f.x * inp.fwd + rx * inp.strafe) * sp;
+        this.flyPos.y += f.y * inp.fwd * sp;
+        this.flyPos.z += (f.z * inp.fwd + rz * inp.strafe) * sp;
+        this.flyPos.y = clamp(this.flyPos.y, -2, 60);
+      }
       return;
     }
     // blindfolded seeker: nothing works until the round starts (only settings, scoreboard and X)
@@ -1114,11 +1149,12 @@ export class Game {
 
   localWeapon() { const me = this.me; return me ? weaponOf(me) : 0; }
 
+  // ▶ / click: watch the next player; after the last one, back to the free flying camera
   cycleSpectate() {
     const alive = [...this.chars.values()].filter((c) => c.alive && c.id !== this.localId);
-    if (!alive.length) { this.specId = null; return; }
     const i = alive.findIndex((c) => c.id === this.specId);
-    this.specId = alive[(i + 1) % alive.length].id;
+    if (!alive.length || i === alive.length - 1) { this.specId = null; this.flyPos = this.camera.position.clone(); return; }
+    this.specId = alive[i + 1].id;
   }
 
   // ---------------------------------------------------------------
@@ -1254,16 +1290,11 @@ export class Game {
     } else {
       this.viewModel.update(dt, 0, 0, false);
       this.deathT += dt;
+      // watching a player (picked with ▶), or the free flying camera
       let target = null;
-      const rd = this.ragdolls.get(me.id);
-      if (rd && this.deathT < 3 && !me.spectator) {
-        const c = rd.center;
-        target = { x: c.x, y: c.y - 0.6, z: c.z };
-      } else {
-        let s = this.chars.get(this.specId);
-        if (!s || !s.alive) { this.cycleSpectate(); s = this.chars.get(this.specId); }
-        if (s && s.alive) target = { x: s.rx, y: s.ry, z: s.rz, c: s };
-      }
+      const s = this.chars.get(this.specId);
+      if (s && s.alive) target = { x: s.rx, y: s.ry, z: s.rz, c: s };
+      else if (this.specId != null) { this.specId = null; this.flyPos = cam.position.clone(); }
       if (target) {
         const yaw = this.camYaw, pitch = clamp(this.camPitch, -1.2, 0.6);
         const d = dirFromAngles(yaw, pitch);
@@ -1274,11 +1305,13 @@ export class Game {
         cam.position.set(hx - d.x * dist, hy - d.y * dist, hz - d.z * dist);
         cam.rotation.set(pitch, yaw, 0);
       } else {
-        const c = this.map.center();
-        const a = this.time * 0.1;
-        cam.position.set(c.x + Math.cos(a) * 12, 4, c.z + Math.sin(a) * 12);
-        cam.lookAt(c.x, 1, c.z);
-        cam.rotation.order = 'YXZ';
+        if (!this.flyPos) {
+          // start flying from where you were (a little above and behind), or above the map for late joiners
+          this.flyPos = me.spectator ? new THREE.Vector3(this.map.center().x, 8, this.map.center().z)
+            : new THREE.Vector3(me.x, me.y + 2.2, me.z).addScaledVector(dirFromAngles(this.camYaw, this.camPitch), -2.5);
+        }
+        cam.position.copy(this.flyPos);
+        cam.rotation.set(this.camPitch, this.camYaw, 0);
       }
     }
     const f = dirFromAngles(cam.rotation.y, cam.rotation.x);
@@ -1321,7 +1354,7 @@ export class Game {
     this.ui.updateHud({
       me, team: me.team, phase: this.phase, timeLeft: this.timeLeft,
       look, spec, weapon: weaponOf(me), hasKnife: me.hasKnife, hasGun: me.hasGun,
-      hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, disguise: me.disguise,
+      hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, maxHp: me.maxHp, disguise: me.disguise,
       propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
       blind: me.alive && me.team === 'seeker' && this.phase === 'pre',
       shiftLock: this.shiftLock, crosshair: !this.freeCam(),
