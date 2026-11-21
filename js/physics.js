@@ -143,7 +143,9 @@ export function moveCharacter(ch, input, dt, map) {
   if (ch.vy < -40) ch.vy = -40;
 
   // Horizontal, in small sub-steps so we never tunnel through walls
-  const r = P.RADIUS;
+  // disguised props collide with their furniture's size (shapeR / shapeH), people with the normal body
+  const r = ch.shapeR || P.RADIUS;
+  const H = ch.shapeH || P.HEIGHT;
   const travel = Math.hypot(ch.vx, ch.vz) * dt;
   const n = Math.max(1, Math.ceil(travel / 0.2));
   const pos = { x: ch.x, z: ch.z };
@@ -178,7 +180,7 @@ export function moveCharacter(ch, input, dt, map) {
     ch.onGround = false;
   }
   // Ceiling
-  if (!map.isOutdoor(ch.x, ch.z) && ch.y + P.HEIGHT > CEIL_H) { ch.y = CEIL_H - P.HEIGHT; if (ch.vy > 0) ch.vy = 0; }
+  if (!map.isOutdoor(ch.x, ch.z) && ch.y + H > CEIL_H) { ch.y = CEIL_H - H; if (ch.vy > 0) ch.vy = 0; }
   if (ch.y < -5) { ch.y = 0; } // safety
   ch.speed = Math.hypot(ch.vx, ch.vz);
 }
@@ -191,14 +193,15 @@ export function pushOutOfProps(ch, map, amount = 1, push = false) {
 
 // Push overlapping characters apart (soft). `movable(c)` says who may be moved.
 export function separateCharacters(list, map, movable) {
-  const r2 = P.RADIUS * 2;
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
     if (!a.alive) continue;
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
       if (!b.alive) continue;
-      if (Math.abs(a.y - b.y) > P.HEIGHT * 0.9) continue;
+      const r2 = (a.shapeR || P.RADIUS) + (b.shapeR || P.RADIUS);
+      // vertical overlap of the two bodies (a bottle can sit under someone jumping over it)
+      if (b.y > a.y + (a.shapeH || P.HEIGHT) * 0.95 || a.y > b.y + (b.shapeH || P.HEIGHT) * 0.95) continue;
       let dx = b.x - a.x, dz = b.z - a.z;
       let d = Math.hypot(dx, dz);
       if (d >= r2) continue;
@@ -211,7 +214,7 @@ export function separateCharacters(list, map, movable) {
     }
   }
   for (const c of list) if (c.alive && movable(c)) {
-    const p = { x: c.x, z: c.z }; resolveWalls(map, p, P.RADIUS, c.y); c.x = p.x; c.z = p.z;
+    const p = { x: c.x, z: c.z }; resolveWalls(map, p, c.shapeR || P.RADIUS, c.y); c.x = p.x; c.z = p.z;
   }
 }
 

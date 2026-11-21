@@ -28,7 +28,7 @@ const DEFAULTS = {
   look: { ...DEFAULT_LOOK },
   touchSens: CONFIG.CONTROLS.TOUCH_SENS * 1000, mouseSens: CONFIG.CONTROLS.MOUSE_SENS * 1000,
   invert: false, autoSprint: true, lefty: false, btnScale: 1,
-  fov: CONFIG.GRAPHICS.FOV, camDist: 0, viewBob: true, shake: true,
+  fov: CONFIG.GRAPHICS.FOV, camDist: 0, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
   fps: false, crosshair: 'dot', hudScale: 1, hints: true,
@@ -49,7 +49,6 @@ const SCHEMA = [
   { tab: 'Controls', key: 'btnScale', label: 'Touch button size', type: 'range', min: 0.7, max: 1.4, step: 0.05, fmt: pct },
   { tab: 'Camera', key: 'fov', label: 'Field of view', type: 'range', min: 60, max: 110, step: 1, fmt: (v) => `${v}°` },
   { tab: 'Camera', key: 'camDist', label: 'Starting camera', type: 'select', options: [[0, 'First person'], [1.6, 'Third person (close)'], [3, 'Third person (far)']] },
-  { tab: 'Camera', key: 'viewBob', label: 'View bobbing', type: 'check' },
   { tab: 'Camera', key: 'shake', label: 'Camera shake', note: 'when shooting and landing', type: 'check' },
   { tab: 'Graphics', key: 'quality', label: 'Quality preset', type: 'select', options: [['low', 'Low (fastest)'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']] },
   { tab: 'Graphics', key: 'renderScale', label: 'Resolution', type: 'range', min: 0.4, max: 2, step: 0.05, fmt: pct },
@@ -493,6 +492,8 @@ function netErrorText(e) {
 }
 
 $('btn-inv-close').onclick = () => ui.toggleInventory(null, false);
+$('inv-x').onclick = () => ui.toggleInventory(null, false);
+$('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleShiftLock(); });
 
 // ---------------- the match ----------------
 function startGame(mode, net, opts) {
@@ -501,7 +502,7 @@ function startGame(mode, net, opts) {
   if (preview) preview.model.setVisible(false);
   game = new Game({
     mode, net, scene, camera, map, nav, textures, ui, settings,
-    myName: myName(), myLook: settings.look,
+    myName: myName(), myLook: settings.look, onSettings: saveSettings,
     serverLabel: opts.serverLabel, code: opts.code, welcome: opts.welcome,
     onExit: (reason) => {
       game = null;
@@ -513,8 +514,10 @@ function startGame(mode, net, opts) {
     },
   });
   ui.game = game;
+  ui.input = input;
   ui.show('game'); ui.current = 'game';
   input.setActive(true);
+  input.setLockMode(!!settings.shiftLock);
   if (ui.isTouch) {
     // go fullscreen + landscape on phones (ignored where unsupported)
     const el = document.documentElement;
@@ -529,7 +532,7 @@ function startGame(mode, net, opts) {
   checkRotate();
   if (mode === 'host' && opts.code) ui.toast(`Private server code: <b>${opts.code}</b> — share it with friends!`, '#fd6', 10);
   if (mode === 'host' && !opts.code) ui.toast('You are hosting this public server. Keep this tab open!', '#9ad', 7);
-  if (settings.hints && !ui.isTouch) ui.toast('Click to look around · Esc for settings · Mouse wheel / V to zoom out', '#ccc', 6);
+  if (settings.hints && !ui.isTouch) ui.toast('Right-drag to turn the camera · L = shift lock · Esc for settings · Mouse wheel to zoom', '#ccc', 7);
 }
 
 // If the host hides the tab, keep the server ticking (browsers pause requestAnimationFrame)
@@ -548,7 +551,7 @@ function step(dt, background = false) {
   if (inp.menu && !ui.overlayOpen) openSettings();
   game.update(dt, inp);
 }
-const emptyInput = () => ({ fwd: 0, strafe: 0, run: false, jump: false, attack: false, attackHeld: false, equip: false, throw: false, next: false, slot: -1, inv: false, tap: null, x: false, score: false, scoreUp: false, lookDX: 0, lookDY: 0, zoom: 0, toggleView: false, menu: false });
+const emptyInput = () => ({ fwd: 0, strafe: 0, run: false, jump: false, attack: false, attackHeld: false, equip: false, throw: false, next: false, slot: -1, inv: false, tap: null, point: null, shiftLock: false, x: false, score: false, scoreUp: false, lookDX: 0, lookDY: 0, zoom: 0, toggleView: false, menu: false });
 
 function frame(now) {
   requestAnimationFrame(frame);

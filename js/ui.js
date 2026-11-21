@@ -25,7 +25,7 @@ export class UI {
     $('gearbtn').classList.toggle('hidden', !inGame);
     $('settings').classList.remove('overlay');
     document.body.classList.toggle('ingame', inGame);
-    if (!inGame) { this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
+    if (!inGame) { $('slbtn').classList.add('hidden'); this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
   }
 
   // settings on top of a running match
@@ -115,6 +115,10 @@ export class UI {
 
     // identity panel (bottom-left, team colored)
     const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? (s.disguise ? `Prop · ${s.disguise}` : 'Prop · person (T-pose)') : '';
+    // shift lock button
+    const sl = $('slbtn');
+    sl.classList.toggle('hidden', !me.alive);
+    sl.classList.toggle('on', !!s.shiftLock);
     this._set('hud-name', me.nick);
     this._set('hud-role', teamTxt);
     const col = me.alive ? textColor(me.color) : '#888';
@@ -130,7 +134,7 @@ export class UI {
       this._set('hud-hp-t', `${Math.max(0, Math.round(s.hp))} HP`);
     }
     let info = '';
-    if (me.alive && prop) info = s.disguise ? (this.isTouch ? 'HUMAN = turn back into a person' : 'Q = turn back into a person') : (this.isTouch ? 'Tap furniture to turn into it' : 'Click furniture to turn into it');
+    if (me.alive && prop) info = s.disguise ? (this.isTouch ? 'Tap other furniture to change' : 'Click other furniture to change') : (this.isTouch ? 'Tap furniture to turn into it' : 'Click furniture to turn into it');
     if (me.alive && seeker && !s.hasKnife) info = 'Knife thrown — go pick it up!';
     this._set('hud-weapon', info);
 
@@ -154,7 +158,7 @@ export class UI {
       el.textContent = look ? look.nick : '';
       el.style.color = look ? textColor(look.color) : '';
     }
-    $('crosshair').style.display = me.alive && !s.blind ? 'block' : 'none';
+    $('crosshair').style.display = me.alive && !s.blind && s.shiftLock ? 'block' : 'none';
 
     // spectate info
     let sp = '';
@@ -177,9 +181,7 @@ export class UI {
       };
       const alive = me.alive;
       tb('attack', alive && (seeker || prop), seeker ? (s.weapon === 1 ? 'STAB' : s.weapon === 2 ? 'SHOOT' : 'DRAW') : 'BECOME');
-      tb('equip', alive && ((seeker && s.weapon) || (prop && !!s.disguise)), prop ? 'HUMAN' : 'HIDE');
       tb('throw', alive && seeker && s.weapon === 1, 'THROW');
-      tb('inv', alive && seeker);
       tb('jump', alive);
       tb('run', alive);
       tb('next', !alive);
@@ -190,7 +192,7 @@ export class UI {
   // ---------- hotbar + inventory ----------
   renderHotbar(s) {
     const el = $('hotbar');
-    const key = s ? `${s.hotbar.join(',')}|${s.slot}|${s.hasKnife}|${s.hasGun}` : '';
+    const key = s ? `${s.hotbar.join(',')}|${s.slot}|${s.hasKnife}|${s.hasGun}|${this.isTouch}` : '';
     if (this.lastHud.hb === key) return;
     this.lastHud.hb = key;
     el.classList.toggle('hidden', !s);
@@ -204,12 +206,18 @@ export class UI {
         d.addEventListener('pointerdown', pick);
         el.appendChild(d);
       }
+      // ✕ = put the item away (empty hands)
+      const x = document.createElement('div');
+      x.className = 'hb-slot hb-small hb-x'; x.title = 'Put away (Q)'; x.textContent = '✕';
+      x.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.game?.holster(); });
+      el.appendChild(x);
       const bag = document.createElement('div');
-      bag.className = 'hb-slot hb-bag'; bag.title = 'Inventory (I)'; bag.textContent = '🎒';
+      bag.className = 'hb-slot hb-small hb-bag'; bag.title = 'Inventory (I)'; bag.textContent = '🎒';
       bag.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.toggleInventory(this.game); });
       el.appendChild(bag);
     }
-    [...el.querySelectorAll('.hb-slot:not(.hb-bag)')].forEach((d, k) => {
+    el.querySelector('.hb-x').classList.toggle('off', s.slot < 0);
+    [...el.querySelectorAll('.hb-slot:not(.hb-small)')].forEach((d, k) => {
       const it = s.hotbar[k];
       const gone = (it === 'knife' && !s.hasKnife) || (it === 'revolver' && !s.hasGun);
       d.classList.toggle('sel', s.slot === k);

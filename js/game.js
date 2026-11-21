@@ -14,7 +14,7 @@ import { CONFIG } from './config.js';
 import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js';
 import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, hasLOS, groundHeight, pushOutOfProps } from './physics.js';
 import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, rayVsPropShape } from './props.js';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape } from './props.js';
 import { Ragdoll } from './ragdoll.js';
 import { Audio } from './audio.js';
 import { initBrain, updateBots } from './bots.js';
@@ -107,6 +107,12 @@ export class Game {
     this.viewModel = new ViewModel(this.camera, this.T);
     this.props = new PropSystem(this.map, this.root, this.T, this.isHost);
     this.camDist = this.settings.camDist || 0;
+    // camera angles are separate from where your character faces:
+    //  shift lock ON  = you always face where the camera looks, aim with the crosshair in the middle
+    //  shift lock OFF = the camera orbits freely, you face where you walk, aim where you tap / click
+    this.camYaw = 0; this.camPitch = -0.15;
+    this.shiftLock = !!this.settings.shiftLock;
+    this.faceT = 0;
     this.trails = new Map();     // flying knife wind trails
     this.propSndT = 0;
     this.camera.rotation.order = 'YXZ';
@@ -208,13 +214,17 @@ export class Game {
     this.corpses = [];
     this.props.reset();
 
-    // teams: about a third seekers (at least one), the rest props
-    const order = shuffle(all.slice());
+    // teams: about a third seekers (at least one), the rest props.
+    // Seeker turns rotate: whoever has been a prop the most rounds in a row goes first,
+    // real players before bots, so everyone gets to seek regularly.
+    const score = (c) => (c.propRounds || 0) + (c.isBot ? 0 : 0.75) + Math.random() * 0.5;
+    const order = shuffle(all.slice()).map((c) => [c, score(c)]).sort((a, b) => b[1] - a[1]).map((e) => e[0]);
     const nSeek = clamp(Math.round(all.length * TM.SEEKER_SHARE), 1, all.length - 1);
     const spawns = shuffle(this.map.spawns.slice());
     order.forEach((c, i) => {
       const seeker = i < nSeek;
       c.team = seeker ? 'seeker' : 'prop';
+      c.propRounds = seeker ? 0 : (c.propRounds || 0) + 1;
       c.color = CONFIG.TEAM_COLORS[c.team];
       c.hasKnife = seeker; c.hasGun = seeker;
       c.hotbar = new Array(INV.HOTBAR).fill(null);
@@ -407,10 +417,6 @@ export class Game {
         c.morphCd = TM.DISGUISE_COOLDOWN;
         c.disguise = p.type;
         this.emit({ e: 'morph', id: c.id, type: p.type });
-      } else if (a === 'undisguise' && c.disguise) {
-        c.morphCd = TM.DISGUISE_COOLDOWN;
-        c.disguise = null;
-        this.emit({ e: 'morph', id: c.id, type: null });
       }
       return;
     }
@@ -510,7 +516,7 @@ export class Game {
       if (!this.canHurt(c, o)) continue;
       const dx = o.x - c.x, dz = o.z - c.z;
       const d = Math.hypot(dx, dz);
-      if (d > W.KNIFE_RANGE + P.RADIUS || Math.abs(o.y - c.y) > 1.3) continue;
+      if (d > W.KNIFE_RANGE + (o.shapeR || P.RADIUS) || Math.abs(o.y - c.y) > 1.3) continue;
       if (d > 0.4 && (dx * fx + dz * fz) / d < cosA) continue;
       if (!hasLOS(this.map, c.x, c.y + 1.3, c.z, o.x, o.y + 1.1, o.z)) continue;
       if (d < bd) { bd = d; best = o; }
@@ -724,6 +730,7 @@ export class Game {
         const me = this.me;
         if (!me) break;
         me.x = ev.x; me.y = ev.y; me.z = ev.z; me.yaw = ev.yaw; me.pitch = 0;
+        this.camYaw = ev.yaw; this.camPitch = -0.15;
         me.vx = me.vy = me.vz = 0; me.alive = true; me.spectator = false;
         me.stamina = P.STAMINA_MAX; me.exhausted = false; me.spawnAt = performance.now();
         this.deathT = 0;
@@ -917,32 +924,52 @@ export class Game {
   // ---------------------------------------------------------------
   //  LOCAL PLAYER
   // ---------------------------------------------------------------
-  // props always see themselves from behind (third person)
-  thirdPerson() { const me = this.me; return this.camDist > 0.25 || !!(me && me.alive && me.team === 'prop'); }
-  camDistance() { const me = this.me; return me && me.alive && me.team === 'prop' ? Math.max(2.6, this.camDist) : this.camDist; }
+  // free camera (shift lock off) and props are always third person
+  thirdPerson() { const me = this.me; return this.camDist > 0.25 || !!(me && me.alive && (me.team === 'prop' || !this.shiftLock)); }
+  camDistance() {
+    const me = this.me;
+    if (!me || !me.alive) return this.camDist;
+    if (!this.shiftLock) return Math.max(3, this.camDist);
+    return me.team === 'prop' ? Math.max(2.6, this.camDist) : this.camDist;
+  }
   eyeHeight(c) { return c.disguise ? Math.max(0.6, propHeight(c.disguise) + 0.35) : P.EYE; }
 
-  // Direction the player is aiming. In third person we aim where the
-  // camera's crosshair points, so shots land where you look.
-  aimAngles() {
+  // A ray from the camera: through a point on the screen, or straight through the middle
+  screenRay(screen = null) {
+    const cam = this.camera;
+    if (screen) {
+      cam.updateMatrixWorld();
+      const v = new THREE.Vector3((screen.x / window.innerWidth) * 2 - 1, -(screen.y / window.innerHeight) * 2 + 1, 0.5).unproject(cam);
+      return { o: cam.position, d: v.sub(cam.position).normalize() };
+    }
+    return { o: cam.position, d: dirFromAngles(this.camYaw, this.camPitch) };
+  }
+
+  // Direction the player aims: from the eyes toward whatever the camera ray (crosshair,
+  // or the tapped / clicked point on the screen) hits, so shots land where you point.
+  aimAngles(screen = null) {
     const me = this.me;
-    if (!this.thirdPerson() || !this._camPos) return { yaw: me.yaw, pitch: me.pitch };
-    const cp = this._camPos, d = dirFromAngles(me.yaw, me.pitch);
+    if (!this.thirdPerson() || !this._camPos) return { yaw: this.camYaw, pitch: this.camPitch };
+    const { o: cp, d } = this.screenRay(screen);
     let t = raycastMap(this.map, cp.x, cp.y, cp.z, d.x, d.y, d.z, 90);
     for (const c of this.chars.values()) {
       if (c === me || !c.alive) continue;
       const tc = this.hitTest(c, cp.x, cp.y, cp.z, d.x, d.y, d.z, 0, true);
       if (tc >= 0 && tc < t) t = tc;
     }
+    const ph = this.props.raycast(cp.x, cp.y, cp.z, d.x, d.y, d.z, t);
+    if (ph) t = ph.t;
     const tx = cp.x + d.x * t, ty = cp.y + d.y * t, tz = cp.z + d.z * t;
     const ex = me.x, ey = me.y + P.EYE, ez = me.z;
     const dx = tx - ex, dy = ty - ey, dz = tz - ez;
     return { yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)) };
   }
 
-  localAction(a, n) {
+  localAction(a, n, screen = null) {
     const me = this.me;
-    const aim = (a === 'attack' || a === 'throw') ? this.aimAngles() : { yaw: me.yaw, pitch: me.pitch };
+    const aimed = a === 'attack' || a === 'throw';
+    const aim = aimed ? this.aimAngles(screen) : { yaw: me.yaw, pitch: me.pitch };
+    if (aimed && !this.shiftLock) { me.yaw = aim.yaw; me.pitch = aim.pitch; this.faceT = 0.7; } // turn toward what you shoot at
     if (this.isHost) {
       const y = me.yaw, pt = me.pitch;
       me.yaw = aim.yaw; me.pitch = aim.pitch;
@@ -956,16 +983,21 @@ export class Game {
   // called by the hotbar / inventory UI
   selectSlot(k) { if (this.me?.alive) this.localAction('slot', k); }
   invSwap(i, j) { if (this.me?.alive) this.localAction('inv', [i, j]); }
-  toggleDisguise() { const me = this.me; if (me?.alive && me.disguise) this.localAction('undisguise'); }
+  holster() { const me = this.me; if (me?.alive && me.slot >= 0) this.localAction('equip'); }
+  toggleShiftLock(on = !this.shiftLock) {
+    this.shiftLock = on;
+    this.settings.shiftLock = on;
+    this.o.onSettings?.();
+    this.ui.input?.setLockMode?.(on);
+    const me = this.me;
+    if (on && me) { this.camYaw = me.yaw; }
+    this.ui.toast(on ? 'Shift lock ON — you face where you look, aim with the crosshair' : 'Shift lock OFF — free camera, tap / click where you want to aim', '#ccc', 2.5);
+  }
 
   // which real prop is under the crosshair (or under a tap on the screen)?
   pickProp(screen = null) {
-    const cam = this.camera, me = this.me;
-    let o = cam.position, d;
-    if (screen) {
-      const v = new THREE.Vector3((screen.x / window.innerWidth) * 2 - 1, -(screen.y / window.innerHeight) * 2 + 1, 0.5).unproject(cam);
-      d = v.sub(cam.position).normalize();
-    } else d = dirFromAngles(me.yaw, me.pitch);
+    const me = this.me;
+    const { o, d } = this.screenRay(screen);
     const reach = TM.DISGUISE_RANGE + (this._camActualDist || 0) + 1;
     const wall = raycastMap(this.map, o.x, o.y, o.z, d.x, d.y, d.z, reach);
     const ph = this.props.raycast(o.x, o.y, o.z, d.x, d.y, d.z, wall);
@@ -990,8 +1022,12 @@ export class Game {
     if (inp.toggleView) { if (this.camDist > 0.25) { this._lastDist = this.camDist; this.camDist = 0; } else this.camDist = this._lastDist || 2.5; }
     if (this.camDist < 0.25 && inp.zoom < 0) this.camDist = 0;
 
-    me.yaw = wrapAngle(me.yaw - inp.lookDX);
-    me.pitch = clamp(me.pitch - inp.lookDY, -1.5, 1.5);
+    if (inp.shiftLock) this.toggleShiftLock();
+    this.camYaw = wrapAngle(this.camYaw - inp.lookDX);
+    this.camPitch = clamp(this.camPitch - inp.lookDY, -1.5, 1.5);
+    if (this.shiftLock || !me.alive) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
+    // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
+    const point = this.shiftLock ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
     if (inp.inv) this.ui.toggleInventory?.(this);
     if (!me.alive) {
@@ -1000,43 +1036,50 @@ export class Game {
     }
 
     if (me.team === 'prop') {
-      // tap / click furniture to turn into it; the equip button turns you back into a person
-      const target = inp.tap ? this.pickProp(inp.tap) : inp.attack ? this.pickProp() : null;
+      // tap / click furniture to turn into it (tap another piece to change)
+      const target = inp.tap ? this.pickProp(inp.tap) : inp.attack ? this.pickProp(point) : null;
       if (target) this.localAction('disguise', target.id);
       else if (inp.attack && !inp.tap) this.ui.toast('Aim at furniture to turn into it', '#ccc', 1.5);
-      if (inp.equip && me.disguise) this.localAction('undisguise');
     }
     if (me.team === 'seeker') {
       if (inp.slot >= 0) this.localAction('slot', inp.slot);
       if (inp.equip) this.localAction('equip');
     }
-    if (inp.throw && this.localWeapon() === 1) this.localAction('throw');
-    if (me.team === 'seeker' && (inp.attack || (inp.attackHeld && this.localWeapon() === 2))) {
+    if (inp.throw && this.localWeapon() === 1) this.localAction('throw', undefined, point);
+    // free camera: tapping the world with a weapon in hand attacks that spot
+    const tapAttack = !this.shiftLock && inp.tap && this.localWeapon() !== 0;
+    if (me.team === 'seeker' && (inp.attack || tapAttack || (inp.attackHeld && this.localWeapon() === 2))) {
       const w = this.localWeapon();
       if (w === 0) this.localAction('attack');
       else if (this.phase === 'play' && this.localGunCd <= 0) {
         if (w === 1) {
           this.localGunCd = W.KNIFE_COOLDOWN;
           this.viewModel.swing(); me.model.swing(); Audio.swing(null);
-          this.localAction('attack');
+          this.localAction('attack', undefined, point);
         } else {
           this.localGunCd = W.GUN_COOLDOWN;
           this.lastLocalShot = performance.now();
           this.viewModel.recoil(); me.model.recoil();
           Audio.gunshot(null);
           this.shake = 0.25;
-          this.localAction('attack');
+          this.localAction('attack', undefined, point);
         }
       }
     }
     if (this.localGunCd > 0) this.localGunCd -= dt;
 
-    // movement
-    const fx = forwardX(me.yaw), fz = forwardZ(me.yaw);
-    const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
+    // movement (relative to the camera)
+    const fx = forwardX(this.camYaw), fz = forwardZ(this.camYaw);
+    const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
     let mx = fx * inp.fwd + rx * inp.strafe, mz = fz * inp.fwd + rz * inp.strafe;
     const frozen = me.team === 'seeker' && this.phase === 'pre';   // seekers wait blindfolded while props hide
     if (frozen) mx = mz = 0;
+    if (!this.shiftLock) {
+      // free camera: turn to face where you walk (after a shot, keep facing it for a moment)
+      this.faceT -= dt;
+      if ((mx || mz) && this.faceT <= 0) me.yaw = turnToward(me.yaw, Math.atan2(-mx, -mz), dt * 12);
+      if (this.faceT <= 0) me.pitch *= Math.exp(-dt * 4);
+    }
     const wasGround = me.onGround;
     moveCharacter(me, { mx, mz, run: inp.run, jump: inp.jump && !frozen }, dt, this.map);
     if (me.landed > 5) { Audio.land(null, me.landed); this.shake = Math.min(0.3, me.landed * 0.02); }
@@ -1046,7 +1089,7 @@ export class Game {
     for (const o of this.chars.values()) {
       if (o === me || !o.alive) continue;
       const dx = me.x - o.rx, dz = me.z - o.rz;
-      const d = Math.hypot(dx, dz), min = P.RADIUS * 2;
+      const d = Math.hypot(dx, dz), min = (me.shapeR || P.RADIUS) + (o.shapeR || P.RADIUS);
       if (d < min && d > 1e-4 && Math.abs(me.y - o.ry) < P.HEIGHT * 0.9) {
         me.x += (dx / d) * (min - d); me.z += (dz / d) * (min - d);
       }
@@ -1079,6 +1122,11 @@ export class Game {
     if (this.ended) return;
     this.time += dt;
     if (!this.isHost) this.timeLeft -= dt;
+    // collision size: disguised props are as big as the furniture they copy
+    for (const c of this.chars.values()) {
+      const sh = c.disguise ? propShape(c.disguise) : null;
+      c.shapeR = sh ? sh.r : 0; c.shapeH = sh ? sh.h : 0;
+    }
     this.updateLocal(dt, inp);
     if (this.ended) return;
     if (this.isHost) this.hostTick(dt);
@@ -1162,17 +1210,16 @@ export class Game {
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
     const sh = (this.settings.shake !== false ? this.shake || 0 : 0);
     if (me.alive) {
-      const bobOn = this.settings.viewBob !== false;
-      const bob = bobOn && me.onGround ? Math.sin(this.time * 9) * 0.035 * Math.min(1, me.speed / 4) : 0;
-      const ex = me.x, ey = me.y + this.eyeHeight(me) + bob, ez = me.z;
+      // no view bobbing: the camera follows your head smoothly
+      const ex = me.x, ey = me.y + this.eyeHeight(me), ez = me.z;
       if (this.thirdPerson()) {
-        // over-the-shoulder camera, pulled in when a wall is in the way
-        const d = dirFromAngles(me.yaw, me.pitch);
-        const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
-        // weapon out -> tighter over-the-right-shoulder view for aiming
-        const aiming = weaponOf(me) !== 0;
+        // camera behind you, pulled in when a wall is in the way
+        const d = dirFromAngles(this.camYaw, this.camPitch);
+        const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
+        // shift lock + weapon out -> tighter over-the-right-shoulder view for aiming
+        const aiming = this.shiftLock && weaponOf(me) !== 0;
         const cd = this.camDistance();
-        const tSide = aiming ? 0.68 : me.team === 'prop' ? 0 : 0.38 * Math.min(1, cd / 1.5);
+        const tSide = aiming ? 0.68 : me.team === 'prop' || !this.shiftLock ? 0 : 0.38 * Math.min(1, cd / 1.5);
         const tDist = aiming ? Math.min(Math.max(cd, 1.2), 1.8) : cd;
         const kk = Math.min(1, dt * 8);
         this._side = (this._side ?? tSide) + (tSide - (this._side ?? tSide)) * kk;
@@ -1190,10 +1237,10 @@ export class Game {
         this._camActualDist = 0;
         cam.position.set(ex, ey, ez);
       }
-      cam.rotation.set(me.pitch + (Math.random() - 0.5) * sh * 0.05, me.yaw + (Math.random() - 0.5) * sh * 0.05, 0);
+      cam.rotation.set(this.camPitch + (Math.random() - 0.5) * sh * 0.05, this.camYaw + (Math.random() - 0.5) * sh * 0.05, 0);
       this._camPos = cam.position;
       this.viewModel.setLook(me.look, me.color, Math.min(1.4, me.model.light[1]));
-      this.viewModel.update(dt, weaponOf(me), me.onGround ? me.speed : 0, !this.thirdPerson());
+      this.viewModel.update(dt, weaponOf(me), 0, !this.thirdPerson());
     } else {
       this.viewModel.update(dt, 0, 0, false);
       this.deathT += dt;
@@ -1208,7 +1255,7 @@ export class Game {
         if (s && s.alive) target = { x: s.rx, y: s.ry, z: s.rz, c: s };
       }
       if (target) {
-        const yaw = me.yaw, pitch = clamp(me.pitch, -1.2, 0.6);
+        const yaw = this.camYaw, pitch = clamp(this.camPitch, -1.2, 0.6);
         const d = dirFromAngles(yaw, pitch);
         const hx = target.x, hy = target.y + 1.6, hz = target.z;
         let dist = Math.max(2, this.camDist || 3.2);
@@ -1233,9 +1280,10 @@ export class Game {
     if (!me) return;
     // who am I looking at? (ray from the camera through the crosshair)
     let look = null;
-    if (me.alive) {
-      const cp = this.camera.position;
-      const d = dirFromAngles(me.yaw, me.pitch);
+    // shift lock: what the crosshair points at; free camera: what the mouse hovers (nothing on phones)
+    const hover = this.shiftLock ? null : this.ui.isTouch ? false : (this.ui.input?.mouse || false);
+    if (me.alive && hover !== false) {
+      const { o: cp, d } = this.screenRay(hover);
       const wall = raycastMap(this.map, cp.x, cp.y, cp.z, d.x, d.y, d.z, 14 + (this._camActualDist || 0));
       let bt = wall;
       for (const c of this.chars.values()) {
@@ -1248,7 +1296,7 @@ export class Game {
       if (look) look = { nick: look.nick, color: look.color };
       if (!look && me.team === 'prop') {
         this._pickT = (this._pickT || 0) - dt;
-        if (this._pickT <= 0) { this._pickT = 0.1; this._pick = this.pickProp(); }
+        if (this._pickT <= 0) { this._pickT = 0.1; this._pick = this.pickProp(hover); }
         if (this._pick) look = { nick: `${this.ui.isTouch ? 'Tap' : 'Click'} to become: ${this._pick.type}`, color: 0xffffff };
       }
       if (!look) {
@@ -1266,6 +1314,7 @@ export class Game {
       hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, disguise: me.disguise,
       propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
       blind: me.alive && me.team === 'seeker' && this.phase === 'pre',
+      shiftLock: this.shiftLock,
       server: this.serverLabel, code: this.code, players: this.chars.size,
       deathT: this.deathT, third: this.thirdPerson(),
     });

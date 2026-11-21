@@ -554,10 +554,8 @@ export class ViewModel {
     this.gun.visible = weapon === 2;
     this.support.visible = weapon === 2;
     this.base.x = weapon === 2 ? 0.17 : 0.24; // two-handed: hold it more in the middle
-    this.bob += dt * speed * 1.8;
-    const bx = Math.sin(this.bob) * 0.012 * Math.min(1, speed / 4);
-    const by = Math.abs(Math.cos(this.bob)) * 0.014 * Math.min(1, speed / 4);
-    this.arm.position.set(this.base.x + bx, this.base.y + by, this.base.z);
+    // no bobbing while walking / running
+    this.arm.position.set(this.base.x, this.base.y, this.base.z);
     this.arm.rotation.set(0, 0, 0);
     if (this.swingT > 0) {
       this.swingT -= dt;

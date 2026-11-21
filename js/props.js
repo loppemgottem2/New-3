@@ -171,6 +171,20 @@ export class DisguiseMesh {
   dispose() { for (const m of this.mats) m.dispose(); }
 }
 
+// collision size of a player disguised as this prop: radius that covers its parts (capped so it
+// still fits through doors) and its height
+const SHAPES = {};
+export function propShape(type) {
+  if (SHAPES[type]) return SHAPES[type];
+  let r = 0, h = 0;
+  for (const [cx, cy, cz, hx, hy, hz, yaw = 0] of PROP_TYPES[type].parts) {
+    const ex = yaw ? Math.hypot(hx, hz) : Math.max(hx, hz);
+    r = Math.max(r, Math.hypot(cx, cz) + ex);
+    h = Math.max(h, cy + hy);
+  }
+  return (SHAPES[type] = { r: Math.min(0.75, Math.max(0.12, r)), h: Math.max(0.15, h) });
+}
+
 // height of a prop type (camera / hit tests for disguised players)
 export function propHeight(type) {
   let top = 0;
@@ -425,13 +439,13 @@ export class PropSystem {
   // Keeps a character out of props. soft = 0..1 how much of the overlap moves the character.
   // With push=true (host) the character shoves the prop (impulse at the contact point -> it can tip over).
   collideChar(ch, soft, push, dt = 1 / 60) {
-    const R = P.RADIUS;
+    const R = ch.shapeR || P.RADIUS, H = ch.shapeH || P.HEIGHT;
     const s = t1, l = t2, q = t3;
     for (const p of this.list) {
       const dx = p.pos.x - ch.x, dz = p.pos.z - ch.z;
       const reach = p.bound + R + 0.1;
       if (dx * dx + dz * dz > reach * reach) continue;
-      if (ch.y > p.top - 0.02 || ch.y + P.HEIGHT < p.y) continue;
+      if (ch.y > p.top - 0.02 || ch.y + H < p.y) continue;
       // low things (bottles, food boxes, mattresses) are walked over and kicked, not blocking
       // walking onto something very low (a mattress) is a small step up, not a wall
       if (ch.onGround && p.top - ch.y <= P.WALK_STEP + 0.01 && p.mass >= 0.6) continue;
@@ -441,6 +455,7 @@ export class PropSystem {
       const bq = new V();
       for (const part of p.parts) {
         for (const hs of samples) {
+          if (hs > H) break;
           s.set(ch.x, ch.y + hs, ch.z);
           this.toPartLocal(p, part, s, l);
           const inside = Math.abs(l.x) < part.h.x && Math.abs(l.y) < part.h.y && Math.abs(l.z) < part.h.z;
