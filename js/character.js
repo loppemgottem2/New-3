@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=180';
-import { CONFIG } from './config.js?v=180';
+import * as THREE from '../vendor/three.module.min.js?v=190';
+import { CONFIG } from './config.js?v=190';
 
 
 const L = CONFIG.LOOKS;
@@ -477,6 +477,23 @@ export class CharacterModel {
     const x = new V3().crossVectors(y, z);
     this.armL.sh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
     this.armL.el.rotation.set(Math.acos(Math.max(-1, Math.min(1, u.dot(f)))), 0, 0);
+  }
+
+  // Hitboxes that follow the body's actual pose: one capsule per body part
+  // [ax, ay, az, bx, by, bz, radius] in world space (head, torso, upper/lower arms, upper/lower legs, feet).
+  hitCapsules() {
+    const j = this.jointPositions();
+    const out = [];
+    const cap = (a, b, r) => out.push([a.x, a.y, a.z, b.x, b.y, b.z, r]);
+    const head = j[0], neck = j[1], pelvis = j[2];
+    cap(head, head, 0.16);                                                              // head
+    const down = pelvis.clone().sub(neck).normalize();
+    cap(neck.clone().addScaledVector(down, 0.1), pelvis.clone().addScaledVector(down, 0.06), 0.15);   // torso + hips
+    cap(j[3], j[4], 0.065); cap(j[4], j[5], 0.055);                                       // left arm
+    cap(j[6], j[7], 0.065); cap(j[7], j[8], 0.055);                                       // right arm
+    cap(j[9], j[10], 0.08); cap(j[10], j[11], 0.065);                                     // left leg
+    cap(j[12], j[13], 0.08); cap(j[13], j[14], 0.065);                                    // right leg
+    return out;
   }
 
   // World positions of the 15 joints used by the ragdoll

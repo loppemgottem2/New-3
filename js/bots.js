@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=180';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=180';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=180';
+import { CONFIG } from './config.js?v=190';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=190';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=190';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -297,7 +297,15 @@ function act(game, c, b, dt) {
       if (useKnife && weaponOf(c) === 1 && err < 30 * DEG) {
         game.hostAction(c, 'attack'); b.shots++;
       } else if (!useKnife && weaponOf(c) === 2 && err < (8 - 5 * b.skill) * DEG && d < 45) {
-        const spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 25) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);
+        // aim gets worse: at longer range, while the bot moves, the faster the target moves,
+        // the smaller the prop is, and now and then just by bad luck (less often for skilled bots)
+        let spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 25) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);
+        if (target && !tp) {
+          spread *= 1 + (target.speed || 0) * (0.3 - 0.12 * b.skill);                      // moving target
+          const size = target.disguise ? target.shapeR || 0.3 : 0.4;
+          spread *= clamp(0.4 / size, 1, 3.5);                                             // small prop = hard to hit
+        }
+        if (Math.random() < 0.18 - 0.12 * b.skill) spread *= rand(2, 3.5);                // a bad shot
         game.gunAttack(c, spread); b.shots++;
       }
       if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; c.slot = -1; }   // tested it, move on
