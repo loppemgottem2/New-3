@@ -983,7 +983,6 @@ export class Game {
   // called by the hotbar / inventory UI
   selectSlot(k) { if (this.me?.alive) this.localAction('slot', k); }
   invSwap(i, j) { if (this.me?.alive) this.localAction('inv', [i, j]); }
-  holster() { const me = this.me; if (me?.alive && me.slot >= 0) this.localAction('equip'); }
   toggleShiftLock(on = !this.shiftLock) {
     this.shiftLock = on;
     this.settings.shiftLock = on;
@@ -1210,8 +1209,11 @@ export class Game {
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
     const sh = (this.settings.shake !== false ? this.shake || 0 : 0);
     if (me.alive) {
-      // no view bobbing: the camera follows your head smoothly
-      const ex = me.x, ey = me.y + this.eyeHeight(me), ez = me.z;
+      // view bobbing in first person only. In third person the camera stays smooth, so your
+      // character / prop doesn't look like it bounces up and down on screen while moving.
+      const bobOn = this.settings.viewBob !== false && !this.thirdPerson();
+      const bob = bobOn && me.onGround ? Math.sin(this.time * 9) * 0.035 * Math.min(1, me.speed / 4) : 0;
+      const ex = me.x, ey = me.y + this.eyeHeight(me) + bob, ez = me.z;
       if (this.thirdPerson()) {
         // camera behind you, pulled in when a wall is in the way
         const d = dirFromAngles(this.camYaw, this.camPitch);
@@ -1240,7 +1242,7 @@ export class Game {
       cam.rotation.set(this.camPitch + (Math.random() - 0.5) * sh * 0.05, this.camYaw + (Math.random() - 0.5) * sh * 0.05, 0);
       this._camPos = cam.position;
       this.viewModel.setLook(me.look, me.color, Math.min(1.4, me.model.light[1]));
-      this.viewModel.update(dt, weaponOf(me), 0, !this.thirdPerson());
+      this.viewModel.update(dt, weaponOf(me), me.onGround ? me.speed : 0, !this.thirdPerson());
     } else {
       this.viewModel.update(dt, 0, 0, false);
       this.deathT += dt;

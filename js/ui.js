@@ -206,17 +206,11 @@ export class UI {
         d.addEventListener('pointerdown', pick);
         el.appendChild(d);
       }
-      // ✕ = put the item away (empty hands)
-      const x = document.createElement('div');
-      x.className = 'hb-slot hb-small hb-x'; x.title = 'Put away (Q)'; x.textContent = '✕';
-      x.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.game?.holster(); });
-      el.appendChild(x);
       const bag = document.createElement('div');
       bag.className = 'hb-slot hb-small hb-bag'; bag.title = 'Inventory (I)'; bag.textContent = '🎒';
       bag.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.toggleInventory(this.game); });
       el.appendChild(bag);
     }
-    el.querySelector('.hb-x').classList.toggle('off', s.slot < 0);
     [...el.querySelectorAll('.hb-slot:not(.hb-small)')].forEach((d, k) => {
       const it = s.hotbar[k];
       const gone = (it === 'knife' && !s.hasKnife) || (it === 'revolver' && !s.hasGun);
