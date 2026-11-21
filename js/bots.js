@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=660';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=660';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=660';
-import { propHeight } from './props.js?v=660';
+import { CONFIG } from './config.js?v=680';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=680';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=680';
+import { propHeight } from './props.js?v=680';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -24,7 +24,7 @@ const TM = CONFIG.TEAMS;
 const weaponOf = (c) => {
   if (c.slot < 0) return 0;
   const it = c.hotbar[c.slot];
-  return it === 'knife' && c.hasKnife ? 1 : it === 'revolver' && c.hasGun ? 2 : 0;
+  return it === 'knife' && c.hasKnife ? 1 : it === 'revolver' && c.hasGun ? 2 : it === 'crowbar' && c.hasCrowbar ? 3 : 0;
 };
 // put an item from the hotbar in hand (bots don't need the inventory screen)
 function hold(c, item) {
@@ -388,18 +388,24 @@ function act(game, c, b, dt) {
     const pro = b.skill > 0.7;
     if (b.wKey !== key) {
       b.wKey = key; b.closeRolled = false;
-      b.knife = weaponOf(c) === 1 && Math.random() < 0.25 + 0.45 * b.skill;
+      // already holding a melee weapon (knife or crowbar): maybe keep using it
+      const held = weaponOf(c);
+      b.knife = (held === 1 || held === 3) && Math.random() < 0.25 + 0.45 * b.skill;
+      b.melee = held === 3 ? 'crowbar' : 'knife';
     }
     if (!b.knife && !b.closeRolled && d < W.KNIFE_RANGE * 1.2) {
       b.closeRolled = true;
-      if (pro && Math.random() < 0.3 + (b.skill - 0.7)) b.knife = true;
+      if (pro && Math.random() < 0.3 + (b.skill - 0.7)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }   // knife or crowbar, at random
     }
     if (b.knife && !pro && d > 6) b.knife = false;
-    if (!c.hasKnife) b.knife = false;
+    // (fall back to the other melee weapon if that one isn't in hand any more, e.g. it was thrown)
+    if (b.melee === 'crowbar' && !c.hasCrowbar) b.melee = 'knife';
+    if (b.melee !== 'crowbar' && !c.hasKnife) b.melee = c.hasCrowbar ? 'crowbar' : null;
+    if (!b.melee) b.knife = false;
     const useKnife = b.knife;
-    hold(c, useKnife ? 'knife' : 'revolver');
+    hold(c, useKnife ? b.melee : 'revolver');
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
-      if (useKnife && weaponOf(c) === 1 && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
+      if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
         const miss = target && !tp ? Math.min(0.75, (target.speed || 0) * (0.09 - 0.04 * b.skill) + b.trk.jerk * 0.03 * (1.2 - 0.6 * b.skill)) : 0;
         if (Math.random() < miss) { c.attackCd = W.KNIFE_COOLDOWN; game.emit({ e: 'swing', id: c.id }); }
