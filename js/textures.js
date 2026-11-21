@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=520';
+import * as THREE from '../vendor/three.module.min.js?v=530';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {

@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=520';
-import { CONFIG } from './config.js?v=520';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=520';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=520';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=520';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=520';
-import { Ragdoll } from './ragdoll.js?v=520';
-import { Audio } from './audio.js?v=520';
-import { initBrain, updateBots } from './bots.js?v=520';
+import * as THREE from '../vendor/three.module.min.js?v=530';
+import { CONFIG } from './config.js?v=530';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=530';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=530';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=530';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=530';
+import { Ragdoll } from './ragdoll.js?v=530';
+import { Audio } from './audio.js?v=530';
+import { initBrain, updateBots } from './bots.js?v=530';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -1553,7 +1553,7 @@ export class Game {
       const sh = c.disguise ? propShape(c.disguise) : null;
       c.shapeR = sh ? sh.r : 0; c.shapeH = sh ? sh.h : 0;
       // collision footprint: every part of the furniture, or a human prop's T-posed arms
-      c.foot = c.disguise ? propFoot(c.disguise) : c.team === 'prop' && c.alive ? TPOSE_FOOT : null;
+      c.foot = c.disguise ? propFoot(c.disguise) : !c.alive ? null : c.team === 'prop' ? TPOSE_FOOT : BODY_FOOT;
     }
     this.updateLocal(dt, inp);
     if (this.ended) return;
@@ -1807,8 +1807,15 @@ function seededRandom(seed) {
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-// a human prop's collision footprint: the body plus its T-posed arms (at shoulder height)
-const TPOSE_FOOT = [{ x: 0, z: 0, r: P.RADIUS, y0: 0, y1: P.HEIGHT },
+// a person's collision footprint, shaped like the body instead of one big cylinder:
+// two legs, the torso (shoulder-wide), the head
+const BODY_FOOT = [
+  { x: 0.1, z: 0, r: 0.11, y0: 0, y1: 0.92 }, { x: -0.1, z: 0, r: 0.11, y0: 0, y1: 0.92 },     // legs / hips
+  { x: 0.11, z: 0, r: 0.18, y0: 0.85, y1: 1.46 }, { x: -0.11, z: 0, r: 0.18, y0: 0.85, y1: 1.46 },   // torso + shoulders
+  { x: 0, z: 0, r: 0.17, y0: 1.42, y1: P.HEIGHT },                                              // head
+];
+// a human prop: the same body plus its T-posed arms (at shoulder height)
+const TPOSE_FOOT = [...BODY_FOOT,
   ...[0.42, 0.56, 0.7, 0.82].flatMap((x) => [x, -x]).map((x) => ({ x, z: 0, r: 0.075, y0: 1.28, y1: 1.5 }))];
 
 let DROP_TEX = null;   // round blood-drop sprite, shared by every game

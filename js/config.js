@@ -60,7 +60,6 @@ export const CONFIG = {
     JUMP_SPEED: 6.4,        // jump apex = JUMP_SPEED^2 / (2*GRAVITY) ≈ 1.14 m
     STEP_HEIGHT: 0.4,       // only used for map/bot-path checks
     WALL_SLIDE: 1.2,        // props pushing into a wall slide down this slowly (m/s)
-    WALL_CLIMB_MAX: 4.5,    // props can wall-jump up to this height (walls are 6 m)
     WALK_STEP: 0.28,        // tiny auto step-up, ONLY while walking/running on the ground (enough for a mattress); none while jumping
     STAMINA_MAX: 100,
     STAMINA_DRAIN: 16,      // per second while sprinting
