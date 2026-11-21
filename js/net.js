@@ -10,8 +10,8 @@
 //   * Add ?local=1 to the URL to use a fake in-browser network
 //     (BroadcastChannel) — handy for testing with two tabs offline.
 // =====================================================================
-import { CONFIG } from './config.js?v=310';
-import { Emitter } from './util.js?v=310';
+import { CONFIG } from './config.js?v=320';
+import { Emitter } from './util.js?v=320';
 
 const params = new URLSearchParams(location.search);
 export const LOCAL_MODE = params.has('local');
@@ -194,9 +194,9 @@ export async function probePublicServers(onProgress) {
   const results = await Promise.all(slots.map(async (slot) => {
     const id = publicId(slot);
     try {
-      const conn = await connectWith(peer, id, 6000);
+      const conn = await connectWith(peer, id, 4000);
       const info = await new Promise((res) => {
-        const t = setTimeout(() => res(null), 3000);
+        const t = setTimeout(() => res(null), 2000);
         conn.on('data', (d) => { if (d && d.t === 'info') { clearTimeout(t); res(d); } });
         conn.send({ t: 'info' });
       });

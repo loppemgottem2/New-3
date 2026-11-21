@@ -1,9 +1,7 @@
 // Small math / helper functions shared by every module.
 
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-export const lerp = (a, b, t) => a + (b - a) * t;
 export const rand = (a, b) => a + Math.random() * (b - a);
-export const randInt = (a, b) => Math.floor(rand(a, b + 1));
 export const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 export const DEG = Math.PI / 180;
 
@@ -42,8 +40,6 @@ export function dirFromAngles(yaw, pitch) {
   const cp = Math.cos(pitch);
   return { x: -Math.sin(yaw) * cp, y: Math.sin(pitch), z: -Math.cos(yaw) * cp };
 }
-
-export const dist2D = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 
 export function makeCode(len = 5) {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

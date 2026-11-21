@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=310';
-import { CONFIG } from './config.js?v=310';
+import * as THREE from '../vendor/three.module.min.js?v=320';
+import { CONFIG } from './config.js?v=320';
 
 
 const L = CONFIG.LOOKS;
@@ -90,6 +90,8 @@ function geos() {
   G.cyl = new THREE.CylinderGeometry(0.03, 0.03, 0.06, 10);
   G.frame = new THREE.BoxGeometry(0.035, 0.05, 0.1);
   G.grip = new THREE.BoxGeometry(0.032, 0.11, 0.045);
+  G.trigger = new THREE.TorusGeometry(0.018, 0.004, 4, 10, Math.PI);
+  G.hammer = new THREE.BoxGeometry(0.01, 0.02, 0.015);
   return G;
 }
 export { geos };
@@ -133,8 +135,11 @@ export function makeCrowbarMesh() {
   const g = new THREE.Group();
   const red = shared('crowbarRed', () => new THREE.MeshPhongMaterial({ color: 0x9e120c, shininess: 40, specular: 0x442020 }));
   const chrome = shared('crowbarChrome', () => new THREE.MeshPhongMaterial({ color: 0x7c828b, shininess: 70, specular: 0xd8dce2 }));
-  g.add(new THREE.Mesh(G2.middle, red), new THREE.Mesh(G2.lower, chrome), new THREE.Mesh(G2.upper, chrome),
+  // inner group turned half a turn around the bar so the claw curls away from the holder
+  const inner = new THREE.Group(); inner.rotation.z = Math.PI;
+  inner.add(new THREE.Mesh(G2.middle, red), new THREE.Mesh(G2.lower, chrome), new THREE.Mesh(G2.upper, chrome),
     new THREE.Mesh(G2.chisel, chrome), new THREE.Mesh(G2.forkL, chrome), new THREE.Mesh(G2.forkR, chrome));
+  g.add(inner);
   return g;
 }
 
@@ -180,8 +185,8 @@ export function makeGunMesh() {
   const f = new THREE.Mesh(g.frame, metal); f.position.set(0, 0.025, 0);
   const gr = new THREE.Mesh(g.grip, shared('grip', () => new THREE.MeshLambertMaterial({ color: 0x5a3518 })));
   gr.position.set(0, -0.03, 0.04); gr.rotation.x = -0.35;
-  const tg = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.004, 4, 10, Math.PI), metal); tg.position.set(0, -0.005, 0.0); tg.rotation.set(0, Math.PI / 2, Math.PI);
-  const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.02, 0.015), metal); hammer.position.set(0, 0.055, 0.045);
+  const tg = new THREE.Mesh(g.trigger, metal); tg.position.set(0, -0.005, 0.0); tg.rotation.set(0, Math.PI / 2, Math.PI);
+  const hammer = new THREE.Mesh(g.hammer, metal); hammer.position.set(0, 0.055, 0.045);
   inner.add(b, c, f, gr, tg, hammer);
   return gun;
 }
@@ -284,7 +289,6 @@ function faceMeshes(face, M) {
   return out;
 }
 
-const tmpV = new THREE.Vector3();
 
 export class CharacterModel {
   constructor(textures, look = DEFAULT_LOOK) {
@@ -642,4 +646,3 @@ export class ViewModel {
   }
 }
 
-export { tmpV };

@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=310';
-import { CONFIG } from './config.js?v=310';
-import { store, makeCode, clamp } from './util.js?v=310';
-import { makeTextures } from './textures.js?v=310';
-import { GameMap } from './map.js?v=310';
-import { NavGrid } from './nav.js?v=310';
-import { Input, isTouchDevice } from './input.js?v=310';
-import { UI } from './ui.js?v=310';
-import { Audio } from './audio.js?v=310';
-import { Game } from './game.js?v=310';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=310';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=310';
+import * as THREE from '../vendor/three.module.min.js?v=320';
+import { CONFIG } from './config.js?v=320';
+import { store, makeCode, clamp } from './util.js?v=320';
+import { makeTextures } from './textures.js?v=320';
+import { GameMap } from './map.js?v=320';
+import { NavGrid } from './nav.js?v=320';
+import { Input, isTouchDevice } from './input.js?v=320';
+import { UI } from './ui.js?v=320';
+import { Audio } from './audio.js?v=320';
+import { Game } from './game.js?v=320';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=320';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=320';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -377,14 +377,29 @@ async function joinServer(hostId) {
   startGame('client', net, { welcome, serverLabel: welcome.server });
 }
 
+// public servers get a made-up code like "Public random-4821"
+function publicLabel() { return `Public random-${1000 + Math.floor(Math.random() * 9000)}`; }
+
 async function quickPlay() {
   if (!requireNet()) return;
   const token = ++cancelToken;
   ui.loading('Looking for public servers…', () => { cancelToken++; ui.show('menu'); });
   try {
-    const results = await probePublicServers();
+    // join the first open server as soon as it answers instead of waiting for every slot to time out
+    const isOpen = (r) => r.info && r.info.humans < r.info.max;
+    let first = null, gotFirst;
+    const firstOpen = new Promise((res) => { gotFirst = res; });
+    const all = probePublicServers((r) => { if (!first && isOpen(r)) { first = r; gotFirst(); } });
+    await Promise.race([firstOpen, all]);
     if (token !== cancelToken) return;
-    const open = results.filter((r) => r.info && r.info.humans < r.info.max)
+    if (first) {
+      ui.loading(`Joining ${first.info.name}…`, () => { cancelToken++; ui.show('menu'); });
+      try { await joinServer(first.id); return; } catch (e) { console.warn('join failed', e); }
+      if (token !== cancelToken) return;
+    }
+    const results = await all;
+    if (token !== cancelToken) return;
+    const open = results.filter((r) => isOpen(r) && r !== first)
       .sort((a, b) => b.info.humans - a.info.humans || Math.random() - 0.5);
     for (const r of open) {
       if (token !== cancelToken) return;
@@ -395,8 +410,9 @@ async function quickPlay() {
     const free = results.filter((r) => !r.info).map((r) => r.slot);
     for (const slot of free) {
       if (token !== cancelToken) return;
-      ui.loading(`Starting Public Server #${slot}…`, () => { cancelToken++; ui.show('menu'); });
-      try { await hostServer(publicId(slot), `Public Server #${slot}`, null); return; } catch (e) {
+      const label = publicLabel();
+      ui.loading(`Starting ${label}…`, () => { cancelToken++; ui.show('menu'); });
+      try { await hostServer(publicId(slot), label, null); return; } catch (e) {
         if (e?.type === 'unavailable-id') { try { await joinServer(publicId(slot)); return; } catch { /* next */ } }
         else throw e;
       }
@@ -431,10 +447,12 @@ async function refreshBrowser() {
         row.appendChild(b);
       } else {
         row.className = 'srv empty';
-        row.innerHTML = `<div><div class="name">Public Server #${r.slot} — empty</div><div class="meta">Start it and others can join</div></div>`;
+        const label = publicLabel();
+        row.innerHTML = `<div><div class="name"></div><div class="meta">Empty — start it and others can join</div></div>`;
+        row.querySelector('.name').textContent = label;
         const b = document.createElement('button');
         b.className = 'btn small'; b.textContent = 'Host';
-        b.onclick = () => hostFromBrowser(r.slot);
+        b.onclick = () => hostFromBrowser(r.slot, label);
         row.appendChild(b);
       }
       rows.set(r.slot, row);
@@ -452,10 +470,10 @@ async function joinFromBrowser(id) {
   ui.loading('Joining server…', () => { cancelToken++; ui.show('browser'); });
   try { await joinServer(id); } catch (e) { if (token === cancelToken) { failToMenu(netErrorText(e)); } }
 }
-async function hostFromBrowser(slot) {
+async function hostFromBrowser(slot, label = publicLabel()) {
   const token = ++cancelToken;
-  ui.loading(`Starting Public Server #${slot}…`, () => { cancelToken++; ui.show('browser'); });
-  try { await hostServer(publicId(slot), `Public Server #${slot}`, null); }
+  ui.loading(`Starting ${label}…`, () => { cancelToken++; ui.show('browser'); });
+  try { await hostServer(publicId(slot), label, null); }
   catch (e) {
     if (token !== cancelToken) return;
     if (e?.type === 'unavailable-id') { try { await joinServer(publicId(slot)); return; } catch (e2) { failToMenu(netErrorText(e2)); return; } }
@@ -695,4 +713,4 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 // debug handle (open the browser console and type GMM)
-window.GMM = { get game() { return game; }, get map() { return map; }, get nav() { return nav; }, scene, CONFIG, startGame, settings, applyAll };
+window.GMM = { get game() { return game; }, get map() { return map; }, get nav() { return nav; }, scene, renderer, CONFIG, startGame, settings, applyAll };
