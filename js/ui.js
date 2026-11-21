@@ -25,7 +25,7 @@ export class UI {
     $('gearbtn').classList.toggle('hidden', !inGame);
     $('settings').classList.remove('overlay');
     document.body.classList.toggle('ingame', inGame);
-    if (!inGame) { document.body.classList.remove('blinded'); $('slbtn').classList.add('hidden'); this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
+    if (!inGame) { document.body.classList.remove('blinded', 'spectating'); $('slbtn').classList.add('hidden'); this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
   }
 
   // settings on top of a running match
@@ -114,6 +114,7 @@ export class UI {
     bl.classList.toggle('hidden', !s.blind);
     // while blindfolded, every control is hidden (only the server text, settings, scoreboard and X stay)
     document.body.classList.toggle('blinded', !!s.blind);
+    document.body.classList.toggle('spectating', !me.alive);
     if (s.blind) this._set('blind-t', String(t));
 
     // identity panel (bottom-left, team colored)
