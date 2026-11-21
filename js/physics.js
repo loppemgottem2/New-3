@@ -1,0 +1,284 @@
+// Character movement, collisions against the grid map, and raycasts.
+import { CONFIG } from './config.js';
+import { CELL, CEIL_H, WALL_H } from './map.js';
+
+const P = CONFIG.PLAYER;
+
+// ---------------------------------------------------------------------
+//  Walls: push a circle (x,z,r) out of every cell that is taller than
+//  the character can step onto.
+// ---------------------------------------------------------------------
+export function resolveWalls(map, pos, r, feetY) {
+  const maxH = feetY + 0.02; // no auto step-up: anything higher than your feet blocks you
+  for (let iter = 0; iter < 3; iter++) {
+    let moved = false;
+    const cx0 = Math.floor((pos.x - r) / CELL), cx1 = Math.floor((pos.x + r) / CELL);
+    const cz0 = Math.floor((pos.z - r) / CELL), cz1 = Math.floor((pos.z + r) / CELL);
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        if (map.cellHeight(cx, cz) <= maxH) continue;
+        const minX = cx * CELL, maxX = minX + CELL, minZ = cz * CELL, maxZ = minZ + CELL;
+        const nx = Math.max(minX, Math.min(pos.x, maxX));
+        const nz = Math.max(minZ, Math.min(pos.z, maxZ));
+        let dx = pos.x - nx, dz = pos.z - nz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) continue;
+        if (d2 > 1e-8) {
+          const d = Math.sqrt(d2);
+          const push = r - d;
+          pos.x += (dx / d) * push; pos.z += (dz / d) * push;
+        } else {
+          // center inside the cell: push out along the smallest axis
+          const l = pos.x - minX, rr = maxX - pos.x, t = pos.z - minZ, b = maxZ - pos.z;
+          const m = Math.min(l, rr, t, b);
+          if (m === l) pos.x = minX - r; else if (m === rr) pos.x = maxX + r;
+          else if (m === t) pos.z = minZ - r; else pos.z = maxZ + r;
+        }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+}
+
+// Highest surface (floor / solid furniture) under a circle that is at most `maxY` high.
+export function groundHeightCells(map, x, z, r, maxY) {
+  let g = 0;
+  const cx0 = Math.floor((x - r) / CELL), cx1 = Math.floor((x + r) / CELL);
+  const cz0 = Math.floor((z - r) / CELL), cz1 = Math.floor((z + r) / CELL);
+  for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) {
+    const h = map.cellHeight(cx, cz);
+    if (h > g && h <= maxY) {
+      const nx = Math.max(cx * CELL, Math.min(x, cx * CELL + CELL));
+      const nz = Math.max(cz * CELL, Math.min(z, cz * CELL + CELL));
+      if ((x - nx) ** 2 + (z - nz) ** 2 < r * r) g = h;
+    }
+  }
+  return g;
+}
+
+// Same, but also counts the tops of physics props (you can stand on boxes, tables, tipped-over crates...)
+export function groundHeight(map, x, z, r, maxY) {
+  const g = groundHeightCells(map, x, z, r, maxY);
+  return map.propSys ? Math.max(g, map.propSys.topAt(x, z, r, maxY)) : g;
+}
+
+// True if a circle at (x,z) does not overlap any blocking cell (used by bot path smoothing)
+export function circleFree(map, x, z, r) {
+  const cx0 = Math.floor((x - r) / CELL), cx1 = Math.floor((x + r) / CELL);
+  const cz0 = Math.floor((z - r) / CELL), cz1 = Math.floor((z + r) / CELL);
+  for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) {
+    if (map.cellHeight(cx, cz) <= P.STEP_HEIGHT) continue;
+    const nx = Math.max(cx * CELL, Math.min(x, cx * CELL + CELL));
+    const nz = Math.max(cz * CELL, Math.min(z, cz * CELL + CELL));
+    if ((x - nx) ** 2 + (z - nz) ** 2 < r * r) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------
+//  Full movement step for a character (players AND bots use this).
+//  input: { mx, mz } world-space wish direction (length 0..1), run, jump
+//
+//  Quake/Source-style: ground friction + acceleration toward the wish
+//  direction, weak friction right after landing and strong air control
+//  so you keep (and can build) momentum by jumping and strafing.
+// ---------------------------------------------------------------------
+function accelerate(ch, wx, wz, wishSpeed, accel, dt) {
+  const cur = ch.vx * wx + ch.vz * wz;
+  const add = wishSpeed - cur;
+  if (add <= 0) return;
+  const a = Math.min(accel * dt * Math.max(wishSpeed, 1), add);
+  ch.vx += a * wx; ch.vz += a * wz;
+}
+
+export function moveCharacter(ch, input, dt, map) {
+  let wl = Math.hypot(input.mx, input.mz);
+  const moving = wl > 0.01;
+  const wx = moving ? input.mx / wl : 0, wz = moving ? input.mz / wl : 0;
+  wl = Math.min(1, wl);
+
+  // Stamina
+  let run = !!input.run && moving && !ch.exhausted;
+  if (run) ch.stamina = Math.max(0, ch.stamina - P.STAMINA_DRAIN * dt);
+  else ch.stamina = Math.min(P.STAMINA_MAX, ch.stamina + P.STAMINA_REGEN * dt);
+  if (ch.stamina <= 0) ch.exhausted = true;
+  if (ch.exhausted && ch.stamina >= P.STAMINA_RECOVER_AT) ch.exhausted = false;
+  if (ch.exhausted) run = false;
+  ch.running = run;
+  const wishSpeed = (run ? P.RUN_SPEED : P.WALK_SPEED) * wl;
+
+  ch.airT = ch.onGround ? 0 : (ch.airT || 0) + dt;
+  ch.groundT = ch.onGround ? (ch.groundT || 0) + dt : 0;
+  ch.landed = 0;
+
+  if (ch.onGround) {
+    // friction (reduced for a moment after landing -> chain jumps keep speed)
+    const sp = Math.hypot(ch.vx, ch.vz);
+    if (sp > 0) {
+      const fr = ch.groundT < P.LAND_GRACE ? P.FRICTION * 0.15 : P.FRICTION;
+      const drop = Math.max(sp, P.STOP_SPEED) * fr * dt;
+      const ns = Math.max(0, sp - drop);
+      ch.vx *= ns / sp; ch.vz *= ns / sp;
+    }
+    if (moving) accelerate(ch, wx, wz, wishSpeed, P.GROUND_ACCEL, dt);
+  } else if (moving) {
+    // air strafing: you can steer and slowly gain speed
+    accelerate(ch, wx, wz, Math.min(wishSpeed, P.AIR_WISH_CAP), P.AIR_ACCEL, dt);
+  }
+
+  // jump buffer: a press shortly before landing still jumps the moment you touch down
+  ch.jumpBuf = input.jump ? 0.15 : Math.max(0, (ch.jumpBuf || 0) - dt);
+  if (ch.jumpBuf > 0 && ch.onGround) {
+    ch.jumpBuf = 0;
+    ch.vy = P.JUMP_SPEED; ch.onGround = false; ch.jumped = true;
+    // small forward boost when jumping while running (momentum)
+    const sp = Math.hypot(ch.vx, ch.vz);
+    if (sp > 1 && run) { const k = Math.min(P.MAX_SPEED, sp + P.JUMP_BOOST) / sp; ch.vx *= k; ch.vz *= k; }
+  }
+  // speed cap
+  const hs = Math.hypot(ch.vx, ch.vz);
+  if (hs > P.MAX_SPEED) { ch.vx *= P.MAX_SPEED / hs; ch.vz *= P.MAX_SPEED / hs; }
+  ch.vy -= P.GRAVITY * dt;
+  if (ch.vy < -40) ch.vy = -40;
+
+  // Horizontal, in small sub-steps so we never tunnel through walls
+  const r = P.RADIUS;
+  const travel = Math.hypot(ch.vx, ch.vz) * dt;
+  const n = Math.max(1, Math.ceil(travel / 0.2));
+  const pos = { x: ch.x, z: ch.z };
+  for (let i = 0; i < n; i++) {
+    pos.x += (ch.vx * dt) / n; pos.z += (ch.vz * dt) / n;
+    resolveWalls(map, pos, r, ch.y);
+  }
+  // Kill the part of the velocity that went into a wall (so you slide along it)
+  if (dt > 0) {
+    const realVx = (pos.x - ch.x) / dt, realVz = (pos.z - ch.z) / dt;
+    if (Math.abs(realVx) < Math.abs(ch.vx) - 0.3) ch.vx = realVx;
+    if (Math.abs(realVz) < Math.abs(ch.vz) - 0.3) ch.vz = realVz;
+  }
+  ch.x = pos.x; ch.z = pos.z;
+
+  // Vertical
+  const prevY = ch.y;
+  const wasGround = ch.onGround;
+  ch.y += ch.vy * dt;
+  // auto step-up onto ledges only when walking or falling, never while rising in a jump
+  // (so jumping into a table bumps/pushes it instead of snapping you up on top)
+  // Step-up: only a tiny one (WALK_STEP, e.g. onto a mattress) while walking/running on the
+  // ground. In the air you only land on surfaces your feet were already above, so to get
+  // onto a table or crate you must jump.
+  const g = groundHeight(map, ch.x, ch.z, r * 0.85, prevY + (wasGround ? P.WALK_STEP : 0.02));
+  if (ch.y <= g) {
+    if (!ch.onGround && ch.vy < -4) ch.landed = -ch.vy;
+    ch.y = g; ch.vy = 0; ch.onGround = true;
+  } else if (ch.onGround && ch.vy <= 0 && ch.y - g < 0.05) {
+    ch.y = g; ch.vy = 0; // walk down small steps smoothly
+  } else {
+    ch.onGround = false;
+  }
+  // Ceiling
+  if (!map.isOutdoor(ch.x, ch.z) && ch.y + P.HEIGHT > CEIL_H) { ch.y = CEIL_H - P.HEIGHT; if (ch.vy > 0) ch.vy = 0; }
+  if (ch.y < -5) { ch.y = 0; } // safety
+  ch.speed = Math.hypot(ch.vx, ch.vz);
+}
+
+// Keep a character out of props (per-part hitboxes). `amount` 0..1 = how much of the
+// overlap to fix this frame (soft for humans so the host can push the prop).
+export function pushOutOfProps(ch, map, amount = 1, push = false) {
+  map.propSys?.collideChar(ch, amount, push);
+}
+
+// Push overlapping characters apart (soft). `movable(c)` says who may be moved.
+export function separateCharacters(list, map, movable) {
+  const r2 = P.RADIUS * 2;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (!a.alive) continue;
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j];
+      if (!b.alive) continue;
+      if (Math.abs(a.y - b.y) > P.HEIGHT * 0.9) continue;
+      let dx = b.x - a.x, dz = b.z - a.z;
+      let d = Math.hypot(dx, dz);
+      if (d >= r2) continue;
+      if (d < 1e-4) { dx = Math.random() - 0.5; dz = Math.random() - 0.5; d = Math.hypot(dx, dz); }
+      const push = (r2 - d) * 0.5;
+      const ma = movable(a), mb = movable(b);
+      const fa = ma && mb ? 1 : ma ? 2 : 0, fb = ma && mb ? 1 : mb ? 2 : 0;
+      a.x -= (dx / d) * push * fa; a.z -= (dz / d) * push * fa;
+      b.x += (dx / d) * push * fb; b.z += (dz / d) * push * fb;
+    }
+  }
+  for (const c of list) if (c.alive && movable(c)) {
+    const p = { x: c.x, z: c.z }; resolveWalls(map, p, P.RADIUS, c.y); c.x = p.x; c.z = p.z;
+  }
+}
+
+// ---------------------------------------------------------------------
+//  Raycast through the grid (3D ray, 2D grid DDA with heights).
+//  Returns distance to the first solid hit, or maxDist.
+// ---------------------------------------------------------------------
+export function raycastMap(map, ox, oy, oz, dx, dy, dz, maxDist) {
+  let cx = Math.floor(ox / CELL), cz = Math.floor(oz / CELL);
+  const stepX = dx > 0 ? 1 : -1, stepZ = dz > 0 ? 1 : -1;
+  const adx = Math.abs(dx), adz = Math.abs(dz);
+  const tDX = adx > 1e-9 ? CELL / adx : Infinity;
+  const tDZ = adz > 1e-9 ? CELL / adz : Infinity;
+  let tMX = adx > 1e-9 ? (dx > 0 ? (cx + 1) * CELL - ox : ox - cx * CELL) / adx : Infinity;
+  let tMZ = adz > 1e-9 ? (dz > 0 ? (cz + 1) * CELL - oz : oz - cz * CELL) / adz : Infinity;
+  const tFloor = dy < -1e-9 ? -oy / dy : Infinity;
+  let t = 0;
+  for (let guard = 0; guard < 512 && t < maxDist; guard++) {
+    if (!map.inBounds(cx, cz)) return oy + dy * t > WALL_H ? maxDist : t;
+    const tNext = Math.min(tMX, tMZ);
+    const tEnd = Math.min(tNext, maxDist);
+    const h = map.cellHeight(cx, cz);
+    if (h > 0) {
+      const y0 = oy + dy * t, y1 = oy + dy * tEnd;
+      if (y0 < h) return t;
+      if (y1 < h) return (h - oy) / dy;
+    }
+    if (dy > 0 && !map.isOutdoorCell(cx, cz) && oy + dy * t < CEIL_H) {
+      const y1 = oy + dy * tEnd;
+      if (y1 > CEIL_H) return Math.max(t, (CEIL_H - oy) / dy);
+    }
+    if (tFloor <= tEnd) return tFloor;
+    t = tNext;
+    if (tMX < tMZ) { tMX += tDX; cx += stepX; } else { tMZ += tDZ; cz += stepZ; }
+  }
+  return Math.min(t, maxDist);
+}
+
+// Line of sight between two points
+export function hasLOS(map, ax, ay, az, bx, by, bz) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az;
+  const d = Math.hypot(dx, dy, dz);
+  if (d < 1e-3) return true;
+  return raycastMap(map, ax, ay, az, dx / d, dy / d, dz / d, d) >= d - 0.05;
+}
+
+// Ray vs character cylinder. Returns distance or -1.
+export function rayVsCharacter(ox, oy, oz, dx, dy, dz, ch, radius = 0.36) {
+  const px = ox - ch.x, pz = oz - ch.z;
+  const a = dx * dx + dz * dz;
+  let t0 = -Infinity, t1 = Infinity;
+  if (a > 1e-9) {
+    const b = 2 * (px * dx + pz * dz);
+    const c = px * px + pz * pz - radius * radius;
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return -1;
+    const s = Math.sqrt(disc);
+    t0 = (-b - s) / (2 * a); t1 = (-b + s) / (2 * a);
+  } else if (px * px + pz * pz > radius * radius) return -1;
+  const y0 = ch.y, y1 = ch.y + P.HEIGHT;
+  if (Math.abs(dy) > 1e-9) {
+    let ta = (y0 - oy) / dy, tb = (y1 - oy) / dy;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+  } else if (oy < y0 || oy > y1) return -1;
+  if (t0 > t1 || t1 < 0) return -1;
+  return Math.max(0, t0);
+}
+
+export { WALL_H };
