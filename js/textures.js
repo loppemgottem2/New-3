@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=500';
+import * as THREE from '../vendor/three.module.min.js?v=510';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -577,6 +577,14 @@ function floorDecal(kind, seed) {
 }
 
 // Library shelves: rows of books
+// top of a bookshelf: the same dark brown wood as the shelf frame, with a faint grain
+function bookTop(S) {
+  const [c, ctx] = canvas(S);
+  ctx.fillStyle = '#3a2618'; ctx.fillRect(0, 0, S, S);
+  for (let y = 0; y < S; y += 3) { ctx.fillStyle = `rgba(${rnd() < 0.5 ? '20,12,6' : '80,52,30'},${0.15 + rnd() * 0.2})`; ctx.fillRect(0, y, S, 1 + (rnd() * 2) | 0); }
+  return c;
+}
+
 function shelfBooks(S) {
   const [c, ctx] = canvas(S);
   ctx.fillStyle = '#3a2618'; ctx.fillRect(0, 0, S, S);
@@ -833,6 +841,7 @@ export function makeTextures(renderer, quality = 'medium') {
   T.asphalt = tex(asphalt(256));
   T.ceiling = tex(ceiling(256));
   T.shelf = tex(shelf(256));
+  T.bookTop = tex(bookTop(128));
   T.counter = tex(counter(256));
   T.pillar = tex(pillar(256));
   T.floorDirty = tex(floorDirty(S));
