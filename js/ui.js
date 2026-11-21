@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=190';
-import { hexToCss, textColor } from './util.js?v=190';
+import { CONFIG } from './config.js?v=200';
+import { hexToCss, textColor } from './util.js?v=200';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -118,7 +118,7 @@ export class UI {
     if (s.blind) this._set('blind-t', String(t));
 
     // identity panel (bottom-left, team colored)
-    const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? `Prop · ${s.disguise || 'Human'}` : '';
+    const teamTxt = !me.alive ? 'Spectating' : seeker ? 'Seeker' : prop ? `Prop · ${s.disguise || 'humanoid'}` : '';
     // shift lock button
     const sl = $('slbtn');
     sl.classList.toggle('hidden', !me.alive);
