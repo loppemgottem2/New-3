@@ -19,8 +19,8 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=440';
-import { fbm } from './textures.js?v=440';
+import * as THREE from '../vendor/three.module.min.js?v=450';
+import { fbm } from './textures.js?v=450';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height

@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=440';
-import { CONFIG } from './config.js?v=440';
-import { store, makeCode, clamp } from './util.js?v=440';
-import { makeTextures } from './textures.js?v=440';
-import { GameMap } from './map.js?v=440';
-import { NavGrid } from './nav.js?v=440';
-import { Input, isTouchDevice } from './input.js?v=440';
-import { UI } from './ui.js?v=440';
-import { Audio } from './audio.js?v=440';
-import { Game } from './game.js?v=440';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=440';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=440';
+import * as THREE from '../vendor/three.module.min.js?v=450';
+import { CONFIG } from './config.js?v=450';
+import { store, makeCode, clamp } from './util.js?v=450';
+import { makeTextures } from './textures.js?v=450';
+import { GameMap } from './map.js?v=450';
+import { NavGrid } from './nav.js?v=450';
+import { Input, isTouchDevice } from './input.js?v=450';
+import { UI } from './ui.js?v=450';
+import { Audio } from './audio.js?v=450';
+import { Game } from './game.js?v=450';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=450';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=450';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -238,9 +238,9 @@ const ED = [
   { tab: 'Clothes', key: 'pants', label: 'Pants', list: L.PANTS },
   { tab: 'Clothes', key: 'pantsColor', label: 'Pants color', colors: L.PANTS_COLORS },
   { tab: 'Accessories', key: 'acc', label: 'Accessory', list: L.ACCESSORIES },
-  { tab: 'Accessories', key: 'accColor', label: 'Accessory color', colors: L.ACC_COLORS },
+  { tab: 'Accessories', key: 'accColor', label: 'Cap color', colors: L.ACC_COLORS, only: (lk) => lk.acc === 'cap' },
 ];
-const NICE = { tshirt: 'T-shirt', dressshirt: 'Dress shirt', sweater: 'Sweater', sidepart: 'Side part', none: 'None', dragon: 'Dragon head' };
+const NICE = { tshirt: 'T-shirt', dressshirt: 'Dress shirt', sweater: 'Sweater', sidepart: 'Side part', none: 'None', dragon: 'Dragon mask' };
 let edTab = 'Look';
 function buildEditor() {
   // tabs
@@ -256,7 +256,7 @@ function buildEditor() {
   const body = $('editor-fields');
   body.innerHTML = '';
   for (const e of ED) {
-    if (e.tab !== edTab) continue;
+    if (e.tab !== edTab || (e.only && !e.only(settings.look))) continue;
     if (e.list) {
       const row = document.createElement('div'); row.className = 'ed-row';
       const i = e.list.indexOf(settings.look[e.key]);
