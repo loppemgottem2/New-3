@@ -302,3 +302,21 @@ body.blinded #joy-base, body.blinded #touch .tbtn:not(#tb-score), body.blinded .
 #tapplay .tp-ver { position: absolute; bottom: calc(10px + var(--sa-b)); right: calc(14px + var(--sa-r)); font-size: 11px; color: rgba(255,255,255,0.45); }
 /* spectating (dead): no joystick, the whole screen turns the camera */
 body.spectating #joy-base { display: none !important; }
+
+/* main menu: everything stays inside the gray box (compact on short / phone screens, scrolls inside if needed) */
+.menu-panel { overflow-y: auto; gap: 7px; }
+.menu-panel > * { flex-shrink: 0; }
+.menu-panel .logo-title { font-size: clamp(26px, 7vh, 52px); letter-spacing: 4px; }
+@media (max-height: 520px) {
+  .menu-panel { padding: 10px 14px; gap: 5px; width: min(360px, 100%); }
+  .menu-panel .logo { margin-bottom: 0; }
+  .menu-panel .logo-title { font-size: clamp(22px, 7.5vh, 34px); letter-spacing: 3px; }
+  .menu-panel .btn { min-height: 34px; padding: 6px 12px; font-size: 14px; }
+  .menu-panel .btn small { font-size: 11px; }
+  .menu-panel .btn.small { min-height: 30px; padding: 5px 10px; font-size: 13px; }
+  .menu-panel .player-card { padding: 4px 10px; }
+  .menu-panel .player-card .btn { min-height: 28px; padding: 4px 10px; }
+  .menu-panel .player-card .muted { font-size: 11px; }
+  .menu-panel #card-name { font-size: 15px; }
+  .menu-panel .version { font-size: 10px; }
+}
