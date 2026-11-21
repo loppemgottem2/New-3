@@ -287,3 +287,11 @@ body.touch .inv-x { width: 28px; height: 28px; top: 4px; right: 4px; font-size: 
 body.touch #slbtn { right: calc(122px + var(--sa-r)); bottom: auto; top: calc(64px + var(--sa-t)); padding: 8px; width: 44px; height: 44px; justify-content: center; }
 body.touch #slbtn span { display: none; }
 body.lefty #joy-base { left: auto; right: calc(140px + var(--sa-r)); margin: 0 -62px -62px 0; }
+
+/* "Tap to play" start screen */
+#tapplay { position: fixed; inset: 0; z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: radial-gradient(ellipse at center, rgba(20,20,24,0.88), rgba(0,0,0,0.97)); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+#tapplay.hidden { display: none; }
+#tapplay .tp-title { font-family: Georgia, "Times New Roman", serif; font-weight: 900; font-size: clamp(38px, 8vw, 72px); letter-spacing: 5px; color: var(--accent-2); text-shadow: 0 3px 0 #5a0d0d, 0 0 24px rgba(229, 57, 53, 0.35); text-align: center; line-height: 1.05; padding: 0 16px; }
+#tapplay .tp-tap { font-size: 20px; font-weight: bold; letter-spacing: 3px; text-transform: uppercase; color: #eee; animation: tp-pulse 1.4s ease-in-out infinite; }
+@keyframes tp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { #tapplay .tp-tap { animation: none; } }

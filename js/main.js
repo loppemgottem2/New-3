@@ -494,6 +494,18 @@ function netErrorText(e) {
   return e.message || String(e.type || e);
 }
 
+// "Tap to play": the first tap goes fullscreen (and sideways on phones) and unlocks sound
+$('tapplay').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  $('tapplay').classList.add('hidden');
+  Audio.unlock();
+  const el = document.documentElement;
+  const fs = el.requestFullscreen || el.webkitRequestFullscreen;
+  try {
+    const p = fs?.call(el, { navigationUI: 'hide' });
+    p?.then?.(() => { if (touch) screen.orientation?.lock?.('landscape').catch(() => {}); }).catch(() => {});
+  } catch { /* fullscreen not allowed here */ }
+});
 $('inv-x').onclick = () => ui.toggleInventory(null, false);
 $('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleShiftLock(); });
 

@@ -489,7 +489,7 @@ export class Game {
   wrongProp(c) {
     if (!c.alive || c.team !== 'seeker') return;
     c.hp -= TM.WRONG_PROP_DAMAGE;
-    this.emit({ e: 'msg', text: `That was real furniture  −${TM.WRONG_PROP_DAMAGE} HP`, color: '#f88' }, [c.id]);
+    this.emit({ e: 'msg', text: `−${TM.WRONG_PROP_DAMAGE} HP`, color: '#f66' }, [c.id]);
     if (c.hp <= 0) this.kill(c, null, 'penalty', { x: 0, y: 0.5, z: 0 });
   }
 
@@ -744,7 +744,7 @@ export class Game {
         const me = this.me;
         if (me) me.team = ev.team;
         const R = {
-          seeker: ['You are a Seeker', `Wait while the props hide, then find them. Real furniture you hit costs you ${TM.WRONG_PROP_DAMAGE} HP.`, '#f55'],
+          seeker: ['You are a Seeker', '', '#f55'],
           prop: ['You are a Prop', `${this.ui.isTouch ? 'Tap' : 'Click'} on any furniture to turn into it. Hide before the seekers are released!`, '#4af'],
         }[ev.team];
         if (R) ui.bigMessage(R[0], R[1], R[2], 5);
@@ -992,7 +992,6 @@ export class Game {
     this.ui.input?.setLockMode?.(on);
     const me = this.me;
     if (on && me) { this.camYaw = me.yaw; }
-    this.ui.toast(on ? 'Shift lock ON — you face where you look, aim with the crosshair' : 'Shift lock OFF — free camera, tap / click where you want to aim', '#ccc', 2.5);
   }
 
   // which real prop is under the crosshair (or under a tap on the screen)?
