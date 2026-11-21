@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=330';
-import { CONFIG } from './config.js?v=330';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=330';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=330';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=330';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=330';
-import { Ragdoll } from './ragdoll.js?v=330';
-import { Audio } from './audio.js?v=330';
-import { initBrain, updateBots } from './bots.js?v=330';
+import * as THREE from '../vendor/three.module.min.js?v=340';
+import { CONFIG } from './config.js?v=340';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=340';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=340';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=340';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=340';
+import { Ragdoll } from './ragdoll.js?v=340';
+import { Audio } from './audio.js?v=340';
+import { initBrain, updateBots } from './bots.js?v=340';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
