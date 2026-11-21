@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=140';
-import { CONFIG } from './config.js?v=140';
-import { store, makeCode, clamp } from './util.js?v=140';
-import { makeTextures } from './textures.js?v=140';
-import { GameMap } from './map.js?v=140';
-import { NavGrid } from './nav.js?v=140';
-import { Input, isTouchDevice } from './input.js?v=140';
-import { UI } from './ui.js?v=140';
-import { Audio } from './audio.js?v=140';
-import { Game } from './game.js?v=140';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=140';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=140';
+import * as THREE from '../vendor/three.module.min.js?v=150';
+import { CONFIG } from './config.js?v=150';
+import { store, makeCode, clamp } from './util.js?v=150';
+import { makeTextures } from './textures.js?v=150';
+import { GameMap } from './map.js?v=150';
+import { NavGrid } from './nav.js?v=150';
+import { Input, isTouchDevice } from './input.js?v=150';
+import { UI } from './ui.js?v=150';
+import { Audio } from './audio.js?v=150';
+import { Game } from './game.js?v=150';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=150';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=150';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -27,7 +27,7 @@ const DEFAULTS = {
   name: 'Player' + Math.floor(Math.random() * 900 + 100),
   look: { ...DEFAULT_LOOK },
   touchLook: 1, mouseSens: CONFIG.CONTROLS.MOUSE_SENS * 1000,
-  invert: false, autoSprint: true, lefty: false, btnScale: 1,
+  autoSprint: true, lefty: false, btnScale: 1,
   fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
@@ -41,13 +41,12 @@ if (!settings.lookV3) { settings.look.skin = WHITE_SKIN; settings.lookV3 = true;
 // v1.3: start in third person, a bit faster touch look (only if you never changed them)
 if (!settings.camV13) { if (!settings.camDist) settings.camDist = 3; settings.camV13 = true; store.set('findthethings-settings', settings); }
 // v1.4: look direction back to normal (turn off any "invert" that was switched on)
-if (!settings.lookV14) { settings.invert = false; delete settings.invertX; settings.lookV14 = true; store.set('findthethings-settings', settings); }
+if (!settings.lookV14 || 'invert' in settings) { delete settings.invert; delete settings.invertX; settings.lookV14 = true; store.set('findthethings-settings', settings); }
 const saveSettings = () => store.set('findthethings-settings', settings);
 const pct = (v) => `${Math.round(v * 100)}%`;
 const SCHEMA = [
   { tab: 'Controls', key: 'touchLook', label: 'Touch look sensitivity', note: '1.0× = the view follows your finger exactly', type: 'range', min: 0.25, max: 3, step: 0.05, fmt: (v) => `${v.toFixed(2)}×` },
   { tab: 'Controls', key: 'mouseSens', label: 'Mouse sensitivity', type: 'range', min: 0.5, max: 8, step: 0.1, fmt: (v) => v.toFixed(1) },
-  { tab: 'Controls', key: 'invert', label: 'Invert look up/down', type: 'check' },
   { tab: 'Controls', key: 'autoSprint', label: 'Auto-sprint', note: 'sprint when the stick is pushed to the edge', type: 'check' },
   { tab: 'Controls', key: 'lefty', label: 'Left-handed layout', note: 'joystick on the right, buttons on the left', type: 'check' },
   { tab: 'Controls', key: 'btnScale', label: 'Touch button size', type: 'range', min: 0.7, max: 1.4, step: 0.05, fmt: pct },
@@ -144,7 +143,6 @@ function applyAll() {
   input.touchSens = settings.touchLook ?? 1;
   input.fovDeg = settings.fov;
   input.mouseSens = settings.mouseSens / 1000;
-  input.invertY = settings.invert;
   input.autoSprint = settings.autoSprint;
   input.lefty = settings.lefty;
   document.body.classList.toggle('lefty', !!settings.lefty);
