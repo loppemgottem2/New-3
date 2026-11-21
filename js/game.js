@@ -1027,18 +1027,25 @@ export class Game {
     if (Math.abs(this.zoomCur - Math.max(this.camDist, this.minZoom())) < 0.005) this.zoomCur = Math.max(this.camDist, this.minZoom());
     const locked = this.lockedView();
 
-    if (inp.shiftLock) this.toggleShiftLock();
+    if (inp.shiftLock && !(me.alive && me.team === 'seeker' && this.phase === 'pre')) this.toggleShiftLock();
     this.camYaw = wrapAngle(this.camYaw - inp.lookDX);
     this.camPitch = clamp(this.camPitch - inp.lookDY, -1.5, 1.5);
     if (locked || !me.alive) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
     // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
     const point = locked ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
-    if (inp.inv) this.ui.toggleInventory?.(this);
     if (!me.alive) {
+      if (inp.inv) this.ui.toggleInventory?.(this);
       if (inp.next || inp.attack) this.cycleSpectate();
       return;
     }
+    // blindfolded seeker: nothing works until the round starts (only settings, scoreboard and X)
+    if (me.team === 'seeker' && this.phase === 'pre') {
+      this.ui.toggleInventory?.(this, false);
+      moveCharacter(me, { mx: 0, mz: 0, run: false, jump: false }, dt, this.map);
+      return;
+    }
+    if (inp.inv) this.ui.toggleInventory?.(this);
 
     if (me.team === 'prop') {
       // tap / click furniture to turn into it (tap another piece to change)

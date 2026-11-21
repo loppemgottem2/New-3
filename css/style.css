@@ -294,3 +294,8 @@ body.lefty #joy-base { left: auto; right: calc(140px + var(--sa-r)); margin: 0 -
 #tapplay .tp-tap { font-size: 20px; font-weight: bold; letter-spacing: 3px; text-transform: uppercase; color: #eee; animation: tp-pulse 1.4s ease-in-out infinite; }
 @keyframes tp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { #tapplay .tp-tap { animation: none; } }
+
+/* blindfolded seeker: hide every control until the round starts */
+body.blinded #hud-id, body.blinded #hud-count, body.blinded #hud-stamina, body.blinded #hud-look, body.blinded #crosshair,
+body.blinded #hotbar, body.blinded #inventory, body.blinded #slbtn,
+body.blinded #joy-base, body.blinded #touch .tbtn:not(#tb-score), body.blinded .touch-hint { display: none !important; }
