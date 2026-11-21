@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=360';
-import { CONFIG } from './config.js?v=360';
-import { store, makeCode, clamp } from './util.js?v=360';
-import { makeTextures } from './textures.js?v=360';
-import { GameMap } from './map.js?v=360';
-import { NavGrid } from './nav.js?v=360';
-import { Input, isTouchDevice } from './input.js?v=360';
-import { UI } from './ui.js?v=360';
-import { Audio } from './audio.js?v=360';
-import { Game } from './game.js?v=360';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=360';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=360';
+import * as THREE from '../vendor/three.module.min.js?v=370';
+import { CONFIG } from './config.js?v=370';
+import { store, makeCode, clamp } from './util.js?v=370';
+import { makeTextures } from './textures.js?v=370';
+import { GameMap } from './map.js?v=370';
+import { NavGrid } from './nav.js?v=370';
+import { Input, isTouchDevice } from './input.js?v=370';
+import { UI } from './ui.js?v=370';
+import { Audio } from './audio.js?v=370';
+import { Game } from './game.js?v=370';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=370';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=370';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -31,7 +31,7 @@ const DEFAULTS = {
   fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
-  fps: false, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
+  fps: false, blood: false, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
 };
 // (falls back to Killer Mystery's saved settings, so your character comes along)
 const settings = { ...DEFAULTS, ...store.get('findthethings-settings', store.get('killermystery-settings', {})) };
@@ -58,6 +58,7 @@ const SCHEMA = [
   { tab: 'Graphics', key: 'renderScale', label: 'Resolution', type: 'range', min: 0.4, max: 2, step: 0.05, fmt: pct },
   { tab: 'Graphics', key: 'dynLights', label: 'Real-time lights', note: 'ceiling lights shine on people & furniture', type: 'select', options: [[0, 'Off (baked only)'], [4, '4'], [6, '6'], [8, '8'], [12, '12']] },
   { tab: 'Graphics', key: 'viewDist', label: 'View distance', type: 'range', min: 50, max: 250, step: 10, fmt: (v) => `${v} m` },
+  { tab: 'Graphics', key: 'blood', label: 'Blood', note: 'blood splatter and drops when a prop is hit', type: 'check' },
   { tab: 'Graphics', key: 'fog', label: 'Fog', type: 'check' },
   { tab: 'Graphics', key: 'glow', label: 'Light glow', type: 'check' },
   { tab: 'Graphics', key: 'antialias', label: 'Smooth edges (anti-aliasing)', note: 'applies after reloading the page', type: 'check' },
