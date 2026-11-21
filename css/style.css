@@ -300,3 +300,5 @@ body.blinded #hud-id, body.blinded #hud-count, body.blinded #hud-stamina, body.b
 body.blinded #hotbar, body.blinded #inventory, body.blinded #slbtn,
 body.blinded #joy-base, body.blinded #touch .tbtn:not(#tb-score), body.blinded .touch-hint { display: none !important; }
 #tapplay .tp-ver { position: absolute; bottom: calc(10px + var(--sa-b)); right: calc(14px + var(--sa-r)); font-size: 11px; color: rgba(255,255,255,0.45); }
+/* spectating (dead): no joystick, the whole screen turns the camera */
+body.spectating #joy-base { display: none !important; }

@@ -217,13 +217,19 @@ export class Game {
     this.corpses = [];
     this.props.reset();
 
-    // teams: about a third seekers (at least one), the rest props. Fully random: every player,
-    // real or bot, has the same chance to take any seeker or prop spot each round.
-    const order = shuffle(all.slice());
+    // teams: about a third seekers (at least one), the rest props.
+    // The round has seats: some seeker seats and some prop seats. Each real player takes one seat
+    // picked at random (every seat equally likely, so you replace a random bot seeker or bot prop);
+    // the bots fill the seats that are left.
     const nSeek = clamp(Math.round(all.length * TM.SEEKER_SHARE), 1, all.length - 1);
+    const seats = all.map((_, i) => (i < nSeek ? 'seeker' : 'prop'));
+    const takeSeat = () => seats.splice(Math.floor(Math.random() * seats.length), 1)[0];
+    const teamOf = new Map();
+    for (const c of all) if (!c.isBot) teamOf.set(c, takeSeat());
+    for (const c of all) if (c.isBot) teamOf.set(c, takeSeat());
     const spawns = shuffle(this.map.spawns.slice());
-    order.forEach((c, i) => {
-      const seeker = i < nSeek;
+    all.forEach((c, i) => {
+      const seeker = teamOf.get(c) === 'seeker';
       c.team = seeker ? 'seeker' : 'prop';
       c.color = CONFIG.TEAM_COLORS[c.team];
       c.hasKnife = seeker; c.hasGun = seeker;
@@ -1031,6 +1037,7 @@ export class Game {
     // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
     const point = locked ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
+    if (this.ui.input) this.ui.input.noJoy = !me.alive;   // spectating: the whole screen turns the camera
     if (!me.alive) {
       if (inp.inv) this.ui.toggleInventory?.(this);
       if (inp.next || inp.attack) this.cycleSpectate();
@@ -1242,6 +1249,8 @@ export class Game {
         const spx = sideHit < side + 0.2 ? ex + rx * Math.max(0, sideHit - 0.2) : px, spz = sideHit < side + 0.2 ? ez + rz * Math.max(0, sideHit - 0.2) : pz;
         const hit = raycastMap(this.map, spx, py, spz, -d.x, -d.y, -d.z, dist + 0.3);
         dist = Math.max(0.1, Math.min(dist, hit - 0.25));
+        const ph = this.props.raycast(spx, py, spz, -d.x, -d.y, -d.z, dist + 0.2);
+        if (ph && ph.t > 0.3) dist = Math.max(0.3, Math.min(dist, ph.t - 0.2));
         // pull in at once when a wall gets in the way, but glide back out (no jumpy camera)
         const prev = this._camActualDist ?? dist;
         if (dist > prev) dist = prev + (dist - prev) * Math.min(1, dt * 8);
@@ -1271,10 +1280,14 @@ export class Game {
       if (target) {
         const yaw = this.camYaw, pitch = clamp(this.camPitch, -1.2, 0.6);
         const d = dirFromAngles(yaw, pitch);
-        const hx = target.x, hy = target.y + 1.6, hz = target.z;
-        let dist = Math.max(2, this.camDist || 3.2);
+        // look at the spectated player's head, or the top of the furniture they're disguised as
+        const th = target.c && target.c.disguise ? propHeight(target.c.disguise) + 0.3 : 1.6;
+        const hx = target.x, hy = target.y + th, hz = target.z;
+        let dist = Math.max(1.2, this.camDist || 3.2);
         const hit = raycastMap(this.map, hx, hy, hz, -d.x, -d.y, -d.z, dist + 0.3);
         dist = Math.max(0.4, Math.min(dist, hit - 0.3));
+        const ph = this.props.raycast(hx, hy, hz, -d.x, -d.y, -d.z, dist + 0.2);
+        if (ph) dist = Math.max(0.4, Math.min(dist, ph.t - 0.2));
         cam.position.set(hx - d.x * dist, hy - d.y * dist, hz - d.z * dist);
         cam.rotation.set(pitch, yaw, 0);
       } else {

@@ -147,7 +147,7 @@ export class Input {
         if (name === 'attack') this.lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY, btn: true });
         continue;
       }
-      const onJoySide = this.lefty ? t.clientX > window.innerWidth * 0.58 : t.clientX < window.innerWidth * 0.42;
+      const onJoySide = !this.noJoy && (this.lefty ? t.clientX > window.innerWidth * 0.58 : t.clientX < window.innerWidth * 0.42);
       if (onJoySide && this.joy.id === null) {
         // the joystick stays where it is: the finger steers relative to its fixed center
         const j = this.joy;
