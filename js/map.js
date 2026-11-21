@@ -19,8 +19,8 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=250';
-import { fbm } from './textures.js?v=250';
+import * as THREE from '../vendor/three.module.min.js?v=260';
+import { fbm } from './textures.js?v=260';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -216,6 +216,18 @@ export class GameMap {
   heightAt(x, z) { return this.cellHeight(Math.floor(x / CELL), Math.floor(z / CELL)); }
   isOutdoorCell(cx, cz) { return this.inBounds(cx, cz) && this.outdoor[cz * this.w + cx] === 1; }
   isOutdoor(x, z) { return this.isOutdoorCell(Math.floor(x / CELL), Math.floor(z / CELL)); }
+  // cells under the building's roof slab (everything that isn't open sky)
+  roofedCell(cx, cz) { return this.inBounds(cx, cz) && this.outdoor[cz * this.w + cx] === 0; }
+  // is (x,z) under a ceiling light fixture? (fixtures are 1.44 x 0.76 m boxes, 7 cm thick, on every 3rd cell)
+  underLight(x, z, pad = 0) {
+    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const lx = cx + dx, lz = cz + dz;
+      if (lx % 3 !== 1 || lz % 3 !== 1 || !this.roofedCell(lx, lz) || this.cellHeight(lx, lz) >= WALL_H) continue;
+      if (Math.abs(x - (lx + 0.5) * CELL) < 0.72 + pad && Math.abs(z - (lz + 0.5) * CELL) < 0.38 + pad) return true;
+    }
+    return false;
+  }
   floorTypeAt(x, z) {
     const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
     return this.inBounds(cx, cz) ? FLOOR_LIST[this.floor[cz * this.w + cx]] : 'tile';
