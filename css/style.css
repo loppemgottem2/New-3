@@ -153,9 +153,9 @@ input[type=range] { padding: 0; accent-color: var(--accent-2); }
 .tbtn.big { width: 92px; height: 92px; font-size: 16px; background: rgba(160,20,20,0.5); border-color: rgba(255,120,120,0.7); }
 #tb-attack { right: calc(26px + var(--sa-r)); bottom: calc(100px + var(--sa-b)); }
 #tb-next { right: calc(38px + var(--sa-r)); bottom: calc(112px + var(--sa-b)); }
-#tb-jump { right: calc(122px + var(--sa-r)); bottom: calc(26px + var(--sa-b)); width: 104px; height: 104px; font-size: 17px; }
+#tb-jump { right: calc(122px + var(--sa-r)); bottom: calc(20px + var(--sa-b)); width: 116px; height: 116px; font-size: 18px; }
 #tb-throw { right: calc(132px + var(--sa-r)); bottom: calc(150px + var(--sa-b)); }
-#tb-run { left: calc(32px + var(--sa-l)); bottom: calc(164px + var(--sa-b)); width: 76px; height: 76px; font-size: 14px; }
+#tb-run { left: calc(42px + var(--sa-l)); bottom: calc(156px + var(--sa-b)); width: 88px; height: 88px; font-size: 15px; }
 #tb-score { right: calc(66px + var(--sa-r)); top: calc(10px + var(--sa-t)); width: 44px; height: 44px; border-radius: 4px; font-size: 20px; }
 .touch-hint { position: absolute; bottom: calc(6px + var(--sa-b)); left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.35); pointer-events: none; }
 
@@ -219,7 +219,7 @@ body.lefty #tb-attack { right: auto; left: calc(26px + var(--sa-l)); }
 body.lefty #tb-next { right: auto; left: calc(38px + var(--sa-l)); }
 body.lefty #tb-jump { right: auto; left: calc(122px + var(--sa-l)); }
 body.lefty #tb-throw { right: auto; left: calc(132px + var(--sa-l)); }
-body.lefty #tb-run { left: auto; right: calc(32px + var(--sa-r)); }
+body.lefty #tb-run { left: auto; right: calc(42px + var(--sa-r)); }
 
 /* HUD scale + crosshair styles */
 #hud-id, #hud-timer, #hud-look, #hud-spec, #toasts { zoom: var(--hud-scale); }
@@ -374,3 +374,4 @@ body.touch #anchorbtn span { display: none; }
 body.blinded #anchorbtn { display: none !important; }
 .help-panel { position: relative; }
 .help-panel h2 { margin-right: 44px; }
+#verbadge.vb-off { display: none; }

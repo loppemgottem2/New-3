@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=230';
-import { hexToCss, textColor } from './util.js?v=230';
+import { CONFIG } from './config.js?v=240';
+import { hexToCss, textColor } from './util.js?v=240';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -19,6 +19,7 @@ export class UI {
     this.current = name;
     for (const s of this.screens) $(s).classList.toggle('hidden', s !== name);
     const inGame = name === 'game';
+    document.getElementById('verbadge')?.classList.toggle('vb-off', name !== 'menu');   // version only on the main menu
     $('hud').classList.toggle('hidden', !inGame);
     $('touch').classList.toggle('hidden', !(inGame && this.isTouch));
     $('menu-bg-shade').classList.toggle('hidden', inGame || name === 'editor');
