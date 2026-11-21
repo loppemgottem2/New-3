@@ -11,9 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=620';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=620';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=620';
+import { CONFIG } from './config.js?v=630';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=630';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=630';
+import { propHeight } from './props.js?v=630';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -60,10 +61,11 @@ function canSee(game, c, o, maxDist = B.VIEW_DISTANCE) {
     const a = Math.abs(angleDiff(c.yaw, yawTo(dx, dz)));
     if (a > (B.FOV_DEG * DEG) / 2) return false;
   }
-  if (!hasLOS(game.map, c.x, c.y + P.EYE, c.z, o.x, (o.y ?? 0) + 0.5, o.z)) return false;
+  const mid = o.disguise ? Math.min(0.5, propHeight(o.disguise) * 0.5) : 0.5;
+  if (!hasLOS(game.map, c.x, c.y + P.EYE, c.z, o.x, (o.y ?? 0) + mid, o.z)) return false;
   // people can also hide behind furniture (not for checking furniture itself)
   if (o.team) {
-    const ex = c.x, ey = c.y + P.EYE, ez = c.z, lx = o.x - ex, ly = (o.y ?? 0) + (o.disguise ? 0.4 : 1.1) - ey, lz = o.z - ez, ll = Math.hypot(lx, ly, lz) || 1;
+    const ex = c.x, ey = c.y + P.EYE, ez = c.z, lx = o.x - ex, ly = (o.y ?? 0) + (o.disguise ? mid : 1.1) - ey, lz = o.z - ez, ll = Math.hypot(lx, ly, lz) || 1;
     if (game.props.raycast(ex, ey, ez, lx / ll, ly / ll, lz / ll, ll - 0.4)) return false;
   }
   return true;
@@ -115,7 +117,7 @@ export function updateBots(game, dt) {
 // ---------------------------------------------------------------------
 function chooseHideProp(game, c, b) {
   const range = B.HIDE_RANGE * (0.35 + 0.65 * b.skill);
-  const near = game.props.list.filter((p) => Math.hypot(p.pos.x - c.x, p.pos.z - c.z) < range && p.top < 2.2);
+  const near = game.props.list.filter((p) => !p.removed && Math.hypot(p.pos.x - c.x, p.pos.z - c.z) < range && p.top < 2.2);
   if (!near.length) return null;
   // skilled props like spots with several pieces of furniture (easier to blend in)
   let best = null, bs = -Infinity;
@@ -145,7 +147,7 @@ function disguiseNear(game, c, b) {
   let p = b.hideProp;
   if (!p || Math.random() > 0.4 + 0.6 * b.skill || Math.hypot(p.pos.x - c.x, p.pos.z - c.z) > TM.DISGUISE_RANGE) {
     let bd = Infinity;
-    for (const o of game.props.list) { const d = Math.hypot(o.pos.x - c.x, o.pos.z - c.z); if (d < bd) { bd = d; p = o; } }
+    for (const o of game.props.list) { if (o.removed) continue; const d = Math.hypot(o.pos.x - c.x, o.pos.z - c.z); if (d < bd) { bd = d; p = o; } }
     if (bd > TM.DISGUISE_RANGE) p = null;
   }
   if (p) game.hostAction(c, 'disguise', p.id);
@@ -247,6 +249,7 @@ function thinkSeeker(game, c, b) {
   if (!careful && Math.random() < B.CHECK_CHANCE) {
     const cands = [];
     for (const p of game.props.list) {
+      if (p.removed) continue;
       const d = Math.hypot(p.pos.x - c.x, p.pos.z - c.z);
       if (d < B.CHECK_RANGE && canSee(game, c, { x: p.pos.x, y: p.y, z: p.pos.z })) cands.push({ prop: p, w: 1 });
     }
@@ -286,7 +289,7 @@ function wanderThink(game, c, b) {
       // seekers search where props like to hide: next to furniture. Then stop and look around a while.
       let p = null;
       if (Math.random() < 0.45 + 0.45 * b.skill) {
-        const near = game.props.list.filter((q) => { const d = Math.hypot(q.pos.x - c.x, q.pos.z - c.z); return d > 6 && d < 45; });
+        const near = game.props.list.filter((q) => { if (q.removed) return false; const d = Math.hypot(q.pos.x - c.x, q.pos.z - c.z); return d > 6 && d < 45; });
         if (near.length) { const q = near[(Math.random() * near.length) | 0]; p = spotNear(game, q); }
       }
       if (!p) p = game.nav.randomPointNear(c.x, c.z, 8, 40);
@@ -310,7 +313,8 @@ function act(game, c, b, dt) {
   if (b.state === 'engage' && ((target && target.alive) || tp)) {
     // ----- seeker attacking a prop (player or real furniture) -----
     let realX = tp ? tp.pos.x : target.x, realZ = tp ? tp.pos.z : target.z;
-    let realY = tp ? tp.pos.y : target.y + (target.disguise ? 0.35 : 1.15);
+    // aim at the middle of what they look like (a keyboard is only 3 cm tall, a chair is 1 m)
+    let realY = tp ? tp.pos.y : target.y + (target.disguise ? propHeight(target.disguise) * 0.5 : 1.15);
     // ----- can it actually see the person right now? (walls and furniture both hide you) -----
     let sees = true;
     if (target && !tp) {
@@ -486,6 +490,7 @@ function act(game, c, b, dt) {
     let ax = 0, az = 0;
     // furniture: steer around tall props, hop over / onto low ones
     for (const p of game.props.list) {
+      if (p.removed) continue;
       const dx = c.x - p.x, dz = c.z - p.z;
       const d = Math.hypot(dx, dz), R = p.r + P.RADIUS + 0.5;
       if (d > R || d < 1e-3) continue;

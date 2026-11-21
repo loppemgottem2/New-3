@@ -28,7 +28,7 @@ export const CONFIG = {
     SEEKER_HP: 100,
     PROP_HUMAN_HP: 100,     // a prop player who hasn't turned into furniture yet
     // health of a prop player disguised as each piece of furniture (bigger = tougher)
-    PROP_HP: { bottle: 10, takeout: 15, babydoll: 20, box: 60, chair: 80, lamp: 80, trashcan: 100, barrel: 150, mattress: 180, crate: 220, table: 300, longcrate: 800, longcounter: 400, shortcounter: 250, desk: 220, swivelchair: 90, computer: 40, keyboard: 15, pencup: 10, couch: 260, plant: 70, whiteboard: 150 },
+    PROP_HP: { bottle: 10, takeout: 15, babydoll: 20, box: 60, chair: 80, lamp: 80, trashcan: 100, barrel: 150, mattress: 180, crate: 220, table: 300, longcrate: 800, longcounter: 400, shortcounter: 250, desk: 220, swivelchair: 90, computer: 40, keyboard: 10, pencup: 10, couch: 260, plant: 70, whiteboard: 150 },
     WRONG_PROP_DAMAGE: 10,  // seekers lose this much health for shooting / stabbing real furniture
     DISGUISE_RANGE: 6,      // props can turn into furniture this close (meters)
     DISGUISE_COOLDOWN: 0.8,
