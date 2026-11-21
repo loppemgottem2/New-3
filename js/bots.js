@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=190';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=190';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=190';
+import { CONFIG } from './config.js?v=200';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=200';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=200';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -278,13 +278,36 @@ function act(game, c, b, dt) {
 
   if (b.state === 'engage' && ((target && target.alive) || tp)) {
     // ----- seeker attacking a prop (player or real furniture) -----
-    const tx = tp ? tp.pos.x : target.x, tz = tp ? tp.pos.z : target.z;
-    const ty = tp ? tp.pos.y : target.y + (target.disguise ? 0.35 : 1.15);
-    const dx = tx - c.x, dz = tz - c.z;
+    const realX = tp ? tp.pos.x : target.x, realZ = tp ? tp.pos.z : target.z;
+    const realY = tp ? tp.pos.y : target.y + (target.disguise ? 0.35 : 1.15);
+    // Tracking: the bot aims at where it THINKS the target is. That point trails behind the real one,
+    // catching up faster for skilled bots. Fast, jumpy, zig-zag movement leaves it behind -> misses.
+    const key = tp ? 'p' + tp.id : 'c' + target.id;
+    if (!b.trk || b.trk.key !== key) {
+      const off = (1 - b.skill) * 0.8;
+      b.trk = { key, x: realX + rand(-off, off), y: realY + rand(-off, off) * 0.5, z: realZ + rand(-off, off), vx: 0, vy: 0, vz: 0, jerk: 0 };
+    }
+    const tk = b.trk, follow = 1 - Math.exp(-(0.8 + 3.0 * b.skill) * dt);
+    tk.x += (realX - tk.x) * follow; tk.y += (realY - tk.y) * follow; tk.z += (realZ - tk.z) * follow;
+    if (target && !tp) {
+      // how unpredictable the target is: sudden changes of speed / direction / jumping
+      const ch = Math.hypot((target.vx || 0) - tk.vx, (target.vy || 0) - tk.vy, (target.vz || 0) - tk.vz);
+      tk.jerk = tk.jerk * Math.exp(-dt * 1.5) + ch;
+      tk.vx = target.vx || 0; tk.vy = target.vy || 0; tk.vz = target.vz || 0;
+    }
+    const tx = tk.x, ty = tk.y, tz = tk.z;
+    const dx = realX - c.x, dz = realZ - c.z;
     const d = Math.hypot(dx, dz) || 0.01;
-    const visible = hasLOS(game.map, c.x, c.y + P.EYE, c.z, tx, ty, tz);
-    faceYaw = yawTo(dx, dz);
-    facePitch = Math.atan2(ty - (c.y + P.EYE), d);
+    const visible = hasLOS(game.map, c.x, c.y + P.EYE, c.z, realX, realY, realZ);
+    // furniture in the way: don't waste a shot (and health) on it, move to get a clear line instead
+    let blocked = false;
+    if (target && !tp && visible) {
+      const ex = c.x, ey = c.y + P.EYE, ez = c.z, lx = realX - ex, ly = realY - ey, lz = realZ - ez, ll = Math.hypot(lx, ly, lz) || 1;
+      const ph = game.props.raycast(ex, ey, ez, lx / ll, ly / ll, lz / ll, ll - 0.4);
+      blocked = !!ph;
+    }
+    faceYaw = yawTo(tx - c.x, tz - c.z);
+    facePitch = Math.atan2(ty - (c.y + P.EYE), Math.hypot(tx - c.x, tz - c.z) || 0.01);
     const turn = B.TURN_SPEED * (0.55 + 0.9 * b.skill);
     c.yaw = turnToward(c.yaw, faceYaw, turn * dt);
     c.pitch += clamp(facePitch - c.pitch, -turn * dt, turn * dt);
@@ -293,27 +316,30 @@ function act(game, c, b, dt) {
     // knife up close, revolver further away
     const useKnife = d < W.KNIFE_RANGE * 0.9 && c.hasKnife;
     hold(c, useKnife ? 'knife' : 'revolver');
-    if (visible && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
+    if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
       if (useKnife && weaponOf(c) === 1 && err < 30 * DEG) {
-        game.hostAction(c, 'attack'); b.shots++;
+        // a moving, dodging target is hard to stab: sometimes the swing just misses
+        const miss = target && !tp ? Math.min(0.75, (target.speed || 0) * (0.09 - 0.04 * b.skill) + b.trk.jerk * 0.03 * (1.2 - 0.6 * b.skill)) : 0;
+        if (Math.random() < miss) { c.attackCd = W.KNIFE_COOLDOWN; game.emit({ e: 'swing', id: c.id }); }
+        else game.hostAction(c, 'attack');
+        b.shots++;
       } else if (!useKnife && weaponOf(c) === 2 && err < (8 - 5 * b.skill) * DEG && d < 45) {
-        // aim gets worse: at longer range, while the bot moves, the faster the target moves,
-        // the smaller the prop is, and now and then just by bad luck (less often for skilled bots)
+        // shot spread grows at longer range, while the bot moves, the faster the target moves,
+        // the more erratic it is, and now and then just by bad luck (less often for skilled bots)
         let spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 25) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);
         if (target && !tp) {
-          spread *= 1 + (target.speed || 0) * (0.3 - 0.12 * b.skill);                      // moving target
-          const size = target.disguise ? target.shapeR || 0.3 : 0.4;
-          spread *= clamp(0.4 / size, 1, 3.5);                                             // small prop = hard to hit
+          spread *= 1 + (target.speed || 0) * (0.45 - 0.2 * b.skill);                      // moving target
+          spread *= 1 + Math.min(6, b.trk.jerk * 0.35) * (1.2 - 0.85 * b.skill);              // jumping / zig-zagging
         }
-        if (Math.random() < 0.18 - 0.12 * b.skill) spread *= rand(2, 3.5);                // a bad shot
+        if (Math.random() < 0.2 - 0.12 * b.skill) spread *= rand(2, 3.5);                 // a bad shot
         game.gunAttack(c, spread); b.shots++;
       }
       if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; c.slot = -1; }   // tested it, move on
     }
     // positioning: get closer if far / no sight
-    if (!visible || d > 14) {
+    if (!visible || blocked || d > 14) {
       b.repathT -= dt;
-      if (!b.path || b.repathT <= 0) setPath(game, c, b, tx, tz);
+      if (!b.path || b.repathT <= 0) setPath(game, c, b, realX, realZ);
       const v = followPath(game, c, b);
       mx = v.x; mz = v.z;
       b.run = d > 10;
