@@ -217,17 +217,14 @@ export class Game {
     this.corpses = [];
     this.props.reset();
 
-    // teams: about a third seekers (at least one), the rest props.
-    // Seeker turns rotate: whoever has been a prop the most rounds in a row goes first,
-    // real players before bots, so everyone gets to seek regularly.
-    const score = (c) => (c.propRounds || 0) + (c.isBot ? 0 : 0.75) + Math.random() * 0.5;
-    const order = shuffle(all.slice()).map((c) => [c, score(c)]).sort((a, b) => b[1] - a[1]).map((e) => e[0]);
+    // teams: about a third seekers (at least one), the rest props. Fully random: every player,
+    // real or bot, has the same chance to take any seeker or prop spot each round.
+    const order = shuffle(all.slice());
     const nSeek = clamp(Math.round(all.length * TM.SEEKER_SHARE), 1, all.length - 1);
     const spawns = shuffle(this.map.spawns.slice());
     order.forEach((c, i) => {
       const seeker = i < nSeek;
       c.team = seeker ? 'seeker' : 'prop';
-      c.propRounds = seeker ? 0 : (c.propRounds || 0) + 1;
       c.color = CONFIG.TEAM_COLORS[c.team];
       c.hasKnife = seeker; c.hasGun = seeker;
       c.hotbar = new Array(INV.HOTBAR).fill(null);
