@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=470';
-import { CONFIG } from './config.js?v=470';
+import * as THREE from '../vendor/three.module.min.js?v=480';
+import { CONFIG } from './config.js?v=480';
 
 
 const L = CONFIG.LOOKS;
@@ -278,6 +278,14 @@ function faceMeshes(face, M) {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.set(sx, sy, sz); out.push(m); return m;
   };
   const EY = 0.165, EX = 0.052, EZ = -0.128;
+  if (face === 'dead') {
+    // X eyes (two crossed dark bars on the skin where each eye was) and a sad mouth
+    const zx = -Math.sqrt(Math.max(0, 0.155 * 0.155 - ((EY - 0.15) / 1.08) ** 2)) * 0.94 - 0.012;
+    for (const sx of [-1, 1]) for (const r of [0.785, -0.785]) add(g.mouthLine, M.mouthDark, sx * EX, EY, zx, -0.1, sx * 0.3, r, 0.95, 1.1, 1);
+    const sY = 0.09, sz = -Math.sqrt(Math.max(0, 0.155 * 0.155 - ((sY - 0.15) / 1.08) ** 2)) - 0.004;
+    add(g.mouthArc, M.mouth, 0, sY - 0.016, sz, -0.3, 0, 0, 0.9, 0.6, 1);
+    return out;
+  }
   // eyeballs + pupils
   for (const sx of [-1, 1]) {
     add(g.eye, M.eyeWhite, sx * EX, EY, EZ, 0, 0, 0, 1, face === 'surprised' ? 1.25 : 1.05, 0.9);
@@ -326,11 +334,11 @@ export class CharacterModel {
       acc: mat({ color: lk.accColor }),
     };
     this.skinColor = lk.skin;
-    // eyes / mouth are not tinted by the room light as much (keeps faces readable)
-    this.mats.eyeWhite = shared('eyeWhite', () => new THREE.MeshLambertMaterial({ color: 0xf8f8f4, emissive: 0x222222 }));
+    // eyes and mouth get darker in the dark like the rest of the body (an off-white, not glowing white)
+    this.mats.eyeWhite = mat({ color: 0xd9d5cb });
     this.mats.pupil = shared('pupil', () => new THREE.MeshBasicMaterial({ color: 0x15100c }));
-    this.mats.mouth = shared('mouth', () => new THREE.MeshLambertMaterial({ color: 0x5a1d1a }));
-    this.mats.mouthDark = shared('mouthDark', () => new THREE.MeshBasicMaterial({ color: 0x2a0b0a, side: THREE.DoubleSide }));
+    this.mats.mouth = mat({ color: 0x5a1d1a });
+    this.mats.mouthDark = mat({ color: 0x2a0b0a, side: THREE.DoubleSide });
     const M = this.mats;
     const mk = (parent, geo, m, x = 0, y = 0, z = 0) => { const mesh = new THREE.Mesh(geo, m); mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
     const seg = (parent, x, y, z) => { const joint = new THREE.Group(); joint.position.set(x, y, z); parent.add(joint); const vis = new THREE.Group(); joint.add(vis); return { joint, vis }; };
@@ -348,7 +356,8 @@ export class CharacterModel {
     this.headMesh = mk(this.head.vis, g.head, M.skin);
     // a cap goes over short hair
     const hairStyle = lk.acc === 'cap' && ['afro', 'mohawk', 'spiky', 'bun', 'beanie'].includes(lk.hair) ? 'short' : lk.hair;
-    for (const f of faceMeshes(lk.face, M)) this.head.vis.add(f);
+    this.faceParts = faceMeshes(lk.face, M);
+    for (const f of this.faceParts) this.head.vis.add(f);
     for (const h of hairMeshes(hairStyle, M.hair)) this.head.vis.add(h);
     for (const a of accessoryMeshes(lk.acc, M)) this.head.vis.add(a);
     // arms
@@ -404,6 +413,15 @@ export class CharacterModel {
     this.light = [1, 1, 1];
     this.lightT = 0;
     this.applyLight();
+  }
+
+  // dead: X eyes and a sad mouth (used for the ragdoll); alive again: back to the chosen face
+  setDead(dead) {
+    if (!!dead === !!this.dead) return;
+    this.dead = !!dead;
+    for (const f of this.faceParts) this.head.vis.remove(f);
+    this.faceParts = faceMeshes(dead ? 'dead' : this.look.face, this.mats);
+    for (const f of this.faceParts) this.head.vis.add(f);
   }
 
   addTo(scene) { scene.add(this.root); scene.add(this.blob); }

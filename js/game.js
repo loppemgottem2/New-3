@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=470';
-import { CONFIG } from './config.js?v=470';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=470';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=470';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=470';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=470';
-import { Ragdoll } from './ragdoll.js?v=470';
-import { Audio } from './audio.js?v=470';
-import { initBrain, updateBots } from './bots.js?v=470';
+import * as THREE from '../vendor/three.module.min.js?v=480';
+import { CONFIG } from './config.js?v=480';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=480';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=480';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=480';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=480';
+import { Ragdoll } from './ragdoll.js?v=480';
+import { Audio } from './audio.js?v=480';
+import { initBrain, updateBots } from './bots.js?v=480';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -1223,7 +1223,9 @@ export class Game {
     if (old) old.dispose();
     // make sure the model pose matches where the character is right now
     c.model.update(0, { x: c.rx, y: c.ry, z: c.rz, yaw: c.ryaw, pitch: 0, speed: c.rspeed, onGround: true, weapon: 0, tpose: c.team === 'prop' }, c.ry);
+    c.model.setDead(true);                    // X eyes + sad mouth on the body
     const rd = new Ragdoll(this.root, c.model, this.map, vel, impulse);
+    c.model.setDead(false);
     this.ragdolls.set(c.id, rd);
     c.model.setVisible(false);
   }

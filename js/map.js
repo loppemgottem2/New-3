@@ -19,8 +19,8 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=470';
-import { fbm } from './textures.js?v=470';
+import * as THREE from '../vendor/three.module.min.js?v=480';
+import { fbm } from './textures.js?v=480';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -139,6 +139,7 @@ export class GameMap {
       return 'tile';
     };
 
+    const crateCells = [];
     for (let z = 0; z < this.h; z++) for (let x = 0; x < this.w; x++) {
       const ch = chAt(x, z);
       const i = z * this.w + x;
@@ -146,6 +147,8 @@ export class GameMap {
       this.floor[i] = FLOOR_LIST.indexOf(f);
       this.outdoor[i] = OUTDOOR.has(f) && ch !== '#' ? 1 : 0;
       const cx = (x + 0.5) * CELL, cz = (z + 0.5) * CELL;
+      // storeroom shelves (not the bookshelves) are now rows of big long crates you can push / hide as
+      if (ch === 'Q' && f === 'concrete') { crateCells.push([x, z]); continue; }
       if (SOLID[ch]) { [this.kinds[i], this.heights[i]] = SOLID[ch]; continue; }
       if (ch === 'S') this.spawns.push({ x: cx, z: cz });
       if (PROP_CH[ch]) {
@@ -187,6 +190,18 @@ export class GameMap {
           const tip = type === 'bottle' ? hash2(x + 7, z) < 0.75 : messy && type === 'chair' && hash2(z, x + 3) < 0.6;
           this.propSpawns.push({ type, x: cx + jit(1) * (messy ? 0.5 : 0.1), z: cz + jit(2) * (messy ? 0.5 : 0.1), yaw: messy ? hash2(x * 3, z) * 6.28 : yaw, tip });
         }
+      }
+    }
+    // rows of storeroom shelves -> long crates of the same size, close together along each row
+    {
+      const key = new Set(crateCells.map(([x, z]) => x + ',' + z));
+      const done = new Set();
+      for (const [x, z] of crateCells) {
+        if (done.has(x + ',' + z)) continue;
+        let x1 = x; while (key.has((x1 + 1) + ',' + z)) x1++;
+        for (let k = x; k <= x1; k++) done.add(k + ',' + z);
+        const len = (x1 - x + 1) * CELL, n = Math.max(1, Math.round(len / 4.4)), step = len / n;
+        for (let k = 0; k < n; k++) this.propSpawns.push({ type: 'longcrate', x: x * CELL + step * (k + 0.5), z: (z + 0.5) * CELL, yaw: 0, tip: false });
       }
     }
     // a creepy old baby doll lying on one of the beds (always the same bed for everyone)
@@ -595,6 +610,32 @@ export class GameMap {
       }
       const pm = new THREE.Mesh(panel.geometry(), new THREE.MeshBasicMaterial({ color: 0xfff6e2, toneMapped: false }));
       group.add(pm);
+    }
+
+    // ---- solid backing: every wall, pillar, shelf, counter and the roof slab is a closed box on the inside ----
+    // (all 6 sides, slightly inset), so no seam or corner can ever show the bright sky / sun behind a wall
+    {
+      const pos = [], e = 0.03, ROOF_TOP = WALL_H + ROOF_T;
+      const box = (x0, y0, z0, x1, y1, z1) => {
+        const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+        for (const [a, b, c, d] of [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]])
+          pos.push(...v[a], ...v[b], ...v[c], ...v[a], ...v[c], ...v[d]);
+      };
+      const heightsSeen = new Set(this.heights);
+      for (const h of heightsSeen) {
+        if (h <= 0) continue;
+        const top = h >= WALL_H ? ROOF_TOP : h;
+        for (const [x0, z0, x1, z1] of rects((x, z) => this.heights[idx(x, z)] === h))
+          box(x0 * CELL + e, 0.002, z0 * CELL + e, (x1 + 1) * CELL - e, top - e, (z1 + 1) * CELL - e);
+      }
+      for (const [x0, z0, x1, z1] of rects((x, z) => !this.outdoor[idx(x, z)] && this.heights[idx(x, z)] < WALL_H))
+        box(x0 * CELL + e, CEIL_H + e, z0 * CELL + e, (x1 + 1) * CELL - e, ROOF_TOP - e, (z1 + 1) * CELL - e);
+      box(-1, -0.6, -1, this.worldW + 1, -0.03, this.worldD + 1);      // under the whole floor
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const back = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x1d1c1a, side: THREE.DoubleSide }));
+      back.name = 'backing';
+      group.add(back);
     }
 
     for (const [key, { b, map }] of builders) {
