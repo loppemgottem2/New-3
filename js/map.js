@@ -19,8 +19,8 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=490';
-import { fbm } from './textures.js?v=490';
+import * as THREE from '../vendor/three.module.min.js?v=500';
+import { fbm } from './textures.js?v=500';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -139,7 +139,7 @@ export class GameMap {
       return 'tile';
     };
 
-    const crateCells = [];
+    const crateCells = [], cellKind = new Map();
     for (let z = 0; z < this.h; z++) for (let x = 0; x < this.w; x++) {
       const ch = chAt(x, z);
       const i = z * this.w + x;
@@ -149,7 +149,7 @@ export class GameMap {
       const cx = (x + 0.5) * CELL, cz = (z + 0.5) * CELL;
       // wooden counters / desks and the storeroom shelves (not the bookshelves) are now rows of big
       // long crates you can push / hide as
-      if (ch === 'W' || (ch === 'Q' && f === 'concrete')) { crateCells.push([x, z]); continue; }
+      if (ch === 'W' || (ch === 'Q' && f === 'concrete')) { crateCells.push([x, z]); cellKind.set(x + ',' + z, ch === 'W' ? 'counter' : 'crate'); continue; }
       if (SOLID[ch]) { [this.kinds[i], this.heights[i]] = SOLID[ch]; continue; }
       if (ch === 'S') this.spawns.push({ x: cx, z: cz });
       if (PROP_CH[ch]) {
@@ -197,22 +197,29 @@ export class GameMap {
     // (rows along x first; whatever is left forms rows along z)
     {
       const key = new Set(crateCells.map(([x, z]) => x + ',' + z));
+      const same = (a, b) => cellKind.get(a) === cellKind.get(b);
       const done = new Set();
       const row = (x, z, along) => {
         const dx = along ? 1 : 0, dz = along ? 0 : 1;
-        let n1 = 0; while (key.has((x + dx * (n1 + 1)) + ',' + (z + dz * (n1 + 1))) && !done.has((x + dx * (n1 + 1)) + ',' + (z + dz * (n1 + 1)))) n1++;
+        let n1 = 0; const k0 = x + ',' + z;
+        while (key.has((x + dx * (n1 + 1)) + ',' + (z + dz * (n1 + 1))) && !done.has((x + dx * (n1 + 1)) + ',' + (z + dz * (n1 + 1))) && same(k0, (x + dx * (n1 + 1)) + ',' + (z + dz * (n1 + 1)))) n1++;
         return n1 + 1;
       };
       const place = (x, z, cells, along) => {
         for (let k = 0; k < cells; k++) done.add((x + (along ? k : 0)) + ',' + (z + (along ? 0 : k)));
-        const len = cells * CELL, n = Math.max(1, Math.round(len / 4.4)), step = len / n;
-        for (let k = 0; k < n; k++) {
-          const a = step * (k + 0.5);
-          this.propSpawns.push({ type: 'longcrate', x: along ? x * CELL + a : (x + 0.5) * CELL, z: along ? (z + 0.5) * CELL : z * CELL + a, yaw: along ? 0 : Math.PI / 2, tip: false });
+        const len = cells * CELL, at = (a) => ({ x: along ? x * CELL + a : (x + 0.5) * CELL, z: along ? (z + 0.5) * CELL : z * CELL + a, yaw: along ? 0 : Math.PI / 2, tip: false });
+        if (cellKind.get(x + ',' + z) === 'counter') {
+          // counters: 4 m pieces end to end, a 2 m piece for what's left
+          let a = 0;
+          while (len - a >= 3.99) { this.propSpawns.push({ type: 'longcounter', ...at(a + 2) }); a += 4; }
+          if (len - a >= 1.99) this.propSpawns.push({ type: 'shortcounter', ...at(a + 1) });
+        } else {
+          const n = Math.max(1, Math.round(len / 4.4)), step = len / n;
+          for (let k = 0; k < n; k++) this.propSpawns.push({ type: 'longcrate', ...at(step * (k + 0.5)) });
         }
       };
-      for (const [x, z] of crateCells) if (!done.has(x + ',' + z) && !key.has((x - 1) + ',' + z) && row(x, z, true) > 1) place(x, z, row(x, z, true), true);
-      for (const [x, z] of crateCells) if (!done.has(x + ',' + z) && (done.has(x + ',' + (z - 1)) || !key.has(x + ',' + (z - 1)))) place(x, z, row(x, z, false), false);
+      for (const [x, z] of crateCells) if (!done.has(x + ',' + z) && !(key.has((x - 1) + ',' + z) && same(x + ',' + z, (x - 1) + ',' + z)) && row(x, z, true) > 1) place(x, z, row(x, z, true), true);
+      for (const [x, z] of crateCells) if (!done.has(x + ',' + z) && (done.has(x + ',' + (z - 1)) || !key.has(x + ',' + (z - 1)) || !same(x + ',' + z, x + ',' + (z - 1)))) place(x, z, row(x, z, false), false);
     }
     // a creepy old baby doll lying on one of the beds (always the same bed for everyone)
     const beds = this.propSpawns.filter((q) => q.type === 'mattress');

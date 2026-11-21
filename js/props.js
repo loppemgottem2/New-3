@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=490';
-import { CONFIG } from './config.js?v=490';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=490';
+import * as THREE from '../vendor/three.module.min.js?v=500';
+import { CONFIG } from './config.js?v=500';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=500';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -47,12 +47,15 @@ export const PROP_TYPES = {
   takeout:  { mass: 0.25, sound: 'cardboard', mu: 0.5, parts: [[0, 0.13, 0, 0.125, 0.13, 0.1]] },
   // a big, long wooden storage crate (heavy, lots of health)
   longcrate: { mass: 40, sound: 'wood', mu: 0.8, parts: [[0, 0.65, 0, 2.0, 0.65, 0.75]] },
+  // simple counters: wooden cabinet with a stone countertop (4 m and 2 m)
+  longcounter: { mass: 20, sound: 'wood', mu: 0.8, parts: [[0, 0.5, 0, 2.0, 0.5, 0.5]] },
+  shortcounter: { mass: 10, sound: 'wood', mu: 0.8, parts: [[0, 0.5, 0, 1.0, 0.5, 0.5]] },
   // an old, broken baby doll lying on its back: head, body, legs, one arm (the other is missing)
   babydoll: { mass: 0.3, sound: 'soft', mu: 0.6, parts: [[0.2, 0.075, 0, 0.075, 0.075, 0.07], [0, 0.055, 0, 0.12, 0.055, 0.075], [-0.2, 0.035, 0.045, 0.09, 0.035, 0.032], [-0.2, 0.035, -0.045, 0.09, 0.035, 0.032], [0.06, 0.03, 0.11, 0.07, 0.025, 0.025]] },
 };
 
 // names shown to players ("Tap to become: baby doll")
-export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate' };
+export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate', longcounter: 'long counter', shortcounter: 'short counter' };
 export const propName = (type) => PROP_NAMES[type] || type;
 
 // ---------------- shared temps ----------------
@@ -93,6 +96,20 @@ function buildGeometry() {
   const Cyl = (a, b, h, s = 10, open = false) => new THREE.CylinderGeometry(a, b, h, s, 1, open);
   GEO.box = mergeParts([{ geo: Box(0.6, 0.56, 0.56), mat: 0, m: M4(0, 0.28, 0) }]);
   GEO.crate = mergeParts([{ geo: Box(0.9, 0.9, 0.9), mat: 0, m: M4(0, 0.45, 0) }]);
+  // counters: cabinet base, overhanging stone top, dark kick strip and door seams on both long sides
+  const counter = (L) => {
+    const p = [
+      { geo: Box(L - 0.04, 0.9, 0.94), mat: 0, m: M4(0, 0.47, 0) },          // cabinet
+      { geo: Box(L, 0.08, 1.0), mat: 1, m: M4(0, 0.96, 0) },                 // countertop
+      { geo: Box(L - 0.1, 0.06, 0.96), mat: 2, m: M4(0, 0.03, 0) },          // kick strip
+    ];
+    const doors = Math.round(L / 0.66);
+    for (let k = 1; k < doors; k++) for (const z of [-0.472, 0.472]) p.push({ geo: Box(0.015, 0.78, 0.01), mat: 2, m: M4(-L / 2 + (k * L) / doors, 0.5, z) });
+    for (const z of [-0.474, 0.474]) p.push({ geo: Box(L - 0.1, 0.015, 0.01), mat: 2, m: M4(0, 0.86, z) });   // drawer line
+    return mergeParts(p);
+  };
+  GEO.longcounter = counter(4.0);
+  GEO.shortcounter = counter(2.0);
   // long crate: four crate-sized sections in a row (so the planks aren't stretched) with dark frame bands
   GEO.longcrate = mergeParts([
     ...[-1.5, -0.5, 0.5, 1.5].map((x) => ({ geo: Box(0.98, 1.3, 1.5), mat: 0, m: M4(x, 0.65, 0) })),
@@ -183,6 +200,7 @@ function propMaterials(T, type, i = 0) {
   switch (type) {
     case 'box': return [new THREE.MeshLambertMaterial({ map: T.cardboard })];
     case 'crate': return [new THREE.MeshLambertMaterial({ map: T.crate })];
+    case 'longcounter': case 'shortcounter': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ color: 0xcfc9bd }), new THREE.MeshLambertMaterial({ color: 0x2a201a })];
     case 'longcrate': return [new THREE.MeshLambertMaterial({ map: T.crate }), new THREE.MeshLambertMaterial({ color: 0x4a3420 })];
     case 'chair': case 'table': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ map: T.metal })];
     case 'barrel': return [new THREE.MeshLambertMaterial({ map: T.barrel }), new THREE.MeshLambertMaterial({ map: T.metal })];
