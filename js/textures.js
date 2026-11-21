@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=340';
+import * as THREE from '../vendor/three.module.min.js?v=350';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -167,25 +167,6 @@ function bloodTex(seed, spray) {
   g.addColorStop(0, 'rgba(160,30,25,0.18)'); g.addColorStop(1, 'rgba(160,30,25,0)');
   ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
   ctx.globalCompositeOperation = 'source-over';
-  return decalTex(c);
-}
-
-// a few round drops of blood (where falling drops land): no streaks
-function bloodDropTex(seed) {
-  const S = 128; const [c, ctx] = canvas(S); const m = S / 2;
-  const drop = (x, y, r) => {
-    ctx.beginPath();
-    for (let i = 0; i <= 14; i++) { const a = (i / 14) * Math.PI * 2, rr = r * (0.88 + hash(seed, i + x, 940) * 0.22); i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
-    ctx.closePath();
-    const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.25, 0, x, y, r);
-    g.addColorStop(0, 'rgba(120,14,10,0.95)'); g.addColorStop(0.6, 'rgba(85,6,5,0.95)'); g.addColorStop(1, 'rgba(50,2,2,0.95)');
-    ctx.fillStyle = g; ctx.fill();
-  };
-  drop(m, m, 16 + hash(seed, 1, 941) * 12);
-  for (let k = 0; k < 4 + (seed % 4); k++) {
-    const a = hash(seed, k, 942) * 6.28, d = 24 + hash(seed, k, 943) * 30;
-    drop(m + Math.cos(a) * d, m + Math.sin(a) * d, 2 + hash(seed, k, 944) * 5);
-  }
   return decalTex(c);
 }
 
@@ -861,7 +842,6 @@ export function makeTextures(renderer, quality = 'medium') {
   T.scratch = [1, 2, 3].map((i) => scratchTex(i));
   T.blood = [1, 2, 3, 4].map((i) => bloodTex(i, false));       // stab / drip splats
   T.bloodSpray = [5, 6, 7, 8].map((i) => bloodTex(i, true));   // gunshot spray
-  T.bloodDrop = [1, 2, 3, 4].map((i) => bloodDropTex(i));      // where falling drops land
   T.bloodPool = [1, 2, 3].map((i) => bloodPoolTex(i));         // big pools on the floor
   // two variants of every kind of floor mess
   T.floorDecals = {};
