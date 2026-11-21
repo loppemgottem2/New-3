@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=520';
-import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=520';
+import { CONFIG } from './config.js?v=530';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=530';
 const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
 const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
 // Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the
@@ -184,7 +184,7 @@ export function moveCharacter(ch, input, dt, map) {
   ch.jumpBuf = input.jump ? 0.15 : Math.max(0, (ch.jumpBuf || 0) - dt);
   // props can climb walls: pushing into a wall in the air, each jump kicks you higher (up to a limit)
   if (ch.wallJumpT > 0) ch.wallJumpT -= dt;
-  const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0) && ch.y < P.WALL_CLIMB_MAX;
+  const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0);   // no height limit: climb until the ceiling / wall top stops you
   if (ch.jumpBuf > 0 && (ch.onGround || wallJump)) {
     if (!ch.onGround) ch.wallJumpT = 0.3;
     ch.jumpBuf = 0;
