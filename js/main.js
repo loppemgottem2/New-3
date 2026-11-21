@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=510';
-import { CONFIG } from './config.js?v=510';
-import { store, makeCode, clamp } from './util.js?v=510';
-import { makeTextures } from './textures.js?v=510';
-import { GameMap } from './map.js?v=510';
-import { NavGrid } from './nav.js?v=510';
-import { Input, isTouchDevice } from './input.js?v=510';
-import { UI } from './ui.js?v=510';
-import { Audio } from './audio.js?v=510';
-import { Game } from './game.js?v=510';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=510';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=510';
+import * as THREE from '../vendor/three.module.min.js?v=520';
+import { CONFIG } from './config.js?v=520';
+import { store, makeCode, clamp } from './util.js?v=520';
+import { makeTextures } from './textures.js?v=520';
+import { GameMap } from './map.js?v=520';
+import { NavGrid } from './nav.js?v=520';
+import { Input, isTouchDevice } from './input.js?v=520';
+import { UI } from './ui.js?v=520';
+import { Audio } from './audio.js?v=520';
+import { Game } from './game.js?v=520';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=520';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=520';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -129,7 +129,7 @@ function updateDynLights(dt) {
     if (!L) { l.intensity = 0; return; }
     l.position.set(L.x, L.y - 0.1, L.z);
     l.target.position.set(L.x, 0, L.z); l.target.updateMatrixWorld();
-    l.intensity = 30;
+    l.intensity = 13;
   });
 }
 
