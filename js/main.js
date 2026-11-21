@@ -28,7 +28,7 @@ const DEFAULTS = {
   look: { ...DEFAULT_LOOK },
   touchSens: CONFIG.CONTROLS.TOUCH_SENS * 1000, mouseSens: CONFIG.CONTROLS.MOUSE_SENS * 1000,
   invert: false, autoSprint: true, lefty: false, btnScale: 1,
-  fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
+  fov: CONFIG.GRAPHICS.FOV, camDist: 0, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
   fps: false, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
