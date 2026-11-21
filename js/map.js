@@ -19,8 +19,8 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=210';
-import { fbm } from './textures.js?v=210';
+import * as THREE from '../vendor/three.module.min.js?v=220';
+import { fbm } from './textures.js?v=220';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -188,6 +188,12 @@ export class GameMap {
           this.propSpawns.push({ type, x: cx + jit(1) * (messy ? 0.5 : 0.1), z: cz + jit(2) * (messy ? 0.5 : 0.1), yaw: messy ? hash2(x * 3, z) * 6.28 : yaw, tip });
         }
       }
+    }
+    // a creepy old baby doll lying on one of the beds (always the same bed for everyone)
+    const beds = this.propSpawns.filter((q) => q.type === 'mattress');
+    if (beds.length) {
+      const bed = beds[Math.floor(hash2(beds.length, 17) * beds.length)];
+      this.propSpawns.push({ type: 'babydoll', x: bed.x + 0.25, z: bed.z + 0.05, yaw: (bed.yaw || 0) + 0.4, tip: false });
     }
     // ceiling lights
     this.lights = [];
