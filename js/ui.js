@@ -102,7 +102,8 @@ export class UI {
     const t = Math.max(0, Math.ceil(s.timeLeft));
     const mmss = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     if (s.phase === 'waiting') ph = 'Waiting for players…';
-    else if (s.phase === 'pre') ph = `Hiding… ${t}`;
+    // blindfolded seekers already see the big countdown, so the top timer stays empty until the round starts
+    else if (s.phase === 'pre') ph = s.blind ? '' : `Hiding… ${t}`;
     else if (s.phase === 'play') ph = mmss;
     else if (s.phase === 'post') ph = `Next round in ${t}`;
     this._set('hud-timer', ph);
