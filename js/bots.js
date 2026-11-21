@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=470';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=470';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=470';
+import { CONFIG } from './config.js?v=480';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=480';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=480';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -376,10 +376,26 @@ function act(game, c, b, dt) {
     b.reactT -= dt;
     const err = Math.abs(angleDiff(c.yaw, faceYaw));
     // knife up close, revolver further away
-    const useKnife = d < W.KNIFE_RANGE * 0.9 && c.hasKnife;
+    // ----- weapon choice -----
+    // Bot seekers keep the revolver out, however close the prop is. Only if a bot already has the knife in
+    // hand might it keep using it (more likely for skilled bots), and only pros sometimes pull the knife out
+    // when a prop is right next to them. Pros chase with the knife; everyone else just walks in, or goes
+    // back to the gun if the prop gets away.
+    const pro = b.skill > 0.7;
+    if (b.wKey !== key) {
+      b.wKey = key; b.closeRolled = false;
+      b.knife = weaponOf(c) === 1 && Math.random() < 0.25 + 0.45 * b.skill;
+    }
+    if (!b.knife && !b.closeRolled && d < W.KNIFE_RANGE * 1.2) {
+      b.closeRolled = true;
+      if (pro && Math.random() < 0.3 + (b.skill - 0.7)) b.knife = true;
+    }
+    if (b.knife && !pro && d > 6) b.knife = false;
+    if (!c.hasKnife) b.knife = false;
+    const useKnife = b.knife;
     hold(c, useKnife ? 'knife' : 'revolver');
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
-      if (useKnife && weaponOf(c) === 1 && err < 30 * DEG) {
+      if (useKnife && weaponOf(c) === 1 && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
         const miss = target && !tp ? Math.min(0.75, (target.speed || 0) * (0.09 - 0.04 * b.skill) + b.trk.jerk * 0.03 * (1.2 - 0.6 * b.skill)) : 0;
         if (Math.random() < miss) { c.attackCd = W.KNIFE_COOLDOWN; game.emit({ e: 'swing', id: c.id }); }
@@ -411,10 +427,11 @@ function act(game, c, b, dt) {
       if (!b.path || b.repathT <= 0) setPath(game, c, b, realX, realZ);
       const v = followPath(game, c, b);
       mx = v.x; mz = v.z;
-      b.run = d > 10;
-    } else if (d > 1.4 && (d < 5 || b.skill < 0.5)) {
-      mx = dx / d; mz = dz / d; b.path = null;          // walk in for a stab
-    } else b.path = null;
+      b.run = useKnife ? pro && d > 2.5 : d > 10;
+    } else if (useKnife && d > 1.2) {
+      mx = dx / d; mz = dz / d; b.path = null;          // knife: pros run them down, everyone else walks in
+      b.run = pro && d > 2.5;
+    } else b.path = null;                               // gun: hold position and shoot
     // give up on a furniture test that takes too long
     b.engageT = tp ? (b.engageT || 0) + dt : 0;     // (only furniture tests time out; people are chased until lost)
     if (b.engageT > 8) { b.engageT = 0; b.state = 'wander'; b.targetProp = null; b.targetId = null; }

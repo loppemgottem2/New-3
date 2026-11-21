@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=470';
-import { CONFIG } from './config.js?v=470';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=470';
+import * as THREE from '../vendor/three.module.min.js?v=480';
+import { CONFIG } from './config.js?v=480';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=480';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -45,12 +45,14 @@ export const PROP_TYPES = {
   bottle:   { mass: 0.2, sound: 'glass', mu: 0.35, parts: [...cyl(0.115, 0.048, 0.115), [0, 0.29, 0, 0.02, 0.07, 0.02]] },
   trashcan: { mass: 1.1, sound: 'metal', mu: 0.4, parts: cyl(0.32, 0.235, 0.32) },
   takeout:  { mass: 0.25, sound: 'cardboard', mu: 0.5, parts: [[0, 0.13, 0, 0.125, 0.13, 0.1]] },
+  // a big, long wooden storage crate (heavy, lots of health)
+  longcrate: { mass: 40, sound: 'wood', mu: 0.8, parts: [[0, 0.65, 0, 2.0, 0.65, 0.75]] },
   // an old, broken baby doll lying on its back: head, body, legs, one arm (the other is missing)
   babydoll: { mass: 0.3, sound: 'soft', mu: 0.6, parts: [[0.2, 0.075, 0, 0.075, 0.075, 0.07], [0, 0.055, 0, 0.12, 0.055, 0.075], [-0.2, 0.035, 0.045, 0.09, 0.035, 0.032], [-0.2, 0.035, -0.045, 0.09, 0.035, 0.032], [0.06, 0.03, 0.11, 0.07, 0.025, 0.025]] },
 };
 
 // names shown to players ("Tap to become: baby doll")
-export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can' };
+export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate' };
 export const propName = (type) => PROP_NAMES[type] || type;
 
 // ---------------- shared temps ----------------
@@ -91,6 +93,11 @@ function buildGeometry() {
   const Cyl = (a, b, h, s = 10, open = false) => new THREE.CylinderGeometry(a, b, h, s, 1, open);
   GEO.box = mergeParts([{ geo: Box(0.6, 0.56, 0.56), mat: 0, m: M4(0, 0.28, 0) }]);
   GEO.crate = mergeParts([{ geo: Box(0.9, 0.9, 0.9), mat: 0, m: M4(0, 0.45, 0) }]);
+  // long crate: four crate-sized sections in a row (so the planks aren't stretched) with dark frame bands
+  GEO.longcrate = mergeParts([
+    ...[-1.5, -0.5, 0.5, 1.5].map((x) => ({ geo: Box(0.98, 1.3, 1.5), mat: 0, m: M4(x, 0.65, 0) })),
+    ...[-2.0, -1.0, 0, 1.0, 2.0].map((x) => ({ geo: Box(0.06, 1.34, 1.54), mat: 1, m: M4(x, 0.65, 0) })),
+  ]);
   {
     const p = [{ geo: Box(0.44, 0.05, 0.42), mat: 0, m: M4(0, 0.455, 0) }, { geo: Box(0.44, 0.42, 0.04), mat: 0, m: M4(0, 0.71, 0.2) }];
     for (const [x, z] of [[-0.19, -0.18], [0.19, -0.18], [-0.19, 0.18], [0.19, 0.18]]) p.push({ geo: Cyl(0.018, 0.016, 0.44, 6), mat: 1, m: M4(x, 0.22, z) });
@@ -176,6 +183,7 @@ function propMaterials(T, type, i = 0) {
   switch (type) {
     case 'box': return [new THREE.MeshLambertMaterial({ map: T.cardboard })];
     case 'crate': return [new THREE.MeshLambertMaterial({ map: T.crate })];
+    case 'longcrate': return [new THREE.MeshLambertMaterial({ map: T.crate }), new THREE.MeshLambertMaterial({ color: 0x4a3420 })];
     case 'chair': case 'table': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ map: T.metal })];
     case 'barrel': return [new THREE.MeshLambertMaterial({ map: T.barrel }), new THREE.MeshLambertMaterial({ map: T.metal })];
     case 'mattress': return [new THREE.MeshLambertMaterial({ map: T.mattress })];
