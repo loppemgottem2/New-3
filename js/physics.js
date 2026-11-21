@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=180';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=180';
+import { CONFIG } from './config.js?v=190';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=190';
 
 const P = CONFIG.PLAYER;
 
@@ -259,6 +259,45 @@ export function hasLOS(map, ax, ay, az, bx, by, bz) {
   const d = Math.hypot(dx, dy, dz);
   if (d < 1e-3) return true;
   return raycastMap(map, ax, ay, az, dx / d, dy / d, dz / d, d) >= d - 0.05;
+}
+
+// Ray vs a list of capsules [ax,ay,az,bx,by,bz,r] (per-body-part hitboxes). Returns distance or -1.
+export function rayVsCapsules(ox, oy, oz, dx, dy, dz, caps, pad = 0, offX = 0, offY = 0, offZ = 0) {
+  let best = -1;
+  for (const c of caps) {
+    const t = rayCapsule(ox, oy, oz, dx, dy, dz, c[0] + offX, c[1] + offY, c[2] + offZ, c[3] + offX, c[4] + offY, c[5] + offZ, c[6] + pad);
+    if (t >= 0 && (best < 0 || t < best)) best = t;
+  }
+  return best;
+}
+// standard ray-vs-capsule test (segment a-b, radius r); ray direction must be normalized
+function rayCapsule(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, r) {
+  const sx = bx - ax, sy = by - ay, sz = bz - az;
+  const oax = ox - ax, oay = oy - ay, oaz = oz - az;
+  const baba = sx * sx + sy * sy + sz * sz;
+  const sphere = (cx, cy, cz) => {
+    const px = ox - cx, py = oy - cy, pz = oz - cz;
+    const b = px * dx + py * dy + pz * dz, c = px * px + py * py + pz * pz - r * r;
+    const h = b * b - c;
+    if (h < 0) return -1;
+    const t = -b - Math.sqrt(h);
+    return t >= 0 ? t : -1;
+  };
+  if (baba < 1e-9) return sphere(ax, ay, az);
+  const bard = sx * dx + sy * dy + sz * dz, baoa = sx * oax + sy * oay + sz * oaz;
+  const rdoa = dx * oax + dy * oay + dz * oaz, oaoa = oax * oax + oay * oay + oaz * oaz;
+  const A = baba - bard * bard, B = baba * rdoa - baoa * bard, C = baba * oaoa - baoa * baoa - r * r * baba;
+  if (Math.abs(A) > 1e-9) {
+    const h = B * B - A * C;
+    if (h < 0) return -1;
+    const t = (-B - Math.sqrt(h)) / A, y = baoa + t * bard;
+    if (y > 0 && y < baba && t >= 0) return t;
+  }
+  // ends of the capsule
+  const t1 = sphere(ax, ay, az), t2 = sphere(bx, by, bz);
+  if (t1 < 0) return t2;
+  if (t2 < 0) return t1;
+  return Math.min(t1, t2);
 }
 
 // Ray vs character cylinder. Returns distance or -1.

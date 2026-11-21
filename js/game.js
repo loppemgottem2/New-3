@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=180';
-import { CONFIG } from './config.js?v=180';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=180';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=180';
-import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=180';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape } from './props.js?v=180';
-import { Ragdoll } from './ragdoll.js?v=180';
-import { Audio } from './audio.js?v=180';
-import { initBrain, updateBots } from './bots.js?v=180';
+import * as THREE from '../vendor/three.module.min.js?v=190';
+import { CONFIG } from './config.js?v=190';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=190';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=190';
+import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js?v=190';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape } from './props.js?v=190';
+import { Ragdoll } from './ragdoll.js?v=190';
+import { Audio } from './audio.js?v=190';
+import { initBrain, updateBots } from './bots.js?v=190';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -486,7 +486,14 @@ export class Game {
   hitTest(o, ox, oy, oz, dx, dy, dz, pad = 0, smooth = false) {
     const x = smooth ? o.rx : o.x, y = smooth ? o.ry : o.y, z = smooth ? o.rz : o.z;
     if (o.disguise) return rayVsPropShape(o.disguise, x, y, z, smooth ? o.ryaw : o.yaw, ox, oy, oz, dx, dy, dz, pad);
-    return rayVsCharacter(ox, oy, oz, dx, dy, dz, { x, y, z }, 0.36 + pad);
+    // people: one hitbox per body part, following the pose (T-pose arms included). Cached for one frame.
+    if (o._capsT !== this.time) { o._caps = o.model.hitCapsules(); o._capsT = this.time; }
+    if (smooth) return rayVsCapsules(ox, oy, oz, dx, dy, dz, o._caps, pad);
+    // the model is drawn at the smoothed position / turn; move the hitboxes to the real ones for the host's checks
+    const turn = wrapAngle(o.yaw - o.ryaw), cs = Math.cos(turn), sn = Math.sin(turn);
+    const mv = (x, z) => { const lx = x - o.rx, lz = z - o.rz; return [o.x + lx * cs + lz * sn, o.z - lx * sn + lz * cs]; };
+    const caps = o._caps.map((c) => { const [ax, az] = mv(c[0], c[2]), [bx, bz] = mv(c[3], c[5]); return [ax, c[1] + o.y - o.ry, az, bx, c[4] + o.y - o.ry, bz, c[6]]; });
+    return rayVsCapsules(ox, oy, oz, dx, dy, dz, caps, pad);
   }
 
   // A seeker hits a prop player: take health off, die at 0

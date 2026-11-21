@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=180';
-import { CONFIG } from './config.js?v=180';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=180';
+import * as THREE from '../vendor/three.module.min.js?v=190';
+import { CONFIG } from './config.js?v=190';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=190';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -24,18 +24,27 @@ for (let y = 0.05; y < 1.8; y += 0.06) CHAR_SAMPLES.push(y);   // the whole body
 const KICK_SAMPLES = [0.05, 0.2, 0.35];
 const P = CONFIG.PLAYER;
 
-// parts: [cx, cy, cz, hx, hy, hz, yaw?] — box center + half sizes, origin = bottom center of the prop
+// parts: [cx, cy, cz, hx, hy, hz, yaw?] — box center + half sizes, origin = bottom center of the prop.
+// Round things (barrels, bins, lamp parts, bottles) are made of 4 thin boxes turned 0/45/90/135°
+// whose corners sit exactly on the circle, so the hitbox stays inside the real round shape
+// (a single square box would stick out at the corners and make stacked barrels float).
+const cyl = (cy, r, hy) => [0, 1, 2, 3].map((k) => [0, cy, 0, r * Math.cos(Math.PI / 8), hy, r * Math.sin(Math.PI / 8), (k * Math.PI) / 4]);
+const legs = (x, z, hy, w) => [[-x, hy, -z, w, hy, w], [x, hy, -z, w, hy, w], [-x, hy, z, w, hy, w], [x, hy, z, w, hy, w]];
 export const PROP_TYPES = {
   box:      { mass: 1.2, sound: 'cardboard', mu: 0.6, parts: [[0, 0.28, 0, 0.3, 0.28, 0.28]] },
   crate:    { mass: 3.0, sound: 'wood', mu: 0.6, parts: [[0, 0.45, 0, 0.45, 0.45, 0.45]] },
-  chair:    { mass: 1.4, sound: 'wood', mu: 0.5, parts: [[0, 0.455, 0, 0.22, 0.03, 0.21], [0, 0.71, 0.2, 0.22, 0.22, 0.025], [-0.19, 0.22, 0, 0.022, 0.22, 0.2], [0.19, 0.22, 0, 0.022, 0.22, 0.2]] },
-  table:    { mass: 8.0, sound: 'wood', mu: 0.3, parts: [[0, 0.745, 0, 0.62, 0.025, 0.4], [-0.53, 0.36, 0, 0.03, 0.36, 0.34], [0.53, 0.36, 0, 0.03, 0.36, 0.34]] },
-  barrel:   { mass: 2.2, sound: 'metal', mu: 0.45, parts: [[0, 0.45, 0, 0.3, 0.45, 0.3], [0, 0.45, 0, 0.3, 0.45, 0.3, Math.PI / 4]] },
+  // seat, backrest, 4 legs, 2 side rails
+  chair:    { mass: 1.4, sound: 'wood', mu: 0.5, parts: [[0, 0.455, 0, 0.22, 0.025, 0.21], [0, 0.71, 0.2, 0.22, 0.21, 0.02], ...legs(0.19, 0.18, 0.22, 0.018), [-0.19, 0.08, 0, 0.012, 0.012, 0.18], [0.19, 0.08, 0, 0.012, 0.012, 0.18]] },
+  // top, 4 legs, 2 rails
+  table:    { mass: 8.0, sound: 'wood', mu: 0.3, parts: [[0, 0.745, 0, 0.62, 0.025, 0.4], ...legs(0.55, 0.33, 0.36, 0.024), [-0.55, 0.1, 0, 0.015, 0.02, 0.35], [0.55, 0.1, 0, 0.015, 0.02, 0.35]] },
+  barrel:   { mass: 2.2, sound: 'metal', mu: 0.45, parts: cyl(0.45, 0.31, 0.45) },
   mattress: { mass: 1.6, sound: 'soft', mu: 0.7, parts: [[0, 0.12, 0, 1.02, 0.12, 0.52]] },
-  lamp:     { mass: 2.0, sound: 'metal', mu: 0.5, parts: [[0, 0.025, 0, 0.17, 0.025, 0.17], [0, 0.8, 0, 0.022, 0.75, 0.022], [0, 1.56, 0, 0.17, 0.12, 0.17]] },
-  bottle:   { mass: 0.2, sound: 'glass', mu: 0.35, parts: [[0, 0.175, 0, 0.05, 0.175, 0.05]] },
-  trashcan: { mass: 1.1, sound: 'metal', mu: 0.4, parts: [[0, 0.32, 0, 0.24, 0.32, 0.24], [0, 0.32, 0, 0.24, 0.32, 0.24, Math.PI / 4]] },
-  takeout:  { mass: 0.25, sound: 'cardboard', mu: 0.5, parts: [[0, 0.125, 0, 0.12, 0.125, 0.095]] },
+  // round base, pole, round shade
+  lamp:     { mass: 2.0, sound: 'metal', mu: 0.5, parts: [...cyl(0.025, 0.17, 0.025), [0, 0.8, 0, 0.018, 0.75, 0.018], ...cyl(1.56, 0.15, 0.12)] },
+  // round body + narrow neck
+  bottle:   { mass: 0.2, sound: 'glass', mu: 0.35, parts: [...cyl(0.115, 0.048, 0.115), [0, 0.29, 0, 0.02, 0.07, 0.02]] },
+  trashcan: { mass: 1.1, sound: 'metal', mu: 0.4, parts: cyl(0.32, 0.235, 0.32) },
+  takeout:  { mass: 0.25, sound: 'cardboard', mu: 0.5, parts: [[0, 0.13, 0, 0.125, 0.13, 0.1]] },
 };
 
 // ---------------- shared temps ----------------
