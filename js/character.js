@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=450';
-import { CONFIG } from './config.js?v=450';
+import * as THREE from '../vendor/three.module.min.js?v=470';
+import { CONFIG } from './config.js?v=470';
 
 
 const L = CONFIG.LOOKS;
@@ -27,7 +27,7 @@ export function randomLook(rng = Math.random) {
   return {
     hair: pickR(L.HAIR, rng), hairColor: pickR(L.HAIR_COLORS.slice(0, 6), rng), face: pickR(FACES, rng), skin: pickR(L.SKINS, rng),
     shirt: pickR(L.SHIRTS, rng), shirtColor: pickR(L.SHIRT_COLORS, rng), pants: pickR(L.PANTS, rng), pantsColor: pickR(L.PANTS_COLORS, rng),
-    acc: (() => { const r = rng(); return r < 0.75 ? 'none' : r < 0.93 ? 'cap' : 'dragon'; })(), accColor: pickR(L.ACC_COLORS, rng),
+    acc: rng() < 0.8 ? 'none' : 'cap', accColor: pickR(L.ACC_COLORS, rng),
   };
 }
 // Validate a look received over the network
@@ -265,63 +265,8 @@ function accessoryMeshes(kind, M) {
     add(new THREE.SphereGeometry(0.168, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), M.acc, 0, 0.165, 0.005, 0.12, 0, 0, 0.96, 1.0, 1.04);
     add(new THREE.CylinderGeometry(0.105, 0.105, 0.012, 18), M.acc, 0, 0.2, -0.165, -0.1, 0, 0, 1, 1, 0.8);
     add(new THREE.SphereGeometry(0.014, 6, 4), M.acc, 0, 0.335, 0.005);
-  } else if (kind === 'dragon') {
-    // Chinese festival dragon MASK worn in front of the face: one hand-made low-poly mesh (flat-shaded
-    // triangles in red and gold), only vaguely dragon-like: brow crest, horns, flame frills, snout and whiskers.
-    const m = new THREE.Mesh(dragonMaskGeometry(), M.mask);
-    out.push(m);
   }
   return out;
-}
-
-// Low-poly dragon mask: right-half points (x >= 0), mirrored to the left. Head center is (0, 0.15, 0), face toward -Z.
-function dragonMaskGeometry() {
-  const P = {
-    A0: [0, 0.34, -0.17], A1: [0.09, 0.33, -0.15], A2: [0.17, 0.27, -0.1],
-    B0: [0, 0.25, -0.24], B1: [0.06, 0.26, -0.222], B2: [0.13, 0.25, -0.19], B3: [0.19, 0.2, -0.11],
-    E1: [0.045, 0.205, -0.238], E2: [0.125, 0.2, -0.205], E3: [0.085, 0.172, -0.228],
-    C1: [0.17, 0.12, -0.15], C2: [0.12, 0.08, -0.22],
-    S0: [0, 0.17, -0.3], S1: [0.052, 0.14, -0.32], S2: [0, 0.12, -0.365], S3: [0.056, 0.09, -0.33], S4: [0, 0.07, -0.342],
-    J0: [0, 0.02, -0.29], J1: [0.09, 0.04, -0.26], J2: [0.15, 0.06, -0.17],
-    H: [0.14, 0.46, -0.06], Hb: [0.08, 0.31, -0.09],                       // horn
-    F: [0.29, 0.26, -0.05], F2: [0.26, 0.13, -0.07], F3: [0.24, 0.035, -0.1],  // flame frill
-    W1: [0.29, 0.02, -0.24], W1b: [0.062, 0.076, -0.326], W2: [0.27, 0.17, -0.27], W2b: [0.05, 0.126, -0.326], // whiskers
-    M0: [0, 0.44, -0.2], M1: [0.05, 0.42, -0.14],                          // crest spikes
-    D1: [0, 0.31, -0.222], D2: [0.032, 0.285, -0.232], D3: [0, 0.258, -0.25],   // gold forehead diamond
-    P1: [0.08, 0.2, -0.236], P2: [0.092, 0.2, -0.231], P3: [0.086, 0.18, -0.238], // pupil
-  };
-  const RED = 0xd0221d, DARK = 0x8c120f, GOLD = 0xffd84a, GOLD2 = 0xf0a826, BLACK = 0x140a06, WHITE = 0xf4ead2;
-  const F = [
-    ['A0', 'A1', 'B1', RED], ['A0', 'B1', 'B0', RED], ['A1', 'A2', 'B2', RED], ['A1', 'B2', 'B1', RED], ['A2', 'B3', 'B2', DARK],
-    ['B1', 'B2', 'E2', GOLD], ['B1', 'E2', 'E1', GOLD],                         // gold brow band
-    ['E1', 'E2', 'E3', WHITE], ['P1', 'P2', 'P3', BLACK],                       // eye + pupil
-    ['B0', 'B1', 'E1', RED], ['B0', 'E1', 'S0', RED],
-    ['S0', 'E1', 'S1', RED], ['S0', 'S1', 'S2', GOLD], ['E1', 'E3', 'S1', DARK],
-    ['E3', 'C2', 'S3', RED], ['E3', 'S3', 'S1', RED], ['S1', 'S3', 'S2', DARK],
-    ['S2', 'S3', 'S4', GOLD],                                                   // gold upper lip
-    ['E2', 'B3', 'C1', RED], ['E2', 'C1', 'C2', DARK], ['E2', 'C2', 'E3', RED],
-    ['S4', 'S3', 'J1', BLACK], ['S4', 'J1', 'J0', WHITE],                       // mouth + teeth
-    ['C2', 'C1', 'J2', RED], ['C2', 'J2', 'J1', DARK], ['S3', 'C2', 'J1', RED],
-    ['A1', 'A2', 'H', GOLD], ['A1', 'H', 'Hb', GOLD2],                          // horn
-    ['A2', 'F', 'B3', GOLD], ['B3', 'F', 'F2', GOLD2], ['B3', 'F2', 'C1', GOLD], ['C1', 'F2', 'F3', GOLD2], ['C1', 'F3', 'J2', GOLD],  // frill
-    ['S3', 'W1', 'W1b', GOLD], ['S1', 'W2', 'W2b', GOLD],                       // whiskers
-    ['A0', 'A1', 'M1', GOLD], ['A0', 'M1', 'M0', GOLD2],                        // crest
-    ['D1', 'D2', 'D3', GOLD],                                                   // forehead diamond
-  ];
-  const pos = [], col = [], c = new THREE.Color();
-  const push = (p, mirror) => pos.push(mirror ? -p[0] : p[0], p[1], p[2]);
-  for (const [a, b, d, hex] of F) {
-    c.setHex(hex).convertSRGBToLinear();
-    for (const mirror of [false, true]) {
-      const tri = mirror ? [a, d, b] : [a, b, d];
-      for (const k of tri) { push(P[k], mirror); col.push(c.r, c.g, c.b); }
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.computeVertexNormals();      // not indexed -> every triangle gets its own flat normal
-  return g;
 }
 
 // ---------------- face (made of shapes) ----------------
@@ -379,8 +324,6 @@ export class CharacterModel {
       hair: mat({ color: lk.hairColor }),
       shoes: mat({ color: 0x1e1c1b }),
       acc: mat({ color: lk.accColor }),
-      accDark: mat({ color: new THREE.Color(lk.accColor).multiplyScalar(0.6).getHex() }),
-      mask: mat({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }),
     };
     this.skinColor = lk.skin;
     // eyes / mouth are not tinted by the room light as much (keeps faces readable)
@@ -403,10 +346,9 @@ export class CharacterModel {
     // head
     this.head = seg(this.torso.joint, 0, 0.6, 0);
     this.headMesh = mk(this.head.vis, g.head, M.skin);
-    // the dragon mask covers the face (hair still shows); a cap goes over short hair
-    const masked = lk.acc === 'dragon';
+    // a cap goes over short hair
     const hairStyle = lk.acc === 'cap' && ['afro', 'mohawk', 'spiky', 'bun', 'beanie'].includes(lk.hair) ? 'short' : lk.hair;
-    if (!masked) for (const f of faceMeshes(lk.face, M)) this.head.vis.add(f);
+    for (const f of faceMeshes(lk.face, M)) this.head.vis.add(f);
     for (const h of hairMeshes(hairStyle, M.hair)) this.head.vis.add(h);
     for (const a of accessoryMeshes(lk.acc, M)) this.head.vis.add(a);
     // arms
