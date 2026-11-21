@@ -152,7 +152,9 @@ export const CONFIG = {
 
   // Character customization choices (character editor)
   LOOKS: {
-    HAIR: ['short', 'buzz', 'sidepart', 'long', 'ponytail', 'bun', 'mohawk', 'spiky', 'afro', 'cap', 'beanie', 'bald'],
+    HAIR: ['short', 'buzz', 'sidepart', 'long', 'ponytail', 'bun', 'mohawk', 'spiky', 'afro', 'beanie', 'bald'],
+    ACCESSORIES: ['none', 'cap', 'dragon'],
+    ACC_COLORS: [0x2f8a3a, 0xc23b3b, 0x2f6fd8, 0x303030, 0xe0c020, 0x9b40d0, 0xf0f0f0, 0xe07a20],
     SHIRTS: ['tshirt', 'dressshirt', 'sweater'],
     PANTS: ['jeans', 'slacks', 'cargo', 'shorts', 'sweats'],
     SKINS: [0xf7e3d4, 0xf0d2bd, 0xe5bf9f, 0xd2a07c, 0xb07b55, 0x7d5034, 0x523222], // first one = default (white)
