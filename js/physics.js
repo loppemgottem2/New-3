@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=230';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=230';
+import { CONFIG } from './config.js?v=240';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=240';
 
 const P = CONFIG.PLAYER;
 
@@ -132,8 +132,13 @@ export function moveCharacter(ch, input, dt, map) {
   // props can climb walls: pushing into a wall in the air, each jump kicks you higher (up to a limit)
   if (ch.wallJumpT > 0) ch.wallJumpT -= dt;
   const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0) && ch.y < P.WALL_CLIMB_MAX;
-  if (ch.jumpBuf > 0 && (ch.onGround || wallJump)) {
-    if (!ch.onGround) ch.wallJumpT = 0.3;
+  // props "fluttering" (spamming the joystick) can jump again in the air, at most every FLUTTER_JUMP_DELAY
+  if (ch.airJumpT > 0) ch.airJumpT -= dt;
+  if (ch.onGround) ch.airJumps = 0;
+  const airJump = input.flutter && !ch.onGround && !wallJump && !(ch.airJumpT > 0) && (ch.airJumps || 0) < P.FLUTTER_MAX_JUMPS && ch.y < P.WALL_CLIMB_MAX;
+  if (ch.jumpBuf > 0 && (ch.onGround || wallJump || airJump)) {
+    if (!ch.onGround && wallJump) ch.wallJumpT = 0.3;
+    if (!ch.onGround && !wallJump) { ch.airJumpT = P.FLUTTER_JUMP_DELAY; ch.airJumps = (ch.airJumps || 0) + 1; }
     ch.jumpBuf = 0;
     ch.vy = ch.onGround ? P.JUMP_SPEED : P.JUMP_SPEED * 0.85; ch.onGround = false; ch.jumped = true;
     // small forward boost when jumping while running (momentum)
@@ -143,7 +148,8 @@ export function moveCharacter(ch, input, dt, map) {
   // speed cap
   const hs = Math.hypot(ch.vx, ch.vz);
   if (hs > P.MAX_SPEED) { ch.vx *= P.MAX_SPEED / hs; ch.vz *= P.MAX_SPEED / hs; }
-  ch.vy -= P.GRAVITY * dt;
+  // fluttering props fall more slowly
+  ch.vy -= P.GRAVITY * (input.flutter && ch.vy < 0 ? P.FLUTTER_GRAVITY : 1) * dt;
   if (ch.vy < -40) ch.vy = -40;
 
   // Horizontal, in small sub-steps so we never tunnel through walls
