@@ -1,8 +1,8 @@
 // Input: keyboard + mouse (pointer lock) on desktop, virtual joystick +
 // drag-to-look + buttons on touch screens. Each finger is tracked by its
 // touch identifier so moving, looking and pressing buttons all work at once.
-import { CONFIG } from './config.js?v=130';
-import { clamp } from './util.js?v=130';
+import { CONFIG } from './config.js?v=140';
+import { clamp } from './util.js?v=140';
 
 export const isTouchDevice = () =>
   ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
@@ -23,9 +23,9 @@ export class Input {
     this.edges = {};
     this.held = {};
     this.mouseSens = CONFIG.CONTROLS.MOUSE_SENS;
-    this.touchSens = CONFIG.CONTROLS.TOUCH_SENS;
+    this.touchSens = 1;      // touch look multiplier: 1 = the view follows your finger exactly
+    this.fovDeg = 75;        // camera field of view (set from settings), used to turn pixels into angles
     this.invertY = false;
-    this.invertX = false;
     this.locked = false;
     this.lockMode = false;   // shift lock: mouse is captured (pointer lock). Off: free cursor, right-drag turns the camera
     this.mouse = null;       // cursor position on screen (free cursor mode)
@@ -193,8 +193,11 @@ export class Input {
         lt.x = t.clientX; lt.y = t.clientY;
         // ignore absurd jumps (finger lifted & re-landed reported as a move on some browsers)
         if (Math.abs(dx) < 300 && Math.abs(dy) < 300) {
-          this.lookDX += dx * this.touchSens;
-          this.lookDY += dy * this.touchSens;
+          // 1:1 with your finger: the view turns exactly as far as the finger moved,
+          // times the sensitivity setting. Drag right = look right, drag up = look up.
+          const k = ((this.fovDeg * Math.PI) / 180 / Math.max(1, window.innerHeight)) * this.touchSens;
+          this.lookDX += dx * k;
+          this.lookDY += dy * k;
         }
       }
     }
@@ -278,7 +281,7 @@ export class Input {
       toggleView: !!this.edges.toggleView,
       menu: !!this.edges.menu,
       scoreUp: !!this.edges.scoreUp,
-      lookDX: this.lookDX * (this.invertX ? -1 : 1),
+      lookDX: this.lookDX,
       lookDY: clamp(this.lookDY, -2, 2) * (this.invertY ? -1 : 1),
     };
     this.edges = {};

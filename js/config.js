@@ -4,7 +4,7 @@
 // =====================================================================
 
 export const CONFIG = {
-  VERSION: '1.3.0',
+  VERSION: '1.4.0',
   TITLE: 'FIND THE THINGS',
   SUBTITLE: '',
 
@@ -123,7 +123,6 @@ export const CONFIG = {
   // ---------------- Controls defaults (changeable in Settings) ----------------
   CONTROLS: {
     MOUSE_SENS: 0.0022,
-    TOUCH_SENS: 0.0080,
     JOYSTICK_RADIUS: 60,     // px
     JOYSTICK_RUN_AT: 0.9,    // push joystick past 90% to sprint
   },
