@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=260';
-import { CONFIG } from './config.js?v=260';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=260';
+import * as THREE from '../vendor/three.module.min.js?v=270';
+import { CONFIG } from './config.js?v=270';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=270';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -557,7 +557,7 @@ export class PropSystem {
 
   // Ray vs every part box. Returns {prop, t, point} of the nearest hit or null.
   raycast(ox, oy, oz, dx, dy, dz, maxT) {
-    let best = null, bt = maxT;
+    let best = null, bt = maxT, bestN = null;
     const o = new V(ox, oy, oz), d = new V(dx, dy, dz), lo = new V(), ld = new V();
     for (const p of this.list) {
       // bounding sphere test
@@ -569,10 +569,17 @@ export class PropSystem {
         this.toPartLocal(p, part, o, lo);
         ld.copy(d).applyQuaternion(tq2.copy(p.quat).invert()).applyQuaternion(part.qi);
         const t = slab(lo, ld, part.h);
-        if (t >= 0 && t < bt) { bt = t; best = p; }
+        if (t >= 0 && t < bt) {
+          bt = t; best = p;
+          // which face of the part was hit -> surface normal (for bullet holes / blood on furniture)
+          const hx = (lo.x + ld.x * t) / part.h.x, hy = (lo.y + ld.y * t) / part.h.y, hz = (lo.z + ld.z * t) / part.h.z;
+          const ax = Math.abs(hx), ay = Math.abs(hy), az = Math.abs(hz);
+          bestN = ax >= ay && ax >= az ? new V(Math.sign(hx), 0, 0) : ay >= az ? new V(0, Math.sign(hy), 0) : new V(0, 0, Math.sign(hz));
+          bestN.applyQuaternion(part.q).applyQuaternion(p.quat);
+        }
       }
     }
-    return best ? { prop: best, t: bt, point: new V(ox + dx * bt, oy + dy * bt, oz + dz * bt) } : null;
+    return best ? { prop: best, t: bt, point: new V(ox + dx * bt, oy + dy * bt, oz + dz * bt), normal: bestN } : null;
   }
 
   // Ragdoll joints: push a sphere out of any prop part. Returns true if it rests on top of something.
