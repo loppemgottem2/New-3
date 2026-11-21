@@ -1,6 +1,15 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=250';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=250';
+import { CONFIG } from './config.js?v=260';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=260';
+const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
+const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
+// Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the
+// building is solid for anyone up there (outside the rooms), but not for people inside below the ceiling.
+function solidH(map, cx, cz, feetY, H) {
+  const h = map.cellHeight(cx, cz);
+  if (feetY + H > CEIL_H + 0.01 && map.roofedCell(cx, cz)) return Math.max(h, ROOF_TOP);
+  return h;
+}
 
 const P = CONFIG.PLAYER;
 
@@ -8,7 +17,7 @@ const P = CONFIG.PLAYER;
 //  Walls: push a circle (x,z,r) out of every cell that is taller than
 //  the character can step onto.
 // ---------------------------------------------------------------------
-export function resolveWalls(map, pos, r, feetY) {
+export function resolveWalls(map, pos, r, feetY, H = P.HEIGHT) {
   const maxH = feetY + 0.02; // no auto step-up: anything higher than your feet blocks you
   for (let iter = 0; iter < 3; iter++) {
     let moved = false;
@@ -16,7 +25,7 @@ export function resolveWalls(map, pos, r, feetY) {
     const cz0 = Math.floor((pos.z - r) / CELL), cz1 = Math.floor((pos.z + r) / CELL);
     for (let cz = cz0; cz <= cz1; cz++) {
       for (let cx = cx0; cx <= cx1; cx++) {
-        if (map.cellHeight(cx, cz) <= maxH) continue;
+        if (solidH(map, cx, cz, feetY, H) <= maxH) continue;
         const minX = cx * CELL, maxX = minX + CELL, minZ = cz * CELL, maxZ = minZ + CELL;
         const nx = Math.max(minX, Math.min(pos.x, maxX));
         const nz = Math.max(minZ, Math.min(pos.z, maxZ));
@@ -47,7 +56,8 @@ export function groundHeightCells(map, x, z, r, maxY) {
   const cx0 = Math.floor((x - r) / CELL), cx1 = Math.floor((x + r) / CELL);
   const cz0 = Math.floor((z - r) / CELL), cz1 = Math.floor((z + r) / CELL);
   for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) {
-    const h = map.cellHeight(cx, cz);
+    let h = map.cellHeight(cx, cz);
+    if (maxY >= ROOF_TOP - 0.01 && map.roofedCell(cx, cz)) h = ROOF_TOP;     // standing on top of the roof
     if (h > g && h <= maxY) {
       const nx = Math.max(cx * CELL, Math.min(x, cx * CELL + CELL));
       const nz = Math.max(cz * CELL, Math.min(z, cz * CELL + CELL));
@@ -160,7 +170,7 @@ export function moveCharacter(ch, input, dt, map) {
   const pos = { x: ch.x, z: ch.z };
   for (let i = 0; i < n; i++) {
     pos.x += (ch.vx * dt) / n; pos.z += (ch.vz * dt) / n;
-    resolveWalls(map, pos, r, ch.y);
+    resolveWalls(map, pos, r, ch.y, H);
   }
   // touching a wall while pushing into it (used for props sticking to / climbing walls)
   if (dt > 0 && moving) {
@@ -173,9 +183,6 @@ export function moveCharacter(ch, input, dt, map) {
     if (Math.abs(realVx) < Math.abs(ch.vx) - 0.3) ch.vx = realVx;
     if (Math.abs(realVz) < Math.abs(ch.vz) - 0.3) ch.vz = realVz;
   }
-  // never leave the map area (e.g. fluttering props flying over the outer walls)
-  pos.x = Math.max(r + 0.5, Math.min(map.worldW - r - 0.5, pos.x));
-  pos.z = Math.max(r + 0.5, Math.min(map.worldD - r - 0.5, pos.z));
   ch.x = pos.x; ch.z = pos.z;
 
   // Vertical
@@ -199,7 +206,11 @@ export function moveCharacter(ch, input, dt, map) {
     ch.onGround = false;
   }
   // Ceiling
-  if (!map.isOutdoor(ch.x, ch.z) && ch.y + H > CEIL_H) { ch.y = CEIL_H - H; if (ch.vy > 0) ch.vy = 0; }
+  // ceiling (and the light fixtures hanging from it) for anyone inside a room
+  if (prevY + H <= CEIL_H + 0.05 && !map.isOutdoor(ch.x, ch.z)) {
+    const top = map.underLight(ch.x, ch.z, r * 0.7) ? CEIL_H - FIXTURE_H : CEIL_H;
+    if (ch.y + H > top) { ch.y = top - H; if (ch.vy > 0) ch.vy = 0; }
+  }
   if (ch.y < -5) { ch.y = 0; } // safety
   ch.speed = Math.hypot(ch.vx, ch.vz);
 }
@@ -233,7 +244,7 @@ export function separateCharacters(list, map, movable) {
     }
   }
   for (const c of list) if (c.alive && movable(c)) {
-    const p = { x: c.x, z: c.z }; resolveWalls(map, p, c.shapeR || P.RADIUS, c.y); c.x = p.x; c.z = p.z;
+    const p = { x: c.x, z: c.z }; resolveWalls(map, p, c.shapeR || P.RADIUS, c.y, c.shapeH || P.HEIGHT); c.x = p.x; c.z = p.z;
   }
 }
 
@@ -263,7 +274,16 @@ export function raycastMap(map, ox, oy, oz, dx, dy, dz, maxDist) {
     }
     if (dy > 0 && !map.isOutdoorCell(cx, cz) && oy + dy * t < CEIL_H) {
       const y1 = oy + dy * tEnd;
+      // light fixtures hang below the ceiling
+      const tf = (CEIL_H - FIXTURE_H - oy) / dy;
+      if (tf >= t && tf <= tEnd && map.underLight(ox + dx * tf, oz + dz * tf)) return tf;
       if (y1 > CEIL_H) return Math.max(t, (CEIL_H - oy) / dy);
+    }
+    // the thick roof slab, from outside / above
+    if (map.roofedCell(cx, cz)) {
+      const y0 = oy + dy * t, y1 = oy + dy * tEnd;
+      if (y0 >= CEIL_H && y0 <= ROOF_TOP && (y0 >= CEIL_H + 0.001 || dy <= 0)) return t;
+      if (y0 > ROOF_TOP && y1 <= ROOF_TOP) return (ROOF_TOP - oy) / dy;
     }
     if (tFloor <= tEnd) return tFloor;
     t = tNext;
