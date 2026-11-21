@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=280';
-import { CONFIG } from './config.js?v=280';
+import * as THREE from '../vendor/three.module.min.js?v=290';
+import { CONFIG } from './config.js?v=290';
 
 
 const L = CONFIG.LOOKS;
@@ -99,22 +99,42 @@ const shared = (k, make) => (SHARED[k] ||= make());
 
 // Knife: the origin is the middle of the handle (where the fist holds it); blade points to -Z.
 let KNIFE_GEO = null;
-// a crowbar: long dark-red painted steel bar, hooked claw at the top end, flat chisel at the bottom.
-// Same orientation as the knife (held in the fist, working end pointing along -Z).
+// a crowbar (like the reference picture): hexagonal steel bar, red painted in the middle, chrome ends,
+// a curled claw at the top with a forked tip, and a slightly bent flat chisel at the bottom.
+// Same orientation as the knife: held in the fist at the origin, the claw end points along -Z.
 let CROWBAR_GEO = null;
 export function makeCrowbarMesh() {
   if (!CROWBAR_GEO) {
-    const bar = new THREE.CylinderGeometry(0.009, 0.009, 0.42, 8); bar.rotateX(Math.PI / 2); bar.translate(0, 0, -0.12);
-    const hook = new THREE.TorusGeometry(0.035, 0.009, 6, 12, Math.PI * 1.1); hook.rotateY(Math.PI / 2); hook.translate(0, 0.035, -0.33);
-    const claw = new THREE.BoxGeometry(0.008, 0.012, 0.03); claw.translate(0, 0.07, -0.31);
-    const chisel = new THREE.BoxGeometry(0.02, 0.006, 0.04); chisel.rotateX(0.35); chisel.translate(0, -0.006, 0.105);
-    CROWBAR_GEO = { bar, hook, claw, chisel };
+    const V = THREE.Vector3;
+    // centre line of the bar, from the chisel tip (bottom, +Z) up to the claw tip (curled over, top)
+    const path = new THREE.CatmullRomCurve3([
+      new V(0, -0.03, 0.17), new V(0, -0.014, 0.125), new V(0, -0.003, 0.07), new V(0, 0.002, 0.0),
+      new V(0, -0.002, -0.1), new V(0, 0.006, -0.2), new V(0, 0.022, -0.255), new V(0, 0.05, -0.278),
+      new V(0, 0.079, -0.27), new V(0, 0.094, -0.245), new V(0, 0.088, -0.218), new V(0, 0.072, -0.207),
+    ], false, 'catmullrom', 0.4);
+    const pts = path.getSpacedPoints(120);
+    const part = (a, b) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.slice(a, b + 1)), 40, 0.0105, 6, false);
+    const lower = part(0, 26), middle = part(26, 72), upper = part(72, 116);
+    // flat chisel blade at the bottom
+    const chisel = new THREE.BoxGeometry(0.026, 0.006, 0.03); chisel.rotateX(-0.35); chisel.translate(0, -0.03, 0.172);
+    // forked claw tip at the end of the curl
+    const end = pts[118], prev = pts[110];
+    const dir = end.clone().sub(prev).normalize();
+    const fork = (side) => {
+      const g = new THREE.BoxGeometry(0.008, 0.006, 0.026);
+      const q = new THREE.Quaternion().setFromUnitVectors(new V(0, 0, 1), dir);
+      g.applyQuaternion(q);
+      g.translate(end.x + side * 0.007, end.y + dir.y * 0.012, end.z + dir.z * 0.012);
+      return g;
+    };
+    CROWBAR_GEO = { lower, middle, upper, chisel, forkL: fork(-1), forkR: fork(1) };
   }
   const G2 = CROWBAR_GEO;
   const g = new THREE.Group();
-  const paint = shared('crowbarPaint', () => new THREE.MeshLambertMaterial({ color: 0x8c1d16 }));
-  const steel = shared('crowbarSteel', () => new THREE.MeshLambertMaterial({ color: 0x6d7076 }));
-  g.add(new THREE.Mesh(G2.bar, paint), new THREE.Mesh(G2.hook, paint), new THREE.Mesh(G2.claw, steel), new THREE.Mesh(G2.chisel, steel));
+  const red = shared('crowbarRed', () => new THREE.MeshPhongMaterial({ color: 0x9e120c, shininess: 40, specular: 0x442020 }));
+  const chrome = shared('crowbarChrome', () => new THREE.MeshPhongMaterial({ color: 0x7c828b, shininess: 70, specular: 0xd8dce2 }));
+  g.add(new THREE.Mesh(G2.middle, red), new THREE.Mesh(G2.lower, chrome), new THREE.Mesh(G2.upper, chrome),
+    new THREE.Mesh(G2.chisel, chrome), new THREE.Mesh(G2.forkL, chrome), new THREE.Mesh(G2.forkR, chrome));
   return g;
 }
 

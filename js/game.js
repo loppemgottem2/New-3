@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=280';
-import { CONFIG } from './config.js?v=280';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=280';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=280';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=280';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=280';
-import { Ragdoll } from './ragdoll.js?v=280';
-import { Audio } from './audio.js?v=280';
-import { initBrain, updateBots } from './bots.js?v=280';
+import * as THREE from '../vendor/three.module.min.js?v=290';
+import { CONFIG } from './config.js?v=290';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=290';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=290';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=290';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=290';
+import { Ragdoll } from './ragdoll.js?v=290';
+import { Audio } from './audio.js?v=290';
+import { initBrain, updateBots } from './bots.js?v=290';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -490,7 +490,9 @@ export class Game {
       this.items.set(id, {
         id, type: tw === 3 ? 'crowbar' : 'knife', flying: true, owner: c.id,
         x: c.x + d.x * 0.5, y: c.y + P.EYE - 0.1, z: c.z + d.z * 0.5,
-        vx: d.x * W.KNIFE_THROW_SPEED + c.vx * 0.5, vy: d.y * W.KNIFE_THROW_SPEED + 1, vz: d.z * W.KNIFE_THROW_SPEED + c.vz * 0.5,
+        vx: d.x * (tw === 3 ? W.CROWBAR_THROW_SPEED : W.KNIFE_THROW_SPEED) + c.vx * 0.5,
+        vy: d.y * (tw === 3 ? W.CROWBAR_THROW_SPEED : W.KNIFE_THROW_SPEED) + (tw === 3 ? 2 : 1),
+        vz: d.z * (tw === 3 ? W.CROWBAR_THROW_SPEED : W.KNIFE_THROW_SPEED) + c.vz * 0.5,
       });
       this.emit({ e: 'throw', id: c.id });
     }
@@ -578,8 +580,8 @@ export class Game {
   }
 
   // host: a prop player was hit -> blood splatters on the surfaces around (more / bigger / farther for gunshots)
-  bleed(target, p, d, gun) {
-    this.emit({ e: 'blood', id: target.id, p: [r2(p.x), r2(p.y), r2(p.z)], d: [r2(d.x), r2(d.y), r2(d.z)], g: gun ? 1 : 0 });
+  bleed(target, p, d, gun, w = 's') {
+    this.emit({ e: 'blood', id: target.id, w, p: [r2(p.x), r2(p.y), r2(p.z)], d: [r2(d.x), r2(d.y), r2(d.z)], g: gun ? 1 : 0 });
   }
 
   addDecal(tex, p, n, w, h, life, prop = null, parentObj = null) {
@@ -608,6 +610,53 @@ export class Game {
     while (this.decals.length > MAX_DECALS) this.removeDecal(this.decals.shift());
   }
   removeDecal(dc) { dc.m.parent?.remove(dc.m); dc.m.material.dispose(); }
+
+  // Blood drops bursting out of a hit prop and falling (more for gunshots); they fade after a moment
+  bloodBurst(p, d, gun) {
+    if (!this._dropTex) {
+      const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+      const g = x.createRadialGradient(28, 28, 2, 32, 32, 30);
+      g.addColorStop(0, 'rgba(150,20,16,1)'); g.addColorStop(0.45, 'rgba(95,8,6,1)'); g.addColorStop(0.8, 'rgba(60,3,3,0.9)'); g.addColorStop(1, 'rgba(50,2,2,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(32, 32, 30, 0, Math.PI * 2); x.fill();
+      this._dropTex = new THREE.CanvasTexture(c); this._dropTex.colorSpace = THREE.SRGBColorSpace;
+    }
+    const n = gun ? 46 : 18;
+    const pos = new Float32Array(n * 3), vel = [];
+    for (let i = 0; i < n; i++) {
+      pos.set([p.x, p.y, p.z], i * 3);
+      // sprayed out of the hit, mostly onward in the direction of the hit, then gravity pulls them down
+      const sp = gun ? rand(2.5, 7) : rand(1.2, 3.5);
+      let vx = d.x * sp * 0.7 + (Math.random() - 0.5) * sp, vy = Math.random() * sp * 0.6 + 0.5, vz = d.z * sp * 0.7 + (Math.random() - 0.5) * sp;
+      vel.push([vx, vy, vz]);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const l = this.map.probe(p.x, p.z, true, [0, 0, 0]), lum = Math.min(1.2, 0.3 * l[0] + 0.55 * l[1] + 0.15 * l[2]);
+    const mat = new THREE.PointsMaterial({ map: this._dropTex, size: gun ? 0.15 : 0.12, transparent: true, depthWrite: false, sizeAttenuation: true, opacity: 1, alphaTest: 0.05 });
+    mat.color.setRGB(lum, lum, lum);
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    this.root.add(pts);
+    (this.bursts || (this.bursts = [])).push({ pts, vel, life: gun ? 1.6 : 1.2, max: gun ? 1.6 : 1.2, ground: groundHeight(this.map, p.x, p.z, 0.1, p.y) });
+  }
+
+  updateBursts(dt) {
+    if (!this.bursts) return;
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const b = this.bursts[i];
+      b.life -= dt;
+      if (b.life <= 0) { this.root.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); this.bursts.splice(i, 1); continue; }
+      const a = b.pts.geometry.attributes.position, arr = a.array;
+      for (let k = 0; k < b.vel.length; k++) {
+        const v = b.vel[k];
+        if (arr[k * 3 + 1] <= b.ground + 0.01) continue;           // landed on the floor
+        v[1] -= 14 * dt;
+        arr[k * 3] += v[0] * dt; arr[k * 3 + 1] = Math.max(b.ground + 0.01, arr[k * 3 + 1] + v[1] * dt); arr[k * 3 + 2] += v[2] * dt;
+      }
+      a.needsUpdate = true;
+      b.pts.material.opacity = Math.min(1, b.life / (b.max * 0.4));
+    }
+  }
 
   // A ray against the people standing around (excluding `skip`): body part hit + surface normal
   rayChars(p, dir, maxT, skip) {
@@ -638,15 +687,17 @@ export class Game {
   }
 
   // client: splash blood onto nearby walls / floor / furniture / people (and a wound on the one who was hit)
-  spawnBlood(p, d, gun, victim = null) {
+  spawnBlood(p, d, gun, victim = null, w = 's') {
     const T = this.T, n = gun ? 10 : 5, range = gun ? 4.5 : 1.8;
-    // the wound: blood on the hit player's own body / furniture shape where the hit landed
+    // the prop that was hit gets the weapon's own mark where it was hit (bullet hole / knife cut / crowbar scratches)
     if (victim) {
       const back = { x: p.x - d.x * 1.2, y: p.y - d.y * 1.2, z: p.z - d.z * 1.2 };
       const own = this.rayChars(back, d, 2.4, null);
       if (own) {
-        const sz = gun ? rand(0.35, 0.5) : rand(0.25, 0.4);
-        this.addDecal(T.blood[(Math.random() * T.blood.length) | 0], { x: back.x + d.x * own.t, y: back.y + d.y * own.t, z: back.z + d.z * own.t }, own.n, sz, sz, rand(35, 45), null, own.obj);
+        const hp = { x: back.x + d.x * own.t, y: back.y + d.y * own.t, z: back.z + d.z * own.t };
+        if (w === 'b') this.addDecal(T.bulletHole, hp, own.n, 0.1, 0.1, 30, null, own.obj);
+        else if (w === 'c') { const sz = rand(0.22, 0.32); this.addDecal(T.scratch[(Math.random() * T.scratch.length) | 0], hp, own.n, sz, sz, 30, null, own.obj); }
+        else { const sz = rand(0.26, 0.4); this.addDecal(T.slash[(Math.random() * T.slash.length) | 0], hp, own.n, sz, sz * 0.25, 30, null, own.obj); }
       }
     }
     for (let i = 0; i < n; i++) {
@@ -664,7 +715,7 @@ export class Game {
       if (t >= range) continue;
       const hp = { x: p.x + dir.x * t, y: p.y + dir.y * t, z: p.z + dir.z * t };
       const nrm = pc ? pc.n : ph ? ph.normal : this.mapNormal(hp, dir);
-      let size = (gun ? rand(0.6, 1.35) : rand(0.32, 0.7)) * (0.8 + Math.min(1, t / range) * 0.5);
+      let size = (gun ? rand(0.85, 1.7) : rand(0.32, 0.7)) * (0.8 + Math.min(1, t / range) * 0.5);
       if (pc) size *= 0.45;                        // smaller on a body
       const set = gun && i > 0 ? T.bloodSpray : T.blood;
       this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, rand(35, 45), pc ? null : ph ? ph.prop : null, pc ? pc.obj : null);
@@ -688,9 +739,9 @@ export class Game {
       c.slashT = 0;
       const d = Math.hypot(best.x - c.x, best.z - c.z) || 1;
       const hy = best.y + (best.disguise ? (best.shapeH || 0.5) * 0.6 : 1.2);
-      this.bleed(best, { x: best.x, y: hy, z: best.z }, { x: (best.x - c.x) / d, y: 0, z: (best.z - c.z) / d }, false);
-      c.lastMeleeCause = weaponOf(c) === 3 ? 'crowbar' : 'knife';
-      this.damage(best, c, W.KNIFE_DAMAGE, 'knife', { x: ((best.x - c.x) / d) * 3, y: 0.5, z: ((best.z - c.z) / d) * 3 });
+      const crow = weaponOf(c) === 3;
+      this.bleed(best, { x: best.x, y: hy, z: best.z }, { x: (best.x - c.x) / d, y: 0, z: (best.z - c.z) / d }, false, crow ? 'c' : 's');
+      this.damage(best, c, crow ? W.CROWBAR_DAMAGE : W.KNIFE_DAMAGE, 'knife', { x: ((best.x - c.x) / d) * 3, y: 0.5, z: ((best.z - c.z) / d) * 3 });
       return true;
     }
     return false;
@@ -716,7 +767,7 @@ export class Game {
     }
     this.emit({ e: 'shot', id: c.id, f: [r2(ox), r2(oy - 0.15), r2(oz)], t: [r2(ox + d.x * ht), r2(oy + d.y * ht), r2(oz + d.z * ht)] });
     const end = { x: ox + d.x * ht, y: oy + d.y * ht, z: oz + d.z * ht };
-    if (hit) { this.bleed(hit, end, d, true); this.damage(hit, c, W.GUN_DAMAGE, 'gun', { x: d.x * 7, y: d.y * 7 + 1, z: d.z * 7 }); }
+    if (hit) { this.bleed(hit, end, d, true, 'b'); this.damage(hit, c, W.GUN_DAMAGE, 'gun', { x: d.x * 7, y: d.y * 7 + 1, z: d.z * 7 }); }
     else if (ph) { this.markImpact('b', ph.point, ph.normal, ph.prop.id); this.wrongProp(c); }
     else if (ht < W.GUN_RANGE) this.markImpact('b', end, this.mapNormal(end, d));
     return hit;
@@ -748,7 +799,7 @@ export class Game {
       const steps = 3;
       for (let s = 0; s < steps && it.flying; s++) {
         const h = dt / steps;
-        it.vy -= 9 * h;
+        it.vy -= (it.type === 'crowbar' ? W.CROWBAR_GRAVITY : 9) * h;     // the crowbar is heavier
         const sp = Math.hypot(it.vx, it.vy, it.vz) || 1;
         const dx = it.vx / sp, dy = it.vy / sp, dz = it.vz / sp;
         const len = sp * h;
@@ -774,8 +825,8 @@ export class Game {
           break;
         }
         if (hit) {
-          this.bleed(hit, { x: it.x + dx * ht, y: it.y + dy * ht, z: it.z + dz * ht }, { x: dx, y: dy, z: dz }, false);
-          this.damage(hit, owner || null, W.THROW_DAMAGE, 'knife', { x: dx * 5, y: 1, z: dz * 5 });
+          this.bleed(hit, { x: it.x + dx * ht, y: it.y + dy * ht, z: it.z + dz * ht }, { x: dx, y: dy, z: dz }, false, it.type === 'crowbar' ? 'c' : 's');
+          this.damage(hit, owner || null, it.type === 'crowbar' ? W.CROWBAR_THROW_DAMAGE : W.THROW_DAMAGE, 'knife', { x: dx * 5, y: 1, z: dz * 5 });
           it.flying = false;
           it.x = hit.x; it.z = hit.z; it.y = groundHeight(this.map, it.x, it.z, 0.1, hit.y + 0.5) + 0.05;
           break;
@@ -897,6 +948,8 @@ export class Game {
         this.tracers = [];
         for (const dc of this.decals) this.removeDecal(dc);
         this.decals = [];
+        for (const b of this.bursts || []) { this.root.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); }
+        this.bursts = [];
         if (!this.isHost) this.items.clear();
         for (const c of this.chars.values()) { c.disguise = null; this.setDisguiseMesh(c, null); }
         this.specId = null;
@@ -979,7 +1032,12 @@ export class Game {
         else { const sz = rand(0.32, 0.5); this.addDecal(this.T.slash[(Math.random() * this.T.slash.length) | 0], p, n, sz, sz * 0.25, 30, prop); }
         break;
       }
-      case 'blood': this.spawnBlood({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }, { x: ev.d[0], y: ev.d[1], z: ev.d[2] }, !!ev.g, this.chars.get(ev.id)); break;
+      case 'blood': {
+        const bp = { x: ev.p[0], y: ev.p[1], z: ev.p[2] }, bd = { x: ev.d[0], y: ev.d[1], z: ev.d[2] };
+        this.spawnBlood(bp, bd, !!ev.g, this.chars.get(ev.id), ev.w || (ev.g ? 'b' : 's'));
+        this.bloodBurst(bp, bd, !!ev.g);
+        break;
+      }
       case 'hit': Audio.thud({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }); break;
       case 'shot': {
         this.addTracer(ev.f, ev.t);
@@ -1423,6 +1481,7 @@ export class Game {
 
     for (const rd of this.ragdolls.values()) rd.update(dt);
     this.props.render(dt, lampsDyn);
+    this.updateBursts(dt);
     // marks fade out over their last 4 seconds
     for (let i = this.decals.length - 1; i >= 0; i--) {
       const dc = this.decals[i];

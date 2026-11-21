@@ -86,6 +86,10 @@ export const CONFIG = {
     KNIFE_DAMAGE: 50,           // damage to props (seekers' health is only lost by hitting real furniture)
     GUN_DAMAGE: 75,
     THROW_DAMAGE: 75,           // a thrown knife
+    CROWBAR_DAMAGE: 60,         // a crowbar hit (a bit more than the knife)
+    CROWBAR_THROW_DAMAGE: 110,  // a thrown crowbar is heavy: hits harder...
+    CROWBAR_THROW_SPEED: 17,    // ...but flies slower
+    CROWBAR_GRAVITY: 16,        // ...and drops faster (thrown knife: 9)
   },
 
   // ---------------- Bots ----------------
