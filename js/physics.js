@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=220';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=220';
+import { CONFIG } from './config.js?v=230';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=230';
 
 const P = CONFIG.PLAYER;
 
@@ -129,9 +129,13 @@ export function moveCharacter(ch, input, dt, map) {
 
   // jump buffer: a press shortly before landing still jumps the moment you touch down
   ch.jumpBuf = input.jump ? 0.15 : Math.max(0, (ch.jumpBuf || 0) - dt);
-  if (ch.jumpBuf > 0 && ch.onGround) {
+  // props can climb walls: pushing into a wall in the air, each jump kicks you higher (up to a limit)
+  if (ch.wallJumpT > 0) ch.wallJumpT -= dt;
+  const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0) && ch.y < P.WALL_CLIMB_MAX;
+  if (ch.jumpBuf > 0 && (ch.onGround || wallJump)) {
+    if (!ch.onGround) ch.wallJumpT = 0.3;
     ch.jumpBuf = 0;
-    ch.vy = P.JUMP_SPEED; ch.onGround = false; ch.jumped = true;
+    ch.vy = ch.onGround ? P.JUMP_SPEED : P.JUMP_SPEED * 0.85; ch.onGround = false; ch.jumped = true;
     // small forward boost when jumping while running (momentum)
     const sp = Math.hypot(ch.vx, ch.vz);
     if (sp > 1 && run) { const k = Math.min(P.MAX_SPEED, sp + P.JUMP_BOOST) / sp; ch.vx *= k; ch.vz *= k; }
@@ -153,6 +157,11 @@ export function moveCharacter(ch, input, dt, map) {
     pos.x += (ch.vx * dt) / n; pos.z += (ch.vz * dt) / n;
     resolveWalls(map, pos, r, ch.y);
   }
+  // touching a wall while pushing into it (used for props sticking to / climbing walls)
+  if (dt > 0 && moving) {
+    const bx = ch.vx * dt - (pos.x - ch.x), bz = ch.vz * dt - (pos.z - ch.z);    // the part of the move the wall blocked
+    ch.onWall = Math.hypot(bx, bz) > 0.002 && (bx * wx + bz * wz) > 0;
+  } else ch.onWall = false;
   // Kill the part of the velocity that went into a wall (so you slide along it)
   if (dt > 0) {
     const realVx = (pos.x - ch.x) / dt, realVz = (pos.z - ch.z) / dt;
@@ -164,6 +173,8 @@ export function moveCharacter(ch, input, dt, map) {
   // Vertical
   const prevY = ch.y;
   const wasGround = ch.onGround;
+  // friction against the wall: a prop pushing into a wall slides down slowly instead of falling
+  if (input.wallClimb && ch.onWall && !ch.onGround && ch.vy < -P.WALL_SLIDE) ch.vy = -P.WALL_SLIDE;
   ch.y += ch.vy * dt;
   // auto step-up onto ledges only when walking or falling, never while rising in a jump
   // (so jumping into a table bumps/pushes it instead of snapping you up on top)

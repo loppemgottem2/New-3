@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=220';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=220';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=220';
+import { CONFIG } from './config.js?v=230';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=230';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=230';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -287,7 +287,7 @@ function act(game, c, b, dt) {
       const off = (1 - b.skill) * 0.8;
       b.trk = { key, x: realX + rand(-off, off), y: realY + rand(-off, off) * 0.5, z: realZ + rand(-off, off), vx: 0, vy: 0, vz: 0, jerk: 0 };
     }
-    const tk = b.trk, follow = 1 - Math.exp(-(0.8 + 3.0 * b.skill) * dt);
+    const tk = b.trk, follow = 1 - Math.exp(-(2.0 + 4.0 * b.skill) * dt);
     tk.x += (realX - tk.x) * follow; tk.y += (realY - tk.y) * follow; tk.z += (realZ - tk.z) * follow;
     if (target && !tp) {
       // how unpredictable the target is: sudden changes of speed / direction / jumping
@@ -328,10 +328,11 @@ function act(game, c, b, dt) {
         // the more erratic it is, and now and then just by bad luck (less often for skilled bots)
         let spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 25) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);
         if (target && !tp) {
-          spread *= 1 + (target.speed || 0) * (0.45 - 0.2 * b.skill);                      // moving target
-          spread *= 1 + Math.min(6, b.trk.jerk * 0.35) * (1.2 - 0.85 * b.skill);              // jumping / zig-zagging
+          const fast = Math.max(0, (target.speed || 0) - 3) / 3.6;                           // 0 at walking, 1 at full sprint, more when faster
+          spread *= 1 + fast * fast * (1.6 - 0.6 * b.skill);                                  // mainly really fast targets
+          spread *= 1 + Math.min(2.5, b.trk.jerk * 0.12) * (1 - 0.6 * b.skill);              // jumping / zig-zagging
         }
-        if (Math.random() < 0.2 - 0.12 * b.skill) spread *= rand(2, 3.5);                 // a bad shot
+        if (Math.random() < 0.08 - 0.05 * b.skill) spread *= rand(1.6, 2.4);              // an occasional bad shot
         game.gunAttack(c, spread); b.shots++;
       }
       if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; c.slot = -1; }   // tested it, move on

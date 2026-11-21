@@ -11,7 +11,7 @@
   <title>Find the Things</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=220">
+  <link rel="stylesheet" href="css/style.css?v=230">
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -98,33 +98,31 @@
 
   <!-- ===================== HELP ===================== -->
   <div id="help" class="screen hidden">
-    <div class="panel wide scroll">
+    <div class="panel wide scroll help-panel">
+      <button id="btn-help-back" class="close-x" title="Close">✕</button>
       <h2>How to play</h2>
-      <h3>Teams</h3>
-      <p>Every round, players are split into Seekers and Props.</p>
-      <p><b style="color:#4af">Props</b> hide by turning into furniture and win if one of them survives until the timer ends.</p>
-      <p><b style="color:#f55">Seekers</b> wait with a black screen while the props hide, then hunt them with a knife and a revolver.</p>
-      <p><b style="color:#f55">Seekers</b> lose 10 health every time they hit real furniture instead of a prop.</p>
-      <p><b style="color:#4af">Props</b> have more health as bigger furniture and less as small things like bottles.</p>
-      <h3>Props</h3>
+      <p>Every round, players are split into Props and Seekers.</p>
+      <h3 style="color:#4af">Props</h3>
       <p>Tap or click any furniture to turn into it, and tap another piece to change.</p>
-      <p>Furniture that moves around gets noticed, so stay still once you are hidden.</p>
-      <p>The anchor button freezes your prop in place and lets you fly the camera around, and pressing it again brings you back.</p>
-      <h3>Seekers</h3>
+      <p>Stay still once you are hidden, because moving furniture gets noticed.</p>
+      <p>Bigger furniture gives you more health and small things like bottles give you less.</p>
+      <p>Run into a wall and keep jumping to climb up it.</p>
+      <p>The anchor button freezes you in place so you can fly the camera around.</p>
+      <p>You win if at least one prop survives until the timer ends.</p>
+      <h3 style="color:#f55">Seekers</h3>
+      <p>You wait with a black screen while the props hide.</p>
       <p>Tap a hotbar slot to hold the knife or revolver, and tap it again to put it away.</p>
-      <p>The backpack button opens your inventory, where you can move items around.</p>
-      <p>You can throw the knife and then walk over it to pick it up again.</p>
+      <p>The backpack button opens your inventory.</p>
+      <p>You can throw the knife and walk over it to pick it up again.</p>
+      <p>Hitting real furniture costs you 10 health.</p>
+      <p>You win when every prop has been found.</p>
       <h3>Camera</h3>
-      <p>Shift lock makes you face where you look and aim with the crosshair in the middle.</p>
-      <p>Without shift lock the camera moves freely and you aim wherever you tap or click.</p>
-      <h3>Phone controls</h3>
-      <p>Use the joystick to move, drag anywhere else to look, and pinch with two fingers to zoom.</p>
-      <h3>Computer controls</h3>
-      <p>WASD to move, mouse to aim, Space to jump, Shift to sprint, L for shift lock, K to anchor, 1 to 5 for the hotbar, I for the inventory, G to throw the knife, Tab for the scoreboard, and Esc for settings.</p>
+      <p>Shift lock makes you face where you look and aim with the crosshair, and without it you aim wherever you tap or click.</p>
+      <h3>Controls</h3>
+      <p>On a phone, use the joystick to move, drag anywhere else to look, and pinch to zoom.</p>
+      <p>On a computer, use WASD, the mouse, Space to jump, Shift to sprint, L for shift lock, K to anchor, 1 to 5 for the hotbar, I for the inventory, G to throw, Tab for the scoreboard and Esc for settings.</p>
       <h3>After you die</h3>
-      <p>You fly around freely, and the arrow button lets you watch other players.</p>
-      <p>The X button takes you back to the main menu.</p>
-      <button id="btn-help-back" class="btn">Back</button>
+      <p>You fly around freely, the arrow button lets you watch other players, and the X button takes you to the main menu.</p>
     </div>
   </div>
 
@@ -220,6 +218,6 @@
   <div id="fps" class="hidden"></div>
 
   <script src="vendor/peerjs.min.js"></script>
-  <script type="module" src="js/main.js?v=220"></script>
+  <script type="module" src="js/main.js?v=230"></script>
 </body>
 </html>
