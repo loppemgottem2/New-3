@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=270';
+import * as THREE from '../vendor/three.module.min.js?v=280';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -101,6 +101,24 @@ function slashTex(seed) {
         const x0 = 16 + t0 * (W - 32), x1 = 16 + t1 * (W - 32);
         ctx.beginPath(); ctx.moveTo(x0, y0 + Math.sin(t0 * Math.PI) * bend); ctx.lineTo(x1, y0 + Math.sin(t1 * Math.PI) * bend); ctx.stroke();
       }
+    }
+  }
+  return decalTex(c);
+}
+
+// crowbar hits: several short rough scratches bunched together in a small area
+function scratchTex(seed) {
+  const S = 128; const [c, ctx] = canvas(S);
+  ctx.lineCap = 'round';
+  const n = 5 + Math.floor(hash(seed, 1, 830) * 4), base = hash(seed, 2, 831) * Math.PI;
+  for (let k = 0; k < n; k++) {
+    const a = base + (hash(seed, k, 832) - 0.5) * 0.7, len = 40 + hash(seed, k, 833) * 50;
+    const cx = S / 2 + (hash(seed, k, 834) - 0.5) * 40, cy = S / 2 + (hash(seed, k, 835) - 0.5) * 40;
+    const x0 = cx - Math.cos(a) * len / 2, y0 = cy - Math.sin(a) * len / 2, x1 = cx + Math.cos(a) * len / 2, y1 = cy + Math.sin(a) * len / 2;
+    for (const [w, col] of [[5, 'rgba(150,140,125,0.35)'], [2.6, 'rgba(70,64,56,0.8)'], [1, 'rgba(15,12,10,0.9)']]) {
+      ctx.strokeStyle = col; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx + (hash(seed, k, 836) - 0.5) * 8, cy + (hash(seed, k, 837) - 0.5) * 8, x1, y1); ctx.stroke();
     }
   }
   return decalTex(c);
@@ -832,6 +850,7 @@ export function makeTextures(renderer, quality = 'medium') {
   T.graffiti = [0, 1, 2, 3, 4].map((i) => graffitiDecal(i + 1));
   T.bulletHole = bulletHoleTex();
   T.slash = [1, 2, 3].map((i) => slashTex(i));
+  T.scratch = [1, 2, 3].map((i) => scratchTex(i));
   T.blood = [1, 2, 3, 4].map((i) => bloodTex(i, false));       // stab / drip splats
   T.bloodSpray = [5, 6, 7, 8].map((i) => bloodTex(i, true));   // gunshot spray
   // two variants of every kind of floor mess

@@ -38,7 +38,7 @@ export const CONFIG = {
   INVENTORY: {
     HOTBAR: 5,              // hotbar slots (keys 1-5)
     BACKPACK: 15,           // extra inventory slots
-    START: ['knife', 'revolver'], // what seekers spawn with (in the hotbar)
+    START: ['knife', 'revolver', 'crowbar'], // what seekers spawn with (in the hotbar)
   },
 
   // ---------------- Player movement / physics ----------------

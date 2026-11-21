@@ -10,8 +10,8 @@
 //   * Add ?local=1 to the URL to use a fake in-browser network
 //     (BroadcastChannel) — handy for testing with two tabs offline.
 // =====================================================================
-import { CONFIG } from './config.js?v=270';
-import { Emitter } from './util.js?v=270';
+import { CONFIG } from './config.js?v=280';
+import { Emitter } from './util.js?v=280';
 
 const params = new URLSearchParams(location.search);
 export const LOCAL_MODE = params.has('local');
