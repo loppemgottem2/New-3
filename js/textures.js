@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=260';
+import * as THREE from '../vendor/three.module.min.js?v=270';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -60,6 +60,97 @@ function tex(c, repeat = true) {
 }
 
 const rnd = (() => { let s = 12345; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
+
+// ======================================================================
+//  Combat decals (transparent): bullet holes, knife cuts, blood splatter
+// ======================================================================
+function decalTex(c) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+
+// a bullet hole: dark hole, torn rim, chipped ring and a few cracks
+function bulletHoleTex() {
+  const S = 128; const [c, ctx] = canvas(S); const m = S / 2;
+  let g = ctx.createRadialGradient(m, m, 0, m, m, m * 0.95);
+  g.addColorStop(0, 'rgba(60,55,50,0.55)'); g.addColorStop(0.45, 'rgba(90,85,78,0.35)'); g.addColorStop(1, 'rgba(90,85,78,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  ctx.strokeStyle = 'rgba(30,28,25,0.6)'; ctx.lineWidth = 1.5;
+  for (let k = 0; k < 7; k++) {
+    const a = rnd() * Math.PI * 2, l = m * (0.35 + rnd() * 0.45);
+    ctx.beginPath(); ctx.moveTo(m, m);
+    ctx.lineTo(m + Math.cos(a) * l * 0.5 + (rnd() - 0.5) * 6, m + Math.sin(a) * l * 0.5 + (rnd() - 0.5) * 6);
+    ctx.lineTo(m + Math.cos(a) * l, m + Math.sin(a) * l); ctx.stroke();
+  }
+  ctx.beginPath();
+  for (let k = 0; k <= 20; k++) { const a = (k / 20) * Math.PI * 2, r = m * (0.2 + rnd() * 0.06); ctx.lineTo(m + Math.cos(a) * r, m + Math.sin(a) * r); }
+  ctx.fillStyle = 'rgba(55,50,45,0.95)'; ctx.fill();
+  g = ctx.createRadialGradient(m, m, 0, m, m, m * 0.15);
+  g.addColorStop(0, 'rgba(5,4,3,1)'); g.addColorStop(1, 'rgba(15,12,10,1)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m, m, m * 0.14, 0, Math.PI * 2); ctx.fill();
+  return decalTex(c);
+}
+
+// a knife cut: a long thin gash with a dark middle and a scuffed edge
+function slashTex(seed) {
+  const W = 256, H = 64; const [c, ctx] = canvas(W, H);
+  for (let k = 0; k < 1 + (seed % 2); k++) {
+    const y0 = H / 2 + (k ? 10 : 0) + (hash(seed, k, 801) - 0.5) * 6, bend = (hash(seed, k, 802) - 0.5) * 14;
+    for (const [w, col] of [[9, 'rgba(120,112,100,0.35)'], [5, 'rgba(60,55,48,0.75)'], [2, 'rgba(10,8,6,0.95)']]) {
+      ctx.strokeStyle = col; ctx.lineCap = 'round';
+      for (let i = 0; i < 40; i++) {
+        const t0 = i / 40, t1 = (i + 1) / 40, taper = Math.sin(Math.PI * t0);
+        ctx.lineWidth = Math.max(0.5, w * taper * (k ? 0.6 : 1));
+        const x0 = 16 + t0 * (W - 32), x1 = 16 + t1 * (W - 32);
+        ctx.beginPath(); ctx.moveTo(x0, y0 + Math.sin(t0 * Math.PI) * bend); ctx.lineTo(x1, y0 + Math.sin(t1 * Math.PI) * bend); ctx.stroke();
+      }
+    }
+  }
+  return decalTex(c);
+}
+
+// realistic dark red blood splatter: a soaked main blob with ragged edges, satellite drops,
+// thin flicked streaks (more of them for "spray" kinds, from gunshots) and darker drying edges
+function bloodTex(seed, spray) {
+  const S = 256; const [c, ctx] = canvas(S); const m = S / 2;
+  const H = (k, salt) => hash(seed, k, salt);
+  const blob = (x, y, r, alpha, n = 18) => {
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2, rr = r * (0.72 + H(i + x, 900 + y) * 0.5);
+      i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.1);
+    g.addColorStop(0, `rgba(70,4,4,${alpha})`); g.addColorStop(0.7, `rgba(95,8,6,${alpha})`); g.addColorStop(1, `rgba(45,2,2,${alpha * 0.9})`);
+    ctx.fillStyle = g; ctx.fill();
+  };
+  const ang = H(1, 910) * Math.PI * 2;                  // main direction of the spray
+  // main soaked area (a few overlapping blobs)
+  const mainR = spray ? 30 + H(2, 911) * 16 : 40 + H(2, 911) * 22;
+  for (let k = 0; k < 5; k++) blob(m + (H(k, 912) - 0.5) * mainR * 0.8, m + (H(k, 913) - 0.5) * mainR * 0.8, mainR * (0.45 + H(k, 914) * 0.45), 0.92);
+  // streaks flung outward in the spray direction
+  const streaks = spray ? 14 : 5;
+  for (let k = 0; k < streaks; k++) {
+    const a = ang + (H(k, 915) - 0.5) * (spray ? 1.6 : 6.28), len = mainR * (0.8 + H(k, 916) * (spray ? 2.2 : 1.1));
+    const w = 1.5 + H(k, 917) * (spray ? 4 : 3);
+    ctx.strokeStyle = 'rgba(80,6,5,0.88)'; ctx.lineCap = 'round'; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(m + Math.cos(a) * mainR * 0.4, m + Math.sin(a) * mainR * 0.4);
+    ctx.lineTo(m + Math.cos(a) * len, m + Math.sin(a) * len); ctx.stroke();
+    blob(m + Math.cos(a) * len, m + Math.sin(a) * len, w * 1.3, 0.92, 10);       // drop at the end of the streak
+  }
+  // satellite droplets
+  const drops = spray ? 40 : 18;
+  for (let k = 0; k < drops; k++) {
+    const a = (spray && k % 3 ? ang + (H(k, 918) - 0.5) * 1.8 : H(k, 919) * 6.28), dd = mainR * (0.9 + H(k, 920) * (spray ? 2.4 : 1.4));
+    const x = m + Math.cos(a) * dd, y = m + Math.sin(a) * dd;
+    if (x < 6 || y < 6 || x > S - 6 || y > S - 6) continue;
+    blob(x, y, 1.2 + H(k, 921) * (spray ? 4 : 5), 0.9, 8);
+  }
+  // wet sheen in the middle
+  const g = ctx.createRadialGradient(m - mainR * 0.2, m - mainR * 0.25, 0, m - mainR * 0.2, m - mainR * 0.25, mainR * 0.5);
+  g.addColorStop(0, 'rgba(160,30,25,0.18)'); g.addColorStop(1, 'rgba(160,30,25,0)');
+  ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  ctx.globalCompositeOperation = 'source-over';
+  return decalTex(c);
+}
 
 // ======================================================================
 //  Surfaces
@@ -739,6 +830,10 @@ export function makeTextures(renderer, quality = 'medium') {
   T.pillar = tex(pillar(256));
   T.floorDirty = tex(floorDirty(S));
   T.graffiti = [0, 1, 2, 3, 4].map((i) => graffitiDecal(i + 1));
+  T.bulletHole = bulletHoleTex();
+  T.slash = [1, 2, 3].map((i) => slashTex(i));
+  T.blood = [1, 2, 3, 4].map((i) => bloodTex(i, false));       // stab / drip splats
+  T.bloodSpray = [5, 6, 7, 8].map((i) => bloodTex(i, true));   // gunshot spray
   // two variants of every kind of floor mess
   T.floorDecals = {};
   for (const k of DECAL_KINDS) T.floorDecals[k] = [floorDecal(k, 11), floorDecal(k, 12)];

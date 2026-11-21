@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=260';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=260';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=260';
+import { CONFIG } from './config.js?v=270';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=270';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=270';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -218,7 +218,7 @@ function thinkSeeker(game, c, b) {
   if (b.state === 'engage') {
     const t = game.chars.get(b.targetId);
     if (b.targetProp) return;                                  // finishing a furniture test
-    if (!t || !t.alive || (b.susp.get(t.id) || 0) < 60) { b.state = 'wander'; b.targetId = null; c.slot = -1; }
+    if (!t || !t.alive || (b.susp.get(t.id) || 0) < 60) { b.state = 'wander'; b.targetId = null; }
     return;
   }
 
@@ -335,7 +335,7 @@ function act(game, c, b, dt) {
         if (Math.random() < 0.08 - 0.05 * b.skill) spread *= rand(1.6, 2.4);              // an occasional bad shot
         game.gunAttack(c, spread); b.shots++;
       }
-      if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; c.slot = -1; }   // tested it, move on
+      if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; }   // tested it, move on
     }
     // positioning: get closer if far / no sight
     if (!visible || blocked || d > 14) {
@@ -349,7 +349,7 @@ function act(game, c, b, dt) {
     } else b.path = null;
     // give up on a furniture test that takes too long
     b.engageT = (b.engageT || 0) + dt;
-    if (b.engageT > 8) { b.engageT = 0; b.state = 'wander'; b.targetProp = null; b.targetId = null; c.slot = -1; }
+    if (b.engageT > 8) { b.engageT = 0; b.state = 'wander'; b.targetProp = null; b.targetId = null; }
   } else {
     b.engageT = 0;
     const v = followPath(game, c, b);
