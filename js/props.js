@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=300';
-import { CONFIG } from './config.js?v=300';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=300';
+import * as THREE from '../vendor/three.module.min.js?v=310';
+import { CONFIG } from './config.js?v=310';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=310';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -557,7 +557,7 @@ export class PropSystem {
 
   // Ray vs every part box. Returns {prop, t, point} of the nearest hit or null.
   raycast(ox, oy, oz, dx, dy, dz, maxT) {
-    let best = null, bt = maxT, bestN = null;
+    let best = null, bt = maxT, bestN = null, bestPart = null, bestAxis = null;
     const o = new V(ox, oy, oz), d = new V(dx, dy, dz), lo = new V(), ld = new V();
     for (const p of this.list) {
       // bounding sphere test
@@ -575,11 +575,12 @@ export class PropSystem {
           const hx = (lo.x + ld.x * t) / part.h.x, hy = (lo.y + ld.y * t) / part.h.y, hz = (lo.z + ld.z * t) / part.h.z;
           const ax = Math.abs(hx), ay = Math.abs(hy), az = Math.abs(hz);
           bestN = ax >= ay && ax >= az ? new V(Math.sign(hx), 0, 0) : ay >= az ? new V(0, Math.sign(hy), 0) : new V(0, 0, Math.sign(hz));
+          bestPart = part; bestAxis = ax >= ay && ax >= az ? 'x' : ay >= az ? 'y' : 'z';
           bestN.applyQuaternion(part.q).applyQuaternion(p.quat);
         }
       }
     }
-    return best ? { prop: best, t: bt, point: new V(ox + dx * bt, oy + dy * bt, oz + dz * bt), normal: bestN } : null;
+    return best ? { prop: best, t: bt, point: new V(ox + dx * bt, oy + dy * bt, oz + dz * bt), normal: bestN, part: bestPart, axis: bestAxis } : null;
   }
 
   // Ragdoll joints: push a sphere out of any prop part. Returns true if it rests on top of something.

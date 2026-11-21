@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=300';
+import * as THREE from '../vendor/three.module.min.js?v=310';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -167,6 +167,51 @@ function bloodTex(seed, spray) {
   g.addColorStop(0, 'rgba(160,30,25,0.18)'); g.addColorStop(1, 'rgba(160,30,25,0)');
   ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
   ctx.globalCompositeOperation = 'source-over';
+  return decalTex(c);
+}
+
+// a few round drops of blood (where falling drops land): no streaks
+function bloodDropTex(seed) {
+  const S = 128; const [c, ctx] = canvas(S); const m = S / 2;
+  const drop = (x, y, r) => {
+    ctx.beginPath();
+    for (let i = 0; i <= 14; i++) { const a = (i / 14) * Math.PI * 2, rr = r * (0.88 + hash(seed, i + x, 940) * 0.22); i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+    ctx.closePath();
+    const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.25, 0, x, y, r);
+    g.addColorStop(0, 'rgba(120,14,10,0.95)'); g.addColorStop(0.6, 'rgba(85,6,5,0.95)'); g.addColorStop(1, 'rgba(50,2,2,0.95)');
+    ctx.fillStyle = g; ctx.fill();
+  };
+  drop(m, m, 16 + hash(seed, 1, 941) * 12);
+  for (let k = 0; k < 4 + (seed % 4); k++) {
+    const a = hash(seed, k, 942) * 6.28, d = 24 + hash(seed, k, 943) * 30;
+    drop(m + Math.cos(a) * d, m + Math.sin(a) * d, 2 + hash(seed, k, 944) * 5);
+  }
+  return decalTex(c);
+}
+
+// a large, smooth pool of blood: dark, thick, glossy, with soft round lobes
+function bloodPoolTex(seed) {
+  const S = 256; const [c, ctx] = canvas(S); const m = S / 2;
+  ctx.beginPath();
+  const n = 40;
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const r = m * (0.62 + 0.14 * Math.sin(a * 3 + hash(seed, 1, 950) * 6) + 0.08 * Math.sin(a * 5 + hash(seed, 2, 951) * 6) + 0.05 * Math.sin(a * 9));
+    i ? ctx.lineTo(m + Math.cos(a) * r, m + Math.sin(a) * r) : ctx.moveTo(m + Math.cos(a) * r, m + Math.sin(a) * r);
+  }
+  ctx.closePath();
+  let g = ctx.createRadialGradient(m, m, 0, m, m, m * 0.85);
+  g.addColorStop(0, 'rgba(70,3,3,0.96)'); g.addColorStop(0.75, 'rgba(85,6,5,0.95)'); g.addColorStop(1, 'rgba(40,1,1,0.9)');
+  ctx.fillStyle = g; ctx.fill();
+  // a few separate little puddles around the edge
+  for (let k = 0; k < 6; k++) {
+    const a = hash(seed, k, 952) * 6.28, d = m * (0.72 + hash(seed, k, 953) * 0.18), r = 4 + hash(seed, k, 954) * 9;
+    ctx.beginPath(); ctx.arc(m + Math.cos(a) * d, m + Math.sin(a) * d, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(75,4,4,0.95)'; ctx.fill();
+  }
+  // glossy wet highlight
+  g = ctx.createRadialGradient(m - 30, m - 34, 0, m - 30, m - 34, m * 0.45);
+  g.addColorStop(0, 'rgba(190,60,50,0.22)'); g.addColorStop(1, 'rgba(190,60,50,0)');
+  ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); ctx.globalCompositeOperation = 'source-over';
   return decalTex(c);
 }
 
@@ -853,6 +898,8 @@ export function makeTextures(renderer, quality = 'medium') {
   T.scratch = [1, 2, 3].map((i) => scratchTex(i));
   T.blood = [1, 2, 3, 4].map((i) => bloodTex(i, false));       // stab / drip splats
   T.bloodSpray = [5, 6, 7, 8].map((i) => bloodTex(i, true));   // gunshot spray
+  T.bloodDrop = [1, 2, 3, 4].map((i) => bloodDropTex(i));      // where falling drops land
+  T.bloodPool = [1, 2, 3].map((i) => bloodPoolTex(i));         // big pools on the floor
   // two variants of every kind of floor mess
   T.floorDecals = {};
   for (const k of DECAL_KINDS) T.floorDecals[k] = [floorDecal(k, 11), floorDecal(k, 12)];
