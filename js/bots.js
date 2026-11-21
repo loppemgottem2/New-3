@@ -11,9 +11,9 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=400';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=400';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=400';
+import { CONFIG } from './config.js?v=420';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=420';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=420';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -76,7 +76,21 @@ function setPath(game, c, b, gx, gz) {
   if (!b.path) b.goal = null;
 }
 
+// A STILL prop (not moving and not turning, or anchored) only gets suspected sometimes: each seeker rolls
+// once in a while whether it finds that piece of furniture suspicious. If not, it ignores it and walks around it.
+const STILL_AFTER = 1.0;                 // seconds without moving / turning before a prop counts as still
+const SUSPECT_STILL = (skill) => 0.2 + 0.25 * skill;   // chance a seeker finds a still prop suspicious
+const REROLL = [8, 16];                  // seconds until a seeker makes up its mind again about the same prop
+export function isStill(o) { return o.anchored || (o.stillT || 0) >= STILL_AFTER; }
+
 export function updateBots(game, dt) {
+  // how long every disguised prop has been perfectly still (no moving, no turning; anchored counts as still)
+  for (const o of game.chars.values()) {
+    if (o.team !== 'prop' || !o.alive) { o.stillT = 0; continue; }
+    const turned = o._lastYaw !== undefined && Math.abs(angleDiff(o.yaw, o._lastYaw)) > 0.01;
+    o._lastYaw = o.yaw;
+    if (o.anchored || ((o.speed || 0) < 0.15 && !turned)) o.stillT = (o.stillT || 0) + dt; else o.stillT = 0;
+  }
   for (const c of game.chars.values()) {
     if (!c.isBot || !c.alive || !c.brain) continue;
     const b = c.brain;
@@ -203,8 +217,8 @@ function thinkSeeker(game, c, b) {
       b.susp.set(o.id, 100);
     } else {
       let s = b.susp.get(o.id) || 0;
-      if (o.speed > 0.4) s += B.MOVE_SUSPICION * I * (0.4 + b.skill);              // furniture that moves!
-      else if (d < B.CHECK_RANGE) s += B.STARE_SUSPICION * I * (0.2 + b.skill);   // "that chair wasn't there before…"
+      if (!isStill(o)) s += B.MOVE_SUSPICION * I * (0.4 + b.skill);               // furniture that moves or turns!
+      else if (d < B.CHECK_RANGE && suspects(b, o)) s += B.STARE_SUSPICION * I * (0.2 + b.skill);   // "that chair wasn't there before…"
       b.susp.set(o.id, Math.min(100, s));
     }
     if ((b.susp.get(o.id) || 0) >= 100 && d < sd) { sd = d; spotted = o; }
@@ -232,6 +246,7 @@ function thinkSeeker(game, c, b) {
     }
     for (const o of game.chars.values()) {
       if (!o.alive || o.team !== 'prop' || !o.disguise) continue;
+      if (isStill(o) && !suspects(b, o)) continue;               // a still prop it isn't suspicious of: leave it alone
       const d = Math.hypot(o.x - c.x, o.z - c.z);
       if (d < B.CHECK_RANGE && canSee(game, c, o)) cands.push({ ch: o, w: 1 + 6 * b.skill * b.skill });
     }
@@ -245,6 +260,15 @@ function thinkSeeker(game, c, b) {
     }
   }
   wanderThink(game, c, b);
+}
+
+// does this seeker find that still prop suspicious right now? (decided at random, re-decided now and then)
+function suspects(b, o) {
+  const now = performance.now() / 1000;
+  if (!b.still) b.still = new Map();
+  let r = b.still.get(o.id);
+  if (!r || now > r.until) { r = { sus: Math.random() < SUSPECT_STILL(b.skill), until: now + rand(REROLL[0], REROLL[1]) }; b.still.set(o.id, r); }
+  return r.sus;
 }
 
 function wanderThink(game, c, b) {
@@ -273,6 +297,7 @@ function act(game, c, b, dt) {
   let mx = 0, mz = 0;
   let faceYaw = null, facePitch = 0;
   const frozen = c.team === 'seeker' && game.phase === 'pre';
+  const yaw0 = c.yaw, pitch0 = c.pitch;          // blindfolded seekers don't even look around
   const target = game.chars.get(b.targetId);
   const tp = b.targetProp;
 
@@ -369,7 +394,7 @@ function act(game, c, b, dt) {
   if (mx || mz) {
     let blocker = null;
     for (const o of game.chars.values()) {
-      if (o === c || !o.alive || o === target) continue;
+      if (o === c || !o.alive || o === target || o.disguise) continue;   // disguised props are steered around below
       const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz);
       if (d > 1.05 || d < 1e-3 || Math.abs(o.y - c.y) > 1.2) continue;
       if ((dx * mx + dz * mz) / d > 0.6) { blocker = o; break; }
@@ -411,6 +436,15 @@ function act(game, c, b, dt) {
       ax += (dx / d) * k * 1.2; az += (dz / d) * k * 1.2;
       if (ahead > 0.5) { ax += -mz * 0.7 * k; az += mx * 0.7 * k; }
     }
+    // disguised props (people pretending to be furniture) get walked around just like real furniture
+    for (const o of game.chars.values()) {
+      if (o === c || !o.alive || !o.disguise || o === target) continue;
+      const dx = c.x - o.x, dz = c.z - o.z, d = Math.hypot(dx, dz), R = (o.shapeR || 0.4) + P.RADIUS + 0.5;
+      if (d > R || d < 1e-3) continue;
+      const k = (R - d) / R, ahead = -(dx * mx + dz * mz) / d;
+      ax += (dx / d) * k * 1.2; az += (dz / d) * k * 1.2;
+      if (ahead > 0.5) { ax += -mz * 0.7 * k; az += mx * 0.7 * k; }
+    }
     mx += ax; mz += az;
     const l = Math.hypot(mx, mz);
     if (l > 1e-3) { mx /= l; mz /= l; }
@@ -441,7 +475,7 @@ function act(game, c, b, dt) {
   }
   if (c.onGround && b.run && b.state === 'flee' && !c.disguise && Math.random() < B.JUMPINESS * dt) b.jump = true;
   if (c.onGround && b.state === 'wander' && b.path && Math.random() < 0.04 * dt) b.jump = true;
-  if (frozen) { mx = 0; mz = 0; b.jump = false; }
+  if (frozen) { mx = 0; mz = 0; b.jump = false; c.yaw = yaw0; c.pitch = pitch0; }
   moveCharacter(c, { mx, mz, run: b.run, jump: b.jump }, dt, game.map);
   b.jump = false;
 

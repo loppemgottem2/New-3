@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=400';
-import { CONFIG } from './config.js?v=400';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=400';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=400';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=400';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=400';
-import { Ragdoll } from './ragdoll.js?v=400';
-import { Audio } from './audio.js?v=400';
-import { initBrain, updateBots } from './bots.js?v=400';
+import * as THREE from '../vendor/three.module.min.js?v=420';
+import { CONFIG } from './config.js?v=420';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=420';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=420';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=420';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=420';
+import { Ragdoll } from './ragdoll.js?v=420';
+import { Audio } from './audio.js?v=420';
+import { initBrain, updateBots } from './bots.js?v=420';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -731,7 +731,7 @@ export class Game {
     if (!DROP_TEX) {
       const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
       const g = x.createRadialGradient(28, 28, 2, 32, 32, 30);
-      g.addColorStop(0, 'rgba(220,32,24,1)'); g.addColorStop(0.45, 'rgba(180,16,12,1)'); g.addColorStop(0.8, 'rgba(135,8,6,0.9)'); g.addColorStop(1, 'rgba(120,6,5,0)');
+      g.addColorStop(0, 'rgba(185,24,18,1)'); g.addColorStop(0.45, 'rgba(148,12,9,1)'); g.addColorStop(0.8, 'rgba(108,6,5,0.9)'); g.addColorStop(1, 'rgba(95,4,4,0)');
       x.fillStyle = g; x.beginPath(); x.arc(32, 32, 30, 0, Math.PI * 2); x.fill();
       DROP_TEX = new THREE.CanvasTexture(c); DROP_TEX.colorSpace = THREE.SRGBColorSpace;
     }
