@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=120';
-import { hexToCss, textColor } from './util.js?v=120';
+import { CONFIG } from './config.js?v=130';
+import { hexToCss, textColor } from './util.js?v=130';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -162,7 +162,7 @@ export class UI {
       el.textContent = look ? look.nick : '';
       el.style.color = look ? textColor(look.color) : '';
     }
-    $('crosshair').style.display = me.alive && !s.blind && s.shiftLock ? 'block' : 'none';
+    $('crosshair').style.display = me.alive && !s.blind && s.crosshair ? 'block' : 'none';
 
     // spectate info
     let sp = '';

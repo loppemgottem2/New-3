@@ -1,8 +1,8 @@
 // Input: keyboard + mouse (pointer lock) on desktop, virtual joystick +
 // drag-to-look + buttons on touch screens. Each finger is tracked by its
 // touch identifier so moving, looking and pressing buttons all work at once.
-import { CONFIG } from './config.js?v=120';
-import { clamp } from './util.js?v=120';
+import { CONFIG } from './config.js?v=130';
+import { clamp } from './util.js?v=130';
 
 export const isTouchDevice = () =>
   ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
@@ -25,6 +25,7 @@ export class Input {
     this.mouseSens = CONFIG.CONTROLS.MOUSE_SENS;
     this.touchSens = CONFIG.CONTROLS.TOUCH_SENS;
     this.invertY = false;
+    this.invertX = false;
     this.locked = false;
     this.lockMode = false;   // shift lock: mouse is captured (pointer lock). Off: free cursor, right-drag turns the camera
     this.mouse = null;       // cursor position on screen (free cursor mode)
@@ -277,7 +278,7 @@ export class Input {
       toggleView: !!this.edges.toggleView,
       menu: !!this.edges.menu,
       scoreUp: !!this.edges.scoreUp,
-      lookDX: this.lookDX,
+      lookDX: this.lookDX * (this.invertX ? -1 : 1),
       lookDY: clamp(this.lookDY, -2, 2) * (this.invertY ? -1 : 1),
     };
     this.edges = {};

@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=120';
-import { CONFIG } from './config.js?v=120';
-import { store, makeCode, clamp } from './util.js?v=120';
-import { makeTextures } from './textures.js?v=120';
-import { GameMap } from './map.js?v=120';
-import { NavGrid } from './nav.js?v=120';
-import { Input, isTouchDevice } from './input.js?v=120';
-import { UI } from './ui.js?v=120';
-import { Audio } from './audio.js?v=120';
-import { Game } from './game.js?v=120';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=120';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=120';
+import * as THREE from '../vendor/three.module.min.js?v=130';
+import { CONFIG } from './config.js?v=130';
+import { store, makeCode, clamp } from './util.js?v=130';
+import { makeTextures } from './textures.js?v=130';
+import { GameMap } from './map.js?v=130';
+import { NavGrid } from './nav.js?v=130';
+import { Input, isTouchDevice } from './input.js?v=130';
+import { UI } from './ui.js?v=130';
+import { Audio } from './audio.js?v=130';
+import { Game } from './game.js?v=130';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=130';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=130';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -27,8 +27,8 @@ const DEFAULTS = {
   name: 'Player' + Math.floor(Math.random() * 900 + 100),
   look: { ...DEFAULT_LOOK },
   touchSens: CONFIG.CONTROLS.TOUCH_SENS * 1000, mouseSens: CONFIG.CONTROLS.MOUSE_SENS * 1000,
-  invert: false, autoSprint: true, lefty: false, btnScale: 1,
-  fov: CONFIG.GRAPHICS.FOV, camDist: 0, viewBob: true, shake: true, shiftLock: false,
+  invert: false, invertX: false, autoSprint: true, lefty: false, btnScale: 1,
+  fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
   fps: false, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
@@ -38,12 +38,15 @@ const settings = { ...DEFAULTS, ...store.get('findthethings-settings', store.get
 settings.look = sanitizeLook(settings.look);
 // v3: everyone starts with the white skin tone (you can still change it in the editor)
 if (!settings.lookV3) { settings.look.skin = WHITE_SKIN; settings.lookV3 = true; store.set('findthethings-settings', settings); }
+// v1.3: start in third person, a bit faster touch look (only if you never changed them)
+if (!settings.camV13) { if (!settings.camDist) settings.camDist = 3; if (settings.touchSens === 6) settings.touchSens = 8; settings.camV13 = true; store.set('findthethings-settings', settings); }
 const saveSettings = () => store.set('findthethings-settings', settings);
 const pct = (v) => `${Math.round(v * 100)}%`;
 const SCHEMA = [
   { tab: 'Controls', key: 'touchSens', label: 'Touch look sensitivity', type: 'range', min: 1, max: 20, step: 0.5, fmt: (v) => v.toFixed(1) },
   { tab: 'Controls', key: 'mouseSens', label: 'Mouse sensitivity', type: 'range', min: 0.5, max: 8, step: 0.1, fmt: (v) => v.toFixed(1) },
   { tab: 'Controls', key: 'invert', label: 'Invert look up/down', type: 'check' },
+  { tab: 'Controls', key: 'invertX', label: 'Invert look left/right', type: 'check' },
   { tab: 'Controls', key: 'autoSprint', label: 'Auto-sprint', note: 'sprint when the stick is pushed to the edge', type: 'check' },
   { tab: 'Controls', key: 'lefty', label: 'Left-handed layout', note: 'joystick on the right, buttons on the left', type: 'check' },
   { tab: 'Controls', key: 'btnScale', label: 'Touch button size', type: 'range', min: 0.7, max: 1.4, step: 0.05, fmt: pct },
@@ -140,6 +143,7 @@ function applyAll() {
   input.touchSens = settings.touchSens / 1000;
   input.mouseSens = settings.mouseSens / 1000;
   input.invertY = settings.invert;
+  input.invertX = !!settings.invertX;
   input.autoSprint = settings.autoSprint;
   input.lefty = settings.lefty;
   document.body.classList.toggle('lefty', !!settings.lefty);
