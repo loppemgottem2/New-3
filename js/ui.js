@@ -158,7 +158,7 @@ export class UI {
       el.textContent = look ? look.nick : '';
       el.style.color = look ? textColor(look.color) : '';
     }
-    $('crosshair').style.display = me.alive && !s.blind && s.shiftLock ? 'block' : 'none';
+    $('crosshair').style.display = me.alive && !s.blind && s.crosshair ? 'block' : 'none';
 
     // spectate info
     let sp = '';

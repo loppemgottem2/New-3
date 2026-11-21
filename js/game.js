@@ -106,7 +106,10 @@ export class Game {
     this.scene.add(this.root);
     this.viewModel = new ViewModel(this.camera, this.T);
     this.props = new PropSystem(this.map, this.root, this.T, this.isHost);
-    this.camDist = this.settings.camDist || 0;
+    // zoom: camDist = where you zoomed to (0 = first person … 8 m), zoomCur glides toward it smoothly.
+    // Works the same with shift lock on or off.
+    this.camDist = this.settings.camDist ?? 3;
+    this.zoomCur = this.camDist;
     // camera angles are separate from where your character faces:
     //  shift lock ON  = you always face where the camera looks, aim with the crosshair in the middle
     //  shift lock OFF = the camera orbits freely, you face where you walk, aim where you tap / click
@@ -486,7 +489,7 @@ export class Game {
   wrongProp(c) {
     if (!c.alive || c.team !== 'seeker') return;
     c.hp -= TM.WRONG_PROP_DAMAGE;
-    this.emit({ e: 'msg', text: `That was real furniture  −${TM.WRONG_PROP_DAMAGE} HP`, color: '#f88' }, [c.id]);
+    this.emit({ e: 'msg', text: `−${TM.WRONG_PROP_DAMAGE} HP`, color: '#f66' }, [c.id]);
     if (c.hp <= 0) this.kill(c, null, 'penalty', { x: 0, y: 0.5, z: 0 });
   }
 
@@ -741,7 +744,7 @@ export class Game {
         const me = this.me;
         if (me) me.team = ev.team;
         const R = {
-          seeker: ['You are a Seeker', `Wait while the props hide, then find them. Real furniture you hit costs you ${TM.WRONG_PROP_DAMAGE} HP.`, '#f55'],
+          seeker: ['You are a Seeker', '', '#f55'],
           prop: ['You are a Prop', `${this.ui.isTouch ? 'Tap' : 'Click'} on any furniture to turn into it. Hide before the seekers are released!`, '#4af'],
         }[ev.team];
         if (R) ui.bigMessage(R[0], R[1], R[2], 5);
@@ -925,13 +928,12 @@ export class Game {
   //  LOCAL PLAYER
   // ---------------------------------------------------------------
   // free camera (shift lock off) and props are always third person
-  thirdPerson() { const me = this.me; return this.camDist > 0.25 || !!(me && me.alive && (me.team === 'prop' || !this.shiftLock)); }
-  camDistance() {
-    const me = this.me;
-    if (!me || !me.alive) return this.camDist;
-    if (!this.shiftLock) return Math.max(3, this.camDist);
-    return me.team === 'prop' ? Math.max(2.6, this.camDist) : this.camDist;
-  }
+  thirdPerson() { return this.zoomCur > 0.35; }
+  camDistance() { return this.zoomCur; }
+  // props always see themselves from a little behind
+  minZoom() { const me = this.me; return me && me.alive && me.team === 'prop' ? 1.6 : 0; }
+  // shift lock, or zoomed all the way into first person: you face where the camera looks + crosshair aim
+  lockedView() { return this.shiftLock || !this.thirdPerson(); }
   eyeHeight(c) { return c.disguise ? Math.max(0.6, propHeight(c.disguise) + 0.35) : P.EYE; }
 
   // A ray from the camera: through a point on the screen, or straight through the middle
@@ -969,7 +971,7 @@ export class Game {
     const me = this.me;
     const aimed = a === 'attack' || a === 'throw';
     const aim = aimed ? this.aimAngles(screen) : { yaw: me.yaw, pitch: me.pitch };
-    if (aimed && !this.shiftLock) { me.yaw = aim.yaw; me.pitch = aim.pitch; this.faceT = 0.7; } // turn toward what you shoot at
+    if (aimed && !this.lockedView()) { me.yaw = aim.yaw; me.pitch = aim.pitch; this.faceT = 0.7; } // turn toward what you shoot at
     if (this.isHost) {
       const y = me.yaw, pt = me.pitch;
       me.yaw = aim.yaw; me.pitch = aim.pitch;
@@ -990,7 +992,6 @@ export class Game {
     this.ui.input?.setLockMode?.(on);
     const me = this.me;
     if (on && me) { this.camYaw = me.yaw; }
-    this.ui.toast(on ? 'Shift lock ON — you face where you look, aim with the crosshair' : 'Shift lock OFF — free camera, tap / click where you want to aim', '#ccc', 2.5);
   }
 
   // which real prop is under the crosshair (or under a tap on the screen)?
@@ -1017,16 +1018,21 @@ export class Game {
     if (inp.score) { this.scoreOpen = !this.scoreOpen || !this.ui.isTouch; this.ui.showScoreboard(this.scoreOpen, this); }
     if (inp.scoreUp && !this.ui.isTouch) { this.scoreOpen = false; this.ui.showScoreboard(false, this); }
     // camera zoom (mouse wheel, +/- buttons, V toggles)
-    if (inp.zoom) this.camDist = clamp(this.camDist + inp.zoom, 0, 5);
-    if (inp.toggleView) { if (this.camDist > 0.25) { this._lastDist = this.camDist; this.camDist = 0; } else this.camDist = this._lastDist || 2.5; }
-    if (this.camDist < 0.25 && inp.zoom < 0) this.camDist = 0;
+    if (inp.zoom) {
+      this.camDist = clamp(this.camDist + inp.zoom, 0, 8);
+      if (inp.zoom < 0 && this.camDist < 0.6) this.camDist = 0;   // close enough: go to first person
+    }
+    if (inp.toggleView) { if (this.camDist > 0.35) { this._lastDist = this.camDist; this.camDist = 0; } else this.camDist = this._lastDist || 3; }
+    this.zoomCur += (Math.max(this.camDist, this.minZoom()) - this.zoomCur) * (1 - Math.exp(-dt * 12));
+    if (Math.abs(this.zoomCur - Math.max(this.camDist, this.minZoom())) < 0.005) this.zoomCur = Math.max(this.camDist, this.minZoom());
+    const locked = this.lockedView();
 
     if (inp.shiftLock) this.toggleShiftLock();
     this.camYaw = wrapAngle(this.camYaw - inp.lookDX);
     this.camPitch = clamp(this.camPitch - inp.lookDY, -1.5, 1.5);
-    if (this.shiftLock || !me.alive) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
+    if (locked || !me.alive) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
     // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
-    const point = this.shiftLock ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
+    const point = locked ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
     if (inp.inv) this.ui.toggleInventory?.(this);
     if (!me.alive) {
@@ -1046,7 +1052,7 @@ export class Game {
     }
     if (inp.throw && this.localWeapon() === 1) this.localAction('throw', undefined, point);
     // free camera: tapping the world with a weapon in hand attacks that spot
-    const tapAttack = !this.shiftLock && inp.tap && this.localWeapon() !== 0;
+    const tapAttack = !locked && inp.tap && this.localWeapon() !== 0;
     if (me.team === 'seeker' && (inp.attack || tapAttack || (inp.attackHeld && this.localWeapon() === 2))) {
       const w = this.localWeapon();
       if (w === 0) this.localAction('attack');
@@ -1073,7 +1079,7 @@ export class Game {
     let mx = fx * inp.fwd + rx * inp.strafe, mz = fz * inp.fwd + rz * inp.strafe;
     const frozen = me.team === 'seeker' && this.phase === 'pre';   // seekers wait blindfolded while props hide
     if (frozen) mx = mz = 0;
-    if (!this.shiftLock) {
+    if (!locked) {
       // free camera: turn to face where you walk (after a shot, keep facing it for a moment)
       this.faceT -= dt;
       if ((mx || mz) && this.faceT <= 0) me.yaw = turnToward(me.yaw, Math.atan2(-mx, -mz), dt * 12);
@@ -1219,20 +1225,22 @@ export class Game {
         const d = dirFromAngles(this.camYaw, this.camPitch);
         const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
         // shift lock + weapon out -> tighter over-the-right-shoulder view for aiming
+        // (the zoom distance itself is never changed here, so zooming feels the same in every mode)
         const aiming = this.shiftLock && weaponOf(me) !== 0;
         const cd = this.camDistance();
-        const tSide = aiming ? 0.68 : me.team === 'prop' || !this.shiftLock ? 0 : 0.38 * Math.min(1, cd / 1.5);
-        const tDist = aiming ? Math.min(Math.max(cd, 1.2), 1.8) : cd;
+        const tSide = (aiming ? 0.68 : me.team === 'prop' || !this.shiftLock ? 0 : 0.38) * Math.min(1, cd / 1.5);
         const kk = Math.min(1, dt * 8);
         this._side = (this._side ?? tSide) + (tSide - (this._side ?? tSide)) * kk;
-        this._tdist = (this._tdist ?? tDist) + (tDist - (this._tdist ?? tDist)) * kk;
         const side = this._side;
         const px = ex + rx * side, py = ey + (aiming ? 0.2 : 0.12), pz = ez + rz * side;
-        let dist = this._tdist;
+        let dist = cd;
         const sideHit = raycastMap(this.map, ex, ey, ez, rx, 0, rz, side + 0.2);
         const spx = sideHit < side + 0.2 ? ex + rx * Math.max(0, sideHit - 0.2) : px, spz = sideHit < side + 0.2 ? ez + rz * Math.max(0, sideHit - 0.2) : pz;
         const hit = raycastMap(this.map, spx, py, spz, -d.x, -d.y, -d.z, dist + 0.3);
         dist = Math.max(0.1, Math.min(dist, hit - 0.25));
+        // pull in at once when a wall gets in the way, but glide back out (no jumpy camera)
+        const prev = this._camActualDist ?? dist;
+        if (dist > prev) dist = prev + (dist - prev) * Math.min(1, dt * 8);
         this._camActualDist = dist;
         cam.position.set(spx - d.x * dist, py - d.y * dist, spz - d.z * dist);
       } else {
@@ -1283,7 +1291,7 @@ export class Game {
     // who am I looking at? (ray from the camera through the crosshair)
     let look = null;
     // shift lock: what the crosshair points at; free camera: what the mouse hovers (nothing on phones)
-    const hover = this.shiftLock ? null : this.ui.isTouch ? false : (this.ui.input?.mouse || false);
+    const hover = this.lockedView() ? null : this.ui.isTouch ? false : (this.ui.input?.mouse || false);
     if (me.alive && hover !== false) {
       const { o: cp, d } = this.screenRay(hover);
       const wall = raycastMap(this.map, cp.x, cp.y, cp.z, d.x, d.y, d.z, 14 + (this._camActualDist || 0));
@@ -1316,7 +1324,7 @@ export class Game {
       hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, disguise: me.disguise,
       propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
       blind: me.alive && me.team === 'seeker' && this.phase === 'pre',
-      shiftLock: this.shiftLock,
+      shiftLock: this.shiftLock, crosshair: this.lockedView(),
       server: this.serverLabel, code: this.code, players: this.chars.size,
       deathT: this.deathT, third: this.thirdPerson(),
     });

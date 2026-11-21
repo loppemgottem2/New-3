@@ -28,10 +28,10 @@ const DEFAULTS = {
   look: { ...DEFAULT_LOOK },
   touchSens: CONFIG.CONTROLS.TOUCH_SENS * 1000, mouseSens: CONFIG.CONTROLS.MOUSE_SENS * 1000,
   invert: false, autoSprint: true, lefty: false, btnScale: 1,
-  fov: CONFIG.GRAPHICS.FOV, camDist: 0, viewBob: true, shake: true, shiftLock: false,
+  fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
-  fps: false, crosshair: 'dot', hudScale: 1, hints: true,
+  fps: false, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
 };
 // (falls back to Killer Mystery's saved settings, so your character comes along)
 const settings = { ...DEFAULTS, ...store.get('findthethings-settings', store.get('killermystery-settings', {})) };
@@ -61,6 +61,7 @@ const SCHEMA = [
   { tab: 'Audio', key: 'volume', label: 'Master volume', type: 'range', min: 0, max: 1.5, step: 0.05, fmt: pct },
   { tab: 'Audio', key: 'footVol', label: 'Footsteps volume', type: 'range', min: 0, max: 2, step: 0.05, fmt: pct },
   { tab: 'HUD', key: 'crosshair', label: 'Crosshair', type: 'select', options: [['dot', 'Dot'], ['cross', 'Cross'], ['circle', 'Circle'], ['none', 'None']] },
+  { tab: 'HUD', key: 'crossSize', label: 'Crosshair size', type: 'range', min: 2, max: 14, step: 1, fmt: (v) => `${v}px` },
   { tab: 'HUD', key: 'hudScale', label: 'HUD size', type: 'range', min: 0.7, max: 1.4, step: 0.05, fmt: pct },
   { tab: 'HUD', key: 'fps', label: 'Show FPS', type: 'check' },
   { tab: 'HUD', key: 'hints', label: 'Show control hints', type: 'check' },
@@ -145,6 +146,7 @@ function applyAll() {
   document.documentElement.style.setProperty('--btn-scale', settings.btnScale);
   document.documentElement.style.setProperty('--hud-scale', settings.hudScale);
   $('crosshair').className = settings.crosshair === 'dot' ? '' : settings.crosshair;
+  $('crosshair').style.setProperty('--cross', `${settings.crossSize ?? 4}px`);
   Audio.setVolume(settings.volume);
   $('fps').classList.toggle('hidden', !settings.fps);
   resize();
@@ -492,7 +494,18 @@ function netErrorText(e) {
   return e.message || String(e.type || e);
 }
 
-$('btn-inv-close').onclick = () => ui.toggleInventory(null, false);
+// "Tap to play": the first tap goes fullscreen (and sideways on phones) and unlocks sound
+$('tapplay').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  $('tapplay').classList.add('hidden');
+  Audio.unlock();
+  const el = document.documentElement;
+  const fs = el.requestFullscreen || el.webkitRequestFullscreen;
+  try {
+    const p = fs?.call(el, { navigationUI: 'hide' });
+    p?.then?.(() => { if (touch) screen.orientation?.lock?.('landscape').catch(() => {}); }).catch(() => {});
+  } catch { /* fullscreen not allowed here */ }
+});
 $('inv-x').onclick = () => ui.toggleInventory(null, false);
 $('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleShiftLock(); });
 

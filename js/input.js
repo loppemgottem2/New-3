@@ -109,6 +109,15 @@ export class Input {
 
   press(name) { this.edges[name] = true; }
 
+  moveJoy(x, y) {
+    const R = CONFIG.CONTROLS.JOYSTICK_RADIUS;
+    let dx = x - this.joy.ox, dy = y - this.joy.oy;
+    const d = Math.hypot(dx, dy);
+    if (d > R) { dx *= R / d; dy *= R / d; }
+    this.joy.x = dx / R; this.joy.y = dy / R;
+    this.joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+
   // shift lock on = capture the mouse; off = release it so the cursor can aim
   setLockMode(on) {
     this.lockMode = on;
@@ -140,12 +149,11 @@ export class Input {
       }
       const onJoySide = this.lefty ? t.clientX > window.innerWidth * 0.58 : t.clientX < window.innerWidth * 0.42;
       if (onJoySide && this.joy.id === null) {
+        // the joystick stays where it is: the finger steers relative to its fixed center
         const j = this.joy;
-        j.id = t.identifier; j.ox = t.clientX; j.oy = t.clientY; j.x = 0; j.y = 0;
-        this.joyBase.style.display = 'block';
-        this.joyBase.style.left = `${t.clientX}px`;
-        this.joyBase.style.top = `${t.clientY}px`;
-        this.joyKnob.style.transform = 'translate(-50%,-50%)';
+        const r = this.joyBase.getBoundingClientRect();
+        j.id = t.identifier; j.ox = r.left + r.width / 2; j.oy = r.top + r.height / 2; j.x = 0; j.y = 0;
+        this.moveJoy(t.clientX, t.clientY);
       } else {
         // sx/sy/t0/moved: lets a quick tap (not a drag) on the screen pick things (props: tap furniture to become it)
         this.lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY, t0: performance.now() });
@@ -177,15 +185,7 @@ export class Input {
     }
     for (const t of e.changedTouches) {
       if (pair0 && t.identifier !== this.joy.id && this.lookTouches.get(t.identifier) && !this.lookTouches.get(t.identifier).btn) continue;
-      if (t.identifier === this.joy.id) {
-        const R = CONFIG.CONTROLS.JOYSTICK_RADIUS;
-        let dx = t.clientX - this.joy.ox, dy = t.clientY - this.joy.oy;
-        const d = Math.hypot(dx, dy);
-        if (d > R) { dx *= R / d; dy *= R / d; }
-        this.joy.x = dx / R; this.joy.y = dy / R;
-        this.joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-        continue;
-      }
+      if (t.identifier === this.joy.id) { this.moveJoy(t.clientX, t.clientY); continue; }
       const lt = this.lookTouches.get(t.identifier);
       if (lt) {
         const dx = t.clientX - lt.x, dy = t.clientY - lt.y;
@@ -204,7 +204,7 @@ export class Input {
     for (const t of e.changedTouches) {
       if (t.identifier === this.joy.id) {
         this.joy.id = null; this.joy.x = 0; this.joy.y = 0;
-        this.joyBase.style.display = 'none';
+        this.joyKnob.style.transform = 'translate(-50%,-50%)';
       }
       const lt = this.lookTouches.get(t.identifier);
       if (lt && !lt.btn && lt.t0 && performance.now() - lt.t0 < 300 && Math.hypot(t.clientX - lt.sx, t.clientY - lt.sy) < 14) {
@@ -224,7 +224,7 @@ export class Input {
   clearAll() {
     this.keys.clear();
     this.joy.id = null; this.joy.x = 0; this.joy.y = 0;
-    if (this.joyBase) this.joyBase.style.display = 'none';
+    if (this.joyKnob) this.joyKnob.style.transform = 'translate(-50%,-50%)';
     this.lookTouches.clear();
     for (const b of this.btnTouches.values()) b.el.classList.remove('down');
     this.btnTouches.clear();
