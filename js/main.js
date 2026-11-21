@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=320';
-import { CONFIG } from './config.js?v=320';
-import { store, makeCode, clamp } from './util.js?v=320';
-import { makeTextures } from './textures.js?v=320';
-import { GameMap } from './map.js?v=320';
-import { NavGrid } from './nav.js?v=320';
-import { Input, isTouchDevice } from './input.js?v=320';
-import { UI } from './ui.js?v=320';
-import { Audio } from './audio.js?v=320';
-import { Game } from './game.js?v=320';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=320';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=320';
+import * as THREE from '../vendor/three.module.min.js?v=330';
+import { CONFIG } from './config.js?v=330';
+import { store, makeCode, clamp } from './util.js?v=330';
+import { makeTextures } from './textures.js?v=330';
+import { GameMap } from './map.js?v=330';
+import { NavGrid } from './nav.js?v=330';
+import { Input, isTouchDevice } from './input.js?v=330';
+import { UI } from './ui.js?v=330';
+import { Audio } from './audio.js?v=330';
+import { Game } from './game.js?v=330';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=330';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=330';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -360,7 +360,7 @@ async function hostServer(peerId, label, code) {
   startGame('host', net, { serverLabel: label, code });
 }
 
-async function joinServer(hostId) {
+async function joinServer(hostId, expectLabel = null) {
   const net = await NetClient.connect(hostId);
   const welcome = await new Promise((resolve, reject) => {
     const done = (fn, v) => { clearTimeout(t); net.off('message', onMsg); net.off('close', onClose); fn(v); };
@@ -374,11 +374,24 @@ async function joinServer(hostId) {
     net.on('close', onClose);
     net.send({ t: 'hello', name: myName(), ap: settings.look });
   }).catch((e) => { net.close(); throw e; });
+  // joining a public server by its number: the slot may now hold a different server
+  if (expectLabel && welcome.server !== expectLabel) { net.close(); throw { type: 'unavailable', message: 'gone' }; }
   startGame('client', net, { welcome, serverLabel: welcome.server });
 }
 
-// public servers get a made-up code like "Public random-4821"
-function publicLabel() { return `Public random-${1000 + Math.floor(Math.random() * 9000)}`; }
+// Public servers get a 4-digit number like "Public random-4821". The number is random, but its
+// remainder (number % slot count) is the server's slot, so two live servers can never share a
+// number (only one server can hold a slot at a time), and typing the number joins that server.
+const PUB_BASE = 1000;
+function publicNumber(slot) {
+  const S = CONFIG.NET.PUBLIC_SLOTS, k = Math.floor(Math.random() * Math.floor((9999 - PUB_BASE - (S - 1)) / S + 1));
+  return PUB_BASE + k * S + (slot - 1);
+}
+function publicLabel(slot) { return `Public random-${publicNumber(slot)}`; }
+function slotOfNumber(n) {
+  const S = CONFIG.NET.PUBLIC_SLOTS;
+  return n >= PUB_BASE && n <= 9999 ? ((n - PUB_BASE) % S) + 1 : 0;
+}
 
 async function quickPlay() {
   if (!requireNet()) return;
@@ -410,7 +423,7 @@ async function quickPlay() {
     const free = results.filter((r) => !r.info).map((r) => r.slot);
     for (const slot of free) {
       if (token !== cancelToken) return;
-      const label = publicLabel();
+      const label = publicLabel(slot);
       ui.loading(`Starting ${label}…`, () => { cancelToken++; ui.show('menu'); });
       try { await hostServer(publicId(slot), label, null); return; } catch (e) {
         if (e?.type === 'unavailable-id') { try { await joinServer(publicId(slot)); return; } catch { /* next */ } }
@@ -447,7 +460,7 @@ async function refreshBrowser() {
         row.appendChild(b);
       } else {
         row.className = 'srv empty';
-        const label = publicLabel();
+        const label = publicLabel(r.slot);
         row.innerHTML = `<div><div class="name"></div><div class="meta">Empty — start it and others can join</div></div>`;
         row.querySelector('.name').textContent = label;
         const b = document.createElement('button');
@@ -470,7 +483,7 @@ async function joinFromBrowser(id) {
   ui.loading('Joining server…', () => { cancelToken++; ui.show('browser'); });
   try { await joinServer(id); } catch (e) { if (token === cancelToken) { failToMenu(netErrorText(e)); } }
 }
-async function hostFromBrowser(slot, label = publicLabel()) {
+async function hostFromBrowser(slot, label = publicLabel(slot)) {
   const token = ++cancelToken;
   ui.loading(`Starting ${label}…`, () => { cancelToken++; ui.show('browser'); });
   try { await hostServer(publicId(slot), label, null); }
@@ -496,9 +509,24 @@ async function createPrivate() {
 }
 
 async function joinPrivate(code) {
-  code = String(code || '').trim().toUpperCase();
-  if (code.length < 4) { ui.notice('Type the 5-letter code first.'); ui.show('menu'); return; }
+  code = String(code || '').trim().toUpperCase().replace(/^(PUBLIC\s*)?RANDOM-?/, '');
+  if (code.length < 4) { ui.notice('Type the server code first.'); ui.show('menu'); return; }
   if (!requireNet()) return;
+  // 4 digits = a public server's number (private codes are 5 letters/digits)
+  if (/^\d{4}$/.test(code)) {
+    const slot = slotOfNumber(+code);
+    const label = `Public random-${code}`;
+    const token = ++cancelToken;
+    ui.loading(`Joining ${label}…`, () => { cancelToken++; ui.show('private'); });
+    try {
+      if (!slot || slot > CONFIG.NET.PUBLIC_SLOTS) throw { type: 'unavailable' };
+      await joinServer(publicId(slot), label);
+    } catch (e) {
+      if (token !== cancelToken) return;
+      failToMenu(e?.type === 'unavailable' ? `No server with number ${code} is running.` : netErrorText(e));
+    }
+    return;
+  }
   const token = ++cancelToken;
   ui.loading(`Joining ${code}…`, () => { cancelToken++; ui.show('private'); });
   try { await joinServer(privateId(code)); } catch (e) {
