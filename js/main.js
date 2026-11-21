@@ -499,12 +499,32 @@ function netErrorText(e) {
 function goFullscreen() {
   const el = document.documentElement;
   if (document.fullscreenElement || document.webkitFullscreenElement) return;
-  const fs = el.requestFullscreen || el.webkitRequestFullscreen;
-  if (!fs) return;
+  const fail = (why) => { ui.notice(why); if (game && !goFullscreen.told) ui.toast(why, '#fd6', 7); goFullscreen.told = true; };
+  const inFrame = (() => { try { return window.self !== window.top; } catch { return true; } })();
+  const iPhone = /iPhone|iPod/.test(navigator.userAgent);
+  // every browser's spelling of "go fullscreen"
+  const fs = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (!fs) {
+    fail(iPhone
+      ? 'iPhones don\'t let websites go fullscreen. For fullscreen: tap Share → "Add to Home Screen", then open the game from your home screen.'
+      : 'This browser can\'t go fullscreen. Open the game in Chrome, or use the browser menu → "Add to Home screen".');
+    return;
+  }
+  const done = () => {
+    if (touch) screen.orientation?.lock?.('landscape').catch(() => {});
+    setTimeout(() => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement && touch) {
+        fail(inFrame ? 'Fullscreen is blocked inside this preview. Open the game\'s website in Chrome to play fullscreen.'
+          : 'Your browser blocked fullscreen. Open the game in Chrome, or use the browser menu → "Add to Home screen".');
+      }
+    }, 700);
+  };
   try {
-    const p = fs.call(el, { navigationUI: 'hide' });
-    p?.then?.(() => { if (touch) screen.orientation?.lock?.('landscape').catch(() => {}); }).catch(() => {});
-  } catch { /* fullscreen not allowed here */ }
+    let p;
+    try { p = fs.call(el, { navigationUI: 'hide' }); } catch { p = fs.call(el); }   // older browsers don't take the options
+    if (p && p.then) p.then(done).catch(() => { try { const p2 = fs.call(el); if (p2 && p2.then) p2.then(done).catch(() => done()); else done(); } catch { done(); } });
+    else done();
+  } catch { done(); }
 }
 function tapToPlay(e) {
   if ($('tapplay').classList.contains('hidden')) return;
@@ -542,13 +562,8 @@ function startGame(mode, net, opts) {
   input.setActive(true);
   input.setLockMode(!!settings.shiftLock);
   if (ui.isTouch) {
-    // go fullscreen + landscape on phones (ignored where unsupported)
-    const el = document.documentElement;
-    const fs = el.requestFullscreen || el.webkitRequestFullscreen;
-    try {
-      const p = fs?.call(el, { navigationUI: 'hide' });
-      p?.then?.(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
-    } catch { /* */ }
+    // go fullscreen + landscape on phones (tries again in case the start screen's attempt was refused)
+    goFullscreen();
     $('touch-hint').style.display = settings.hints ? '' : 'none';
     setTimeout(() => { $('touch-hint').style.display = 'none'; }, 8000);
   }
