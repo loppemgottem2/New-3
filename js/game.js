@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=340';
-import { CONFIG } from './config.js?v=340';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=340';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=340';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=340';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=340';
-import { Ragdoll } from './ragdoll.js?v=340';
-import { Audio } from './audio.js?v=340';
-import { initBrain, updateBots } from './bots.js?v=340';
+import * as THREE from '../vendor/three.module.min.js?v=350';
+import { CONFIG } from './config.js?v=350';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=350';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=350';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=350';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=350';
+import { Ragdoll } from './ragdoll.js?v=350';
+import { Audio } from './audio.js?v=350';
+import { initBrain, updateBots } from './bots.js?v=350';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -736,7 +736,7 @@ export class Game {
         v[1] -= 14 * dt;
         const x = arr[k * 3], y = arr[k * 3 + 1], z = arr[k * 3 + 2];
         const len = Math.hypot(v[0], v[1], v[2]) * dt || 1e-6, dx = v[0] * dt / len, dy = v[1] * dt / len, dz = v[2] * dt / len;
-        // did the drop hit a wall, the floor or furniture on the way? -> it stops there and leaves a drop mark
+        // did the drop hit a wall, the floor or furniture on the way? -> it stops there (no mark)
         const tw = raycastMap(this.map, x, y, z, dx, dy, dz, len);
         const ph = this.props.raycast(x, y, z, dx, dy, dz, Math.min(tw, len));
         const t = ph ? ph.t : tw;
@@ -744,12 +744,6 @@ export class Game {
           const hp = { x: x + dx * t, y: y + dy * t, z: z + dz * t };
           arr[k * 3] = hp.x; arr[k * 3 + 1] = hp.y; arr[k * 3 + 2] = hp.z;
           b.landed[k] = 1;
-          if (k % 2 === 0) {     // every other drop leaves a mark (keeps it light on phones)
-            const nrm = ph ? ph.normal : this.mapNormal(hp, { x: dx, y: dy, z: dz });
-            const sz = rand(0.1, 0.26);
-            const clip = ph && ph.part ? { local: this.propClipLocal(ph.part, ph.axis) } : null;
-            this.addDecal(this.T.bloodDrop[(Math.random() * this.T.bloodDrop.length) | 0], hp, nrm, sz, sz, rand(35, 45), ph ? ph.prop : null, null, clip);
-          }
           continue;
         }
         arr[k * 3] = x + v[0] * dt; arr[k * 3 + 1] = y + v[1] * dt; arr[k * 3 + 2] = z + v[2] * dt;
