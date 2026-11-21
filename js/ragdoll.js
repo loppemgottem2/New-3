@@ -1,7 +1,7 @@
 // Verlet ragdoll: 15 joints linked by distance constraints ("limb connectors").
 // The torso is kept rigid with cross-braces so the body keeps a human shape.
-import * as THREE from '../vendor/three.module.min.js';
-import { CELL } from './map.js';
+import * as THREE from '../vendor/three.module.min.js?v=120';
+import { CELL } from './map.js?v=120';
 
 // joint indices (see CharacterModel.jointPositions)
 const HEAD = 0, NECK = 1, PELVIS = 2, SHL = 3, ELL = 4, HAL = 5, SHR = 6, ELR = 7, HAR = 8,
