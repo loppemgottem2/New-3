@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=360';
-import { CONFIG } from './config.js?v=360';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=360';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=360';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=360';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=360';
-import { Ragdoll } from './ragdoll.js?v=360';
-import { Audio } from './audio.js?v=360';
-import { initBrain, updateBots } from './bots.js?v=360';
+import * as THREE from '../vendor/three.module.min.js?v=370';
+import { CONFIG } from './config.js?v=370';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=370';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=370';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=370';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=370';
+import { Ragdoll } from './ragdoll.js?v=370';
+import { Audio } from './audio.js?v=370';
+import { initBrain, updateBots } from './bots.js?v=370';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -26,7 +26,7 @@ const INV = CONFIG.INVENTORY;
 const r2 = (v) => Math.round(v * 100) / 100;
 const FLASH_GEO = new THREE.SphereGeometry(0.12, 8, 6);
 const DECAL_GEO = new THREE.PlaneGeometry(1, 1);
-const MAX_DECALS = 360;
+const MAX_DECALS = 500;   // safety limit only (oldest go first); normally every mark stays until the next round
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // Flags packed into snapshots
@@ -645,7 +645,7 @@ export class Game {
     return out;
   }
 
-  addDecal(tex, p, n, w, h, life, prop = null, parentObj = null, clip = null, pop = false) {
+  addDecal(tex, p, n, w, h, prop = null, parentObj = null, clip = null) {
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const l = this.map.probe(p.x, p.z, true, [0, 0, 0]);
     const lum = Math.min(1.25, 0.3 * l[0] + 0.55 * l[1] + 0.15 * l[2]);
@@ -672,7 +672,7 @@ export class Game {
     if (clip && clip.world) mat.clippingPlanes = clip.world;
     else if (clip && clip.local && parent) { local = clip.local; mat.clippingPlanes = local.map((pl) => pl.clone().applyMatrix4(parent.matrixWorld)); }
     else if (!parent) mat.clippingPlanes = this.mapClip(p, n);
-    this.decals.push({ m, life, max: life, local, parent: local ? parent : null, pop });
+    this.decals.push({ m, local, parent: local ? parent : null });
     while (this.decals.length > MAX_DECALS) this.removeDecal(this.decals.shift());
   }
 
@@ -784,23 +784,24 @@ export class Game {
   // client: splash blood onto nearby walls / floor / furniture / people (and a wound on the one who was hit)
   spawnBlood(p, d, gun, victim = null, w = 's') {
     const T = this.T, n = gun ? 5 : 3, range = gun ? 4 : 2;
-    // a big pool of blood on the floor under the hit
-    {
-      const tf = raycastMap(this.map, p.x, p.y, p.z, 0, -1, 0, 4);
-      if (tf < 4) {
-        const fp = { x: p.x, y: p.y - tf, z: p.z }, sz = gun ? rand(1.0, 1.6) : rand(0.6, 0.95);
-        this.addDecal(T.bloodPool[(Math.random() * T.bloodPool.length) | 0], fp, { x: 0, y: 1, z: 0 }, sz, sz, rand(20, 45), null, null, null, true);
-      }
-    }
     // the prop that was hit gets the weapon's own mark where it was hit (bullet hole / knife cut / crowbar scratches)
     if (victim) {
       const back = { x: p.x - d.x * 1.2, y: p.y - d.y * 1.2, z: p.z - d.z * 1.2 };
       const own = this.rayChars(back, d, 2.4, null);
       if (own) {
         const hp = { x: back.x + d.x * own.t, y: back.y + d.y * own.t, z: back.z + d.z * own.t };
-        if (w === 'b') this.addDecal(T.bulletHole, hp, own.n, 0.1, 0.1, 30, null, own.obj);
-        else if (w === 'c') { const sz = rand(0.22, 0.32); this.addDecal(T.scratch[(Math.random() * T.scratch.length) | 0], hp, own.n, sz, sz, 30, null, own.obj); }
-        else { const sz = rand(0.26, 0.4); this.addDecal(T.slash[(Math.random() * T.slash.length) | 0], hp, own.n, sz, sz * 0.25, 30, null, own.obj); }
+        if (w === 'b') this.addDecal(T.bulletHole, hp, own.n, 0.1, 0.1, null, own.obj);
+        else if (w === 'c') { const sz = rand(0.22, 0.32); this.addDecal(T.scratch[(Math.random() * T.scratch.length) | 0], hp, own.n, sz, sz, null, own.obj); }
+        else { const sz = rand(0.26, 0.4); this.addDecal(T.slash[(Math.random() * T.slash.length) | 0], hp, own.n, sz, sz * 0.25, null, own.obj); }
+      }
+    }
+    if (!this.settings.blood) return;       // Blood setting off: only the weapon marks
+    // a big pool of blood on the floor under the hit
+    {
+      const tf = raycastMap(this.map, p.x, p.y, p.z, 0, -1, 0, 4);
+      if (tf < 4) {
+        const fp = { x: p.x, y: p.y - tf, z: p.z }, sz = gun ? rand(1.0, 1.6) : rand(0.6, 0.95);
+        this.addDecal(T.bloodPool[(Math.random() * T.bloodPool.length) | 0], fp, { x: 0, y: 1, z: 0 }, sz, sz);
       }
     }
     for (let i = 0; i < n; i++) {
@@ -822,7 +823,7 @@ export class Game {
       if (pc) size *= 0.45;                        // smaller on a body
       const set = gun && i > 0 ? T.bloodSpray : T.blood;
       const clip = pc ? null : ph ? (ph.part ? { local: this.propClipLocal(ph.part, ph.axis) } : null) : null;
-      this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, rand(20, 45), pc ? null : ph ? ph.prop : null, pc ? pc.obj : null, clip, true);
+      this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, pc ? null : ph ? ph.prop : null, pc ? pc.obj : null, clip);
     }
   }
 
@@ -1128,15 +1129,15 @@ export class Game {
         const p = { x: ev.p[0], y: ev.p[1], z: ev.p[2] }, n = { x: ev.n[0], y: ev.n[1], z: ev.n[2] };
         const prop = ev.pid >= 0 ? this.props.list[ev.pid] : null;
         const clip = prop ? this.propFaceClip(prop, p, n) : null;
-        if (ev.k === 'b') this.addDecal(this.T.bulletHole, p, n, 0.11, 0.11, 30, prop, null, clip);
-        else if (ev.k === 'c') { const sz = rand(0.28, 0.4); this.addDecal(this.T.scratch[(Math.random() * this.T.scratch.length) | 0], p, n, sz, sz, 30, prop, null, clip); }
-        else { const sz = rand(0.32, 0.5); this.addDecal(this.T.slash[(Math.random() * this.T.slash.length) | 0], p, n, sz, sz * 0.25, 30, prop, null, clip); }
+        if (ev.k === 'b') this.addDecal(this.T.bulletHole, p, n, 0.11, 0.11, prop, null, clip);
+        else if (ev.k === 'c') { const sz = rand(0.28, 0.4); this.addDecal(this.T.scratch[(Math.random() * this.T.scratch.length) | 0], p, n, sz, sz, prop, null, clip); }
+        else { const sz = rand(0.32, 0.5); this.addDecal(this.T.slash[(Math.random() * this.T.slash.length) | 0], p, n, sz, sz * 0.25, prop, null, clip); }
         break;
       }
       case 'blood': {
         const bp = { x: ev.p[0], y: ev.p[1], z: ev.p[2] }, bd = { x: ev.d[0], y: ev.d[1], z: ev.d[2] };
         this.spawnBlood(bp, bd, !!ev.g, this.chars.get(ev.id), ev.w || (ev.g ? 'b' : 's'));
-        this.bloodBurst(bp, bd, !!ev.g);
+        if (this.settings.blood) this.bloodBurst(bp, bd, !!ev.g);
         break;
       }
       case 'hit': Audio.thud({ x: ev.p[0], y: ev.p[1], z: ev.p[2] }); break;
@@ -1572,12 +1573,8 @@ export class Game {
     for (const rd of this.ragdolls.values()) rd.update(dt);
     this.props.render(dt, lampsDyn);
     this.updateBursts(dt);
-    // marks fade out over their last 4 seconds
-    for (let i = this.decals.length - 1; i >= 0; i--) {
-      const dc = this.decals[i];
-      dc.life -= dt;
-      if (dc.life <= 0) { this.removeDecal(dc); this.decals.splice(i, 1); continue; }
-      if (dc.life < 4 && !dc.pop) dc.m.material.opacity = dc.life / 4;   // blood just vanishes (each at its own time); other marks fade
+    // marks stay until the next round starts; ones on furniture keep their edge clipping in step with it
+    for (const dc of this.decals) {
       if (dc.local) { const cp = dc.m.material.clippingPlanes; for (let k = 0; k < cp.length; k++) cp[k].copy(dc.local[k]).applyMatrix4(dc.parent.matrixWorld); }
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
