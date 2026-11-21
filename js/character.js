@@ -7,8 +7,8 @@
 //  Facing: the model looks toward -Z when yaw = 0. Right hand is +X.
 //  Every body segment has a "vis" group so ragdolls can clone it.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=370';
-import { CONFIG } from './config.js?v=370';
+import * as THREE from '../vendor/three.module.min.js?v=380';
+import { CONFIG } from './config.js?v=380';
 
 
 const L = CONFIG.LOOKS;

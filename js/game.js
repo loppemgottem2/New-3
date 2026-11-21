@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=370';
-import { CONFIG } from './config.js?v=370';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=370';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=370';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=370';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=370';
-import { Ragdoll } from './ragdoll.js?v=370';
-import { Audio } from './audio.js?v=370';
-import { initBrain, updateBots } from './bots.js?v=370';
+import * as THREE from '../vendor/three.module.min.js?v=380';
+import { CONFIG } from './config.js?v=380';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=380';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=380';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=380';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=380';
+import { Ragdoll } from './ragdoll.js?v=380';
+import { Audio } from './audio.js?v=380';
+import { initBrain, updateBots } from './bots.js?v=380';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -232,6 +232,8 @@ export class Game {
     for (const c of all) if (!c.isBot) teamOf.set(c, takeSeat());
     for (const c of all) if (c.isBot) teamOf.set(c, takeSeat());
     const spawns = shuffle(this.map.spawns.slice());
+    const seekSpots = this.seekerSpawns(all.filter((c) => teamOf.get(c) === 'seeker').length);
+    let si = 0;
     all.forEach((c, i) => {
       const seeker = teamOf.get(c) === 'seeker';
       c.team = seeker ? 'seeker' : 'prop';
@@ -245,9 +247,9 @@ export class Game {
       c.disguise = null; c.morphCd = 0; c.anchored = false;
       c.attackCd = 0;
       c.alive = true; c.spectator = false;
-      const s = spawns[i % spawns.length];
-      const off = Math.floor(i / spawns.length) * 0.8;
-      c.x = s.x + off; c.z = s.z; c.y = 0; c.vx = c.vy = c.vz = 0;
+      if (seeker) { const s = seekSpots[si++]; c.x = s.x; c.z = s.z; }
+      else { const s = spawns[i % spawns.length]; c.x = s.x + Math.floor(i / spawns.length) * 0.8; c.z = s.z; }
+      c.y = 0; c.vx = c.vy = c.vz = 0;
       c.yaw = Math.random() * Math.PI * 2; c.pitch = 0;
       c.stamina = P.STAMINA_MAX; c.exhausted = false;
       c.rx = c.x; c.ry = c.y; c.rz = c.z; c.ryaw = c.yaw;
@@ -263,6 +265,25 @@ export class Game {
     this.phase = 'pre';
     this.timeLeft = CONFIG.ROUND.HIDE_TIME;
     this.emit({ e: 'phase', phase: 'pre', tl: this.timeLeft });
+  }
+
+  // Seekers start together on the path crossing in the middle of the grass courtyard,
+  // spread out at random (at least 1.3 m apart, on open asphalt, clear of furniture)
+  seekerSpawns(n) {
+    const map = this.map, cx = map.worldW / 2, cz = map.worldD / 2, out = [];
+    const free = (x, z) => map.floorTypeAt(x, z) === 'asphalt' && map.heightAt(x, z) === 0 &&
+      !this.props.list.some((p) => Math.hypot(p.pos.x - x, p.pos.z - z) < p.r + 0.5) &&
+      out.every((o) => Math.hypot(o.x - x, o.z - z) >= 1.3);
+    for (let k = 0; k < n; k++) {
+      let spot = null;
+      for (let t = 0; t < 200 && !spot; t++) {
+        const r = 6 * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+        const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+        if (free(x, z)) spot = { x, z };
+      }
+      out.push(spot || { x: cx + (k % 3 - 1) * 1.4, z: cz + Math.floor(k / 3) * 1.4 });
+    }
+    return out;
   }
 
   endRound(winner, reason = '') {
@@ -418,6 +439,7 @@ export class Game {
   hostAction(c, a, n) {
     if (!c || !c.alive) return;
     if (a === 'suicide') { this.kill(c, null, 'suicide', { x: Math.random() - 0.5, y: 0, z: Math.random() - 0.5 }); return; }
+    if (c.team === 'seeker' && this.phase === 'pre') return;   // blindfolded seekers can't do anything yet
 
     // ---------- prop team ----------
     if (c.team === 'prop') {
