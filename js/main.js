@@ -2,19 +2,19 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=590';
-import { CONFIG } from './config.js?v=590';
-import { store, makeCode, clamp } from './util.js?v=590';
-import { makeTextures } from './textures.js?v=590';
-import { GameMap } from './map.js?v=590';
-import { NavGrid } from './nav.js?v=590';
-import { Input, isTouchDevice } from './input.js?v=590';
-import { UI } from './ui.js?v=590';
-import { Audio } from './audio.js?v=590';
-import { Game } from './game.js?v=590';
-import { PropSystem } from './props.js?v=590';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=590';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=590';
+import * as THREE from '../vendor/three.module.min.js?v=610';
+import { CONFIG } from './config.js?v=610';
+import { store, makeCode, clamp } from './util.js?v=610';
+import { makeTextures } from './textures.js?v=610';
+import { GameMap, SUN_DIR } from './map.js?v=610';
+import { NavGrid } from './nav.js?v=610';
+import { Input, isTouchDevice } from './input.js?v=610';
+import { UI } from './ui.js?v=610';
+import { Audio } from './audio.js?v=610';
+import { Game } from './game.js?v=610';
+import { PropSystem } from './props.js?v=610';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=610';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=610';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -125,6 +125,12 @@ let lightT = 0;
 // The 3 ceiling lights nearest the camera get a shadow-casting spotlight (no extra light, intensity 0:
 // the level's lighting is baked). Their shadows land on an invisible "shadow catcher" over the floors.
 const shadowSpots = [];
+// the sun: shadows of things standing outdoors (courtyard, loading yard, the menu view). It's a far-away
+// spotlight up in the sun's direction (no extra light, intensity 0), only used while the camera is outdoors
+// so furniture inside the rooms never throws a sun shadow.
+const sunShadow = new THREE.SpotLight(0xffffff, 0, 0, 0.42, 0, 0);
+sunShadow.castShadow = true; sunShadow.shadow.mapSize.set(1024, 1024); sunShadow.shadow.bias = -0.0004;
+sunShadow.shadow.camera.near = 30; sunShadow.shadow.camera.far = 120;
 let shadowCatcher = null, shadowsOn = false, castT = 0;
 function buildShadowCatcher() {
   const pos = [];
@@ -157,7 +163,7 @@ function setShadows(on) {
     s.castShadow = true; s.shadow.mapSize.set(512, 512); s.shadow.bias = -0.0006; s.shadow.camera.near = 0.3; s.shadow.camera.far = 14;
     shadowSpots.push(s);
   }
-  for (const s of shadowSpots) { if (on) { scene.add(s); scene.add(s.target); } else { scene.remove(s); scene.remove(s.target); } }
+  for (const s of [...shadowSpots, sunShadow]) { if (on) { scene.add(s); scene.add(s.target); } else { scene.remove(s); scene.remove(s.target); } }
   // every material has to be rebuilt with / without shadow support
   scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
 }
@@ -173,6 +179,11 @@ function updateShadows(dt) {
     if (!L) return;
     s.position.set(L.x, L.y - 0.1, L.z); s.target.position.set(L.x, 0, L.z); s.target.updateMatrixWorld();
   });
+  // the sun's shadow box follows the camera (snapped to whole meters so the shadows don't shimmer)
+  const cx = Math.round(p.x), cz = Math.round(p.z);
+  sunShadow.target.position.set(cx, 0, cz); sunShadow.target.updateMatrixWorld();
+  sunShadow.position.set(cx + SUN_DIR.x * 70, SUN_DIR.y * 70, cz + SUN_DIR.z * 70);
+  sunShadow.castShadow = map.isOutdoor(p.x, p.z);
   // people, furniture and disguises cast shadows (marks, particles and tracers don't)
   for (const top of scene.children) if (top !== camera) top.traverse((o) => {     // (not your own first-person arm)
     if (!o.isMesh || o === shadowCatcher) return;

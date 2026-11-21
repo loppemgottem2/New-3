@@ -19,9 +19,9 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=590';
-import { fbm } from './textures.js?v=590';
-import { furnish, DARK_ROOMS } from './furnish.js?v=590';
+import * as THREE from '../vendor/three.module.min.js?v=610';
+import { fbm } from './textures.js?v=610';
+import { furnish, DARK_ROOMS } from './furnish.js?v=610';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -100,7 +100,7 @@ export const PROP_CH = { B: 'box', C: 'crate', K: 'chair', T: 'table', X: 'barre
 export const ROOF_T = 0.55;   // thickness of the concrete roof slab above the ceilings
 
 // ---- lighting constants (baked into vertex colors) ----
-const SUN_DIR = new THREE.Vector3(0.45, 0.82, 0.36).normalize();
+export const SUN_DIR = new THREE.Vector3(0.45, 0.82, 0.36).normalize();
 const SUN_COL = [1.15, 1.05, 0.88];
 const SKY_COL = [0.42, 0.5, 0.62];
 const INDOOR_AMB = [0.13, 0.125, 0.12];
