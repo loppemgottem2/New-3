@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=550';
-import { CONFIG } from './config.js?v=550';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=550';
-import { footWorld } from './physics.js?v=550';
+import * as THREE from '../vendor/three.module.min.js?v=590';
+import { CONFIG } from './config.js?v=590';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=590';
+import { footWorld } from './physics.js?v=590';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -399,8 +399,11 @@ export class PropSystem {
     this.T = T;
     const glowMat = GLOW_MAT();
     const matsFor = (type, i) => propMaterials(T, type, i);
-    map.propSpawns.forEach((s, id) => {
-      const def = PROP_TYPES[s.type];
+    // the shape data (center of mass, parts, contact points, inertia) only depends on the type: build it once
+    const typeData = new Map();
+    const shapeOf = (type) => {
+      if (typeData.has(type)) return typeData.get(type);
+      const def = PROP_TYPES[type];
       // parts relative to the center of mass
       let vol = 0; const com = new V();
       for (const [cx, cy, cz, hx, hy, hz] of def.parts) { const v = hx * hy * hz; vol += v; com.x += cx * v; com.y += cy * v; com.z += cz * v; }
@@ -436,6 +439,14 @@ export class PropSystem {
       const m = def.mass;
       const dx = 2 * mx, dy = 2 * my, dz = 2 * mz;
       const invI = new V(12 / (m * (dy * dy + dz * dz)), 12 / (m * (dx * dx + dz * dz)), 12 / (m * (dx * dx + dy * dy)));
+      const out = { com, parts, corners, invI };
+      typeData.set(type, out);
+      return out;
+    };
+    map.propSpawns.forEach((s, id) => {
+      const def = PROP_TYPES[s.type];
+      const { com, parts, corners, invI } = shapeOf(s.type);
+      const m = def.mass;
       const mats = matsFor(s.type, id);
       for (const mm of mats) mm.userData.base = mm.color.clone();
       const group = new THREE.Group();
