@@ -494,18 +494,27 @@ function netErrorText(e) {
   return e.message || String(e.type || e);
 }
 
-// "Tap to play": the first tap goes fullscreen (and sideways on phones) and unlocks sound
-$('tapplay').addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  $('tapplay').classList.add('hidden');
-  Audio.unlock();
+// "Tap to play": the first tap goes fullscreen (and sideways on phones) and unlocks sound.
+// Phones only allow fullscreen from a finished tap (click / touchend), not from the moment the finger lands.
+function goFullscreen() {
   const el = document.documentElement;
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
   const fs = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!fs) return;
   try {
-    const p = fs?.call(el, { navigationUI: 'hide' });
+    const p = fs.call(el, { navigationUI: 'hide' });
     p?.then?.(() => { if (touch) screen.orientation?.lock?.('landscape').catch(() => {}); }).catch(() => {});
   } catch { /* fullscreen not allowed here */ }
-});
+}
+function tapToPlay(e) {
+  if ($('tapplay').classList.contains('hidden')) return;
+  e.preventDefault();
+  goFullscreen();
+  Audio.unlock();
+  $('tapplay').classList.add('hidden');
+}
+$('tapplay').addEventListener('click', tapToPlay);
+$('tapplay').addEventListener('touchend', tapToPlay, { passive: false });
 $('inv-x').onclick = () => ui.toggleInventory(null, false);
 $('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleShiftLock(); });
 
