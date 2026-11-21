@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=400';
+import * as THREE from '../vendor/three.module.min.js?v=420';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -137,7 +137,7 @@ function bloodTex(seed, spray) {
     }
     ctx.closePath();
     const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.1);
-    g.addColorStop(0, `rgba(150,10,8,${alpha})`); g.addColorStop(0.7, `rgba(185,18,12,${alpha})`); g.addColorStop(1, `rgba(115,6,5,${alpha * 0.9})`);
+    g.addColorStop(0, `rgba(120,8,6,${alpha})`); g.addColorStop(0.7, `rgba(150,14,10,${alpha})`); g.addColorStop(1, `rgba(88,5,4,${alpha * 0.9})`);
     ctx.fillStyle = g; ctx.fill();
   };
   const ang = H(1, 910) * Math.PI * 2;                  // main direction of the spray
@@ -149,7 +149,7 @@ function bloodTex(seed, spray) {
   for (let k = 0; k < streaks; k++) {
     const a = ang + (H(k, 915) - 0.5) * (spray ? 1.6 : 6.28), len = mainR * (0.8 + H(k, 916) * (spray ? 2.2 : 1.1));
     const w = 1.5 + H(k, 917) * (spray ? 4 : 3);
-    ctx.strokeStyle = 'rgba(165,14,10,0.88)'; ctx.lineCap = 'round'; ctx.lineWidth = w;
+    ctx.strokeStyle = 'rgba(135,11,8,0.88)'; ctx.lineCap = 'round'; ctx.lineWidth = w;
     ctx.beginPath(); ctx.moveTo(m + Math.cos(a) * mainR * 0.4, m + Math.sin(a) * mainR * 0.4);
     ctx.lineTo(m + Math.cos(a) * len, m + Math.sin(a) * len); ctx.stroke();
     blob(m + Math.cos(a) * len, m + Math.sin(a) * len, w * 1.3, 0.92, 10);       // drop at the end of the streak
@@ -182,12 +182,12 @@ function bloodPoolTex(seed) {
   }
   ctx.closePath();
   let g = ctx.createRadialGradient(m, m, 0, m, m, m * 0.85);
-  g.addColorStop(0, 'rgba(140,8,6,0.96)'); g.addColorStop(0.75, 'rgba(165,14,10,0.95)'); g.addColorStop(1, 'rgba(105,4,4,0.9)');
+  g.addColorStop(0, 'rgba(112,6,5,0.96)'); g.addColorStop(0.75, 'rgba(135,11,8,0.95)'); g.addColorStop(1, 'rgba(82,3,3,0.9)');
   ctx.fillStyle = g; ctx.fill();
   // a few separate little puddles around the edge
   for (let k = 0; k < 6; k++) {
     const a = hash(seed, k, 952) * 6.28, d = m * (0.72 + hash(seed, k, 953) * 0.18), r = 4 + hash(seed, k, 954) * 9;
-    ctx.beginPath(); ctx.arc(m + Math.cos(a) * d, m + Math.sin(a) * d, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(150,10,8,0.95)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(m + Math.cos(a) * d, m + Math.sin(a) * d, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(122,8,6,0.95)'; ctx.fill();
   }
   // glossy wet highlight
   g = ctx.createRadialGradient(m - 30, m - 34, 0, m - 30, m - 34, m * 0.45);
