@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=530';
+import * as THREE from '../vendor/three.module.min.js?v=540';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -585,6 +585,93 @@ function bookTop(S) {
   return c;
 }
 
+// ---------------- new furniture textures ----------------
+// woven upholstery: fine criss-cross weave with soft wear
+function upholstery(S, base, seed) {
+  const [c, ctx] = canvas(S);
+  paint(ctx, S, S, (u, v, x, y) => {
+    const weave = ((x >> 1) + (y >> 1)) % 2 ? 1.06 : 0.94;
+    const n = fbm(u * 4, v * 4, 4, 3, seed) * 0.25 + hash(x, y, seed) * 0.08;
+    const k = weave * (0.88 + n);
+    return [base[0] * k, base[1] * k, base[2] * k];
+  });
+  return c;
+}
+// lighter office-desk wood (straight grain)
+function deskWood(S) {
+  const [c, ctx] = canvas(S);
+  paint(ctx, S, S, (u, v) => {
+    const n = fbm(u * 0.4, v * 7, 8, 4, 151);
+    const g = Math.sin((v * 40 + n * 6)) * 0.5 + 0.5;
+    return [176 + g * 18 - n * 26, 132 + g * 12 - n * 20, 86 + g * 6 - n * 14];
+  });
+  return c;
+}
+// slightly textured dark grey plastic
+function plasticDark(S) {
+  const [c, ctx] = canvas(S);
+  paint(ctx, S, S, (u, v, x, y) => { const b = 34 + hash(x, y, 161) * 8 + fbm(u * 3, v * 3, 4, 2, 162) * 8; return [b, b, b * 1.05]; });
+  return c;
+}
+// a desktop on the monitor: blue wallpaper, a few icons, a window and the taskbar
+function screen(S) {
+  const [c, ctx] = canvas(S);
+  const g = ctx.createLinearGradient(0, 0, S, S); g.addColorStop(0, '#1d5fa8'); g.addColorStop(1, '#4fa3d8');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  for (let k = 0; k < 5; k++) { ctx.fillStyle = ['#f0d060', '#e8e8e8', '#7fd07f', '#f08a5a', '#c8d8f0'][k]; ctx.fillRect(S * 0.05, S * (0.08 + k * 0.15), S * 0.07, S * 0.09); }
+  ctx.fillStyle = '#f4f4f4'; ctx.fillRect(S * 0.25, S * 0.15, S * 0.6, S * 0.55);
+  ctx.fillStyle = '#3c7bd0'; ctx.fillRect(S * 0.25, S * 0.15, S * 0.6, S * 0.06);
+  ctx.fillStyle = '#9aa4b0'; for (let k = 0; k < 7; k++) ctx.fillRect(S * 0.29, S * (0.26 + k * 0.055), S * (0.3 + rnd() * 0.22), S * 0.018);
+  ctx.fillStyle = '#1a2230'; ctx.fillRect(0, S * 0.9, S, S * 0.1);
+  return c;
+}
+// keyboard keys
+function keys(S) {
+  const [c, ctx] = canvas(S, S / 2);
+  ctx.fillStyle = '#151515'; ctx.fillRect(0, 0, S, S / 2);
+  const rows = 5, cols = 15, kw = S / cols, kh = S / 2 / rows;
+  for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+    const w = r === 4 && q > 3 && q < 10 ? (q === 4 ? kw * 6 : 0) : kw;
+    if (!w) continue;
+    ctx.fillStyle = '#3a3a3c'; ctx.fillRect(q * kw + 1.5, r * kh + 1.5, w - 3, kh - 3);
+    ctx.fillStyle = '#4a4a4d'; ctx.fillRect(q * kw + 2.5, r * kh + 2, w - 5, kh - 6);
+  }
+  return c;
+}
+// terracotta pot
+function terracotta(S) {
+  const [c, ctx] = canvas(S);
+  paint(ctx, S, S, (u, v, x, y) => { const n = fbm(u * 3, v * 3, 4, 3, 171) * 30 + hash(x, y, 172) * 10; const band = v > 0.08 && v < 0.14 ? -18 : 0; return [176 + n + band, 92 + n * 0.6 + band, 58 + n * 0.4 + band]; });
+  return c;
+}
+// leaves: overlapping leaf shapes in several greens with lighter veins
+function leaves(S) {
+  const [c, ctx] = canvas(S);
+  ctx.fillStyle = '#24481d'; ctx.fillRect(0, 0, S, S);
+  for (let k = 0; k < 90; k++) {
+    const x = rnd() * S, y = rnd() * S, l = S * (0.08 + rnd() * 0.1), a = rnd() * 6.28;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    ctx.fillStyle = `hsl(${95 + rnd() * 30},${45 + rnd() * 20}%,${20 + rnd() * 18}%)`;
+    ctx.beginPath(); ctx.ellipse(0, 0, l, l * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(190,230,150,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-l, 0); ctx.lineTo(l, 0); ctx.stroke();
+    ctx.restore();
+  }
+  return c;
+}
+// whiteboard: glossy white with marker notes, a diagram and faint old smudges
+function whiteboard(S) {
+  const [c, ctx] = canvas(S, S / 2);
+  ctx.fillStyle = '#f2f3f1'; ctx.fillRect(0, 0, S, S / 2);
+  for (let k = 0; k < 6; k++) { ctx.fillStyle = 'rgba(150,160,170,0.08)'; ctx.beginPath(); ctx.ellipse(rnd() * S, rnd() * S / 2, 30 + rnd() * 50, 10 + rnd() * 20, rnd(), 0, 6.3); ctx.fill(); }
+  ctx.lineCap = 'round';
+  const line = (col, w, pts) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * S, y * S / 2) : ctx.moveTo(x * S, y * S / 2))); ctx.stroke(); };
+  ctx.fillStyle = '#1f3f9a'; ctx.font = `bold ${S * 0.06}px sans-serif`; ctx.fillText('Lesson 4: Planning', S * 0.06, S * 0.1);
+  for (let k = 0; k < 4; k++) line('#203040', 2, [[0.08, 0.32 + k * 0.13], [0.12, 0.32 + k * 0.13]]), line('#203040', 2, [[0.15, 0.32 + k * 0.13], [0.3 + rnd() * 0.14, 0.32 + k * 0.13]]);
+  line('#c03030', 3, [[0.62, 0.85], [0.62, 0.3], [0.94, 0.3]]);
+  line('#2a8a3a', 3, [[0.62, 0.8], [0.7, 0.66], [0.78, 0.7], [0.86, 0.48], [0.93, 0.38]]);
+  return c;
+}
+
 function shelfBooks(S) {
   const [c, ctx] = canvas(S);
   ctx.fillStyle = '#3a2618'; ctx.fillRect(0, 0, S, S);
@@ -841,6 +928,17 @@ export function makeTextures(renderer, quality = 'medium') {
   T.asphalt = tex(asphalt(256));
   T.ceiling = tex(ceiling(256));
   T.shelf = tex(shelf(256));
+  T.deskWood = tex(deskWood(128));
+  T.fabricDark = tex(upholstery(64, [46, 48, 54], 181));
+  T.fabricBlue = tex(upholstery(64, [62, 86, 128], 182));
+  T.fabricGreen = tex(upholstery(64, [74, 104, 78], 183));
+  T.fabricBrown = tex(upholstery(64, [128, 92, 66], 184));
+  T.plasticDark = tex(plasticDark(64));
+  T.screen = tex(screen(128), false);
+  T.keys = tex(keys(128), false);
+  T.terracotta = tex(terracotta(64));
+  T.leaves = tex(leaves(128));
+  T.whiteboard = tex(whiteboard(256), false);
   T.bookTop = tex(bookTop(128));
   T.counter = tex(counter(256));
   T.pillar = tex(pillar(256));

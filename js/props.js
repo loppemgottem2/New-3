@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=530';
-import { CONFIG } from './config.js?v=530';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=530';
-import { footWorld } from './physics.js?v=530';
+import * as THREE from '../vendor/three.module.min.js?v=540';
+import { CONFIG } from './config.js?v=540';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=540';
+import { footWorld } from './physics.js?v=540';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -51,12 +51,28 @@ export const PROP_TYPES = {
   // simple counters: wooden cabinet with a stone countertop (4 m and 2 m)
   longcounter: { mass: 20, sound: 'wood', mu: 0.8, parts: [[0, 0.5, 0, 2.0, 0.5, 0.5]] },
   shortcounter: { mass: 10, sound: 'wood', mu: 0.8, parts: [[0, 0.5, 0, 1.0, 0.5, 0.5]] },
+  // ---- office / classroom furniture ----
+  // office desk: top, drawer pedestal, side panel, modesty panel at the back (the sitter is on the +z side)
+  desk:     { mass: 6.0, sound: 'wood', mu: 0.5, parts: [[0, 0.735, 0, 0.7, 0.025, 0.35], [-0.5, 0.355, 0, 0.18, 0.355, 0.32], [0.66, 0.355, 0, 0.02, 0.355, 0.32], [0.08, 0.45, -0.31, 0.56, 0.24, 0.012]] },
+  // office swivel chair: 5-spoke base, gas column, seat, backrest (+z), two armrests
+  swivelchair: { mass: 1.6, sound: 'metal', mu: 0.35, parts: [[0, 0.04, 0, 0.3, 0.03, 0.035, 0], [0, 0.04, 0, 0.3, 0.03, 0.035, 1.2566], [0, 0.04, 0, 0.3, 0.03, 0.035, 2.5133], [0, 0.26, 0, 0.03, 0.2, 0.03], [0, 0.49, 0, 0.25, 0.05, 0.24], [0, 0.84, 0.21, 0.23, 0.28, 0.04], [-0.24, 0.63, 0, 0.025, 0.03, 0.17], [0.24, 0.63, 0, 0.025, 0.03, 0.17]] },
+  // desktop computer monitor on a stand (screen faces +z)
+  computer: { mass: 0.9, sound: 'metal', mu: 0.5, parts: [[0, 0.012, 0, 0.11, 0.012, 0.08], [0, 0.11, -0.02, 0.02, 0.09, 0.015], [0, 0.32, 0, 0.29, 0.18, 0.025]] },
+  keyboard: { mass: 0.3, sound: 'cardboard', mu: 0.5, parts: [[0, 0.015, 0, 0.22, 0.015, 0.075]] },
+  // pen / pencil cup with a few pencils sticking out
+  pencup:   { mass: 0.12, sound: 'glass', mu: 0.5, parts: [...cyl(0.05, 0.04, 0.05), [0, 0.13, 0, 0.025, 0.04, 0.025]] },
+  // two-seat couch: base, cushions, backrest (+z), two arms
+  couch:    { mass: 14, sound: 'soft', mu: 0.8, parts: [[0, 0.22, 0, 1.0, 0.2, 0.45], [0, 0.47, -0.05, 0.86, 0.06, 0.38], [0, 0.62, 0.36, 1.0, 0.3, 0.09], [-0.93, 0.5, 0, 0.07, 0.1, 0.45], [0.93, 0.5, 0, 0.07, 0.1, 0.45]] },
+  // potted plant: pot + leafy top
+  plant:    { mass: 2.5, sound: 'soft', mu: 0.6, parts: [...cyl(0.19, 0.19, 0.19), [0, 0.72, 0, 0.3, 0.34, 0.3]] },
+  // mobile whiteboard on two legs
+  whiteboard: { mass: 5, sound: 'metal', mu: 0.6, parts: [[0, 1.35, 0, 0.9, 0.5, 0.02], [-0.85, 0.65, 0, 0.03, 0.65, 0.03], [0.85, 0.65, 0, 0.03, 0.65, 0.03], [-0.85, 0.03, 0, 0.04, 0.03, 0.3], [0.85, 0.03, 0, 0.04, 0.03, 0.3]] },
   // an old, broken baby doll lying on its back: head, body, legs, one arm (the other is missing)
   babydoll: { mass: 0.3, sound: 'soft', mu: 0.6, parts: [[0.2, 0.075, 0, 0.075, 0.075, 0.07], [0, 0.055, 0, 0.12, 0.055, 0.075], [-0.2, 0.035, 0.045, 0.09, 0.035, 0.032], [-0.2, 0.035, -0.045, 0.09, 0.035, 0.032], [0.06, 0.03, 0.11, 0.07, 0.025, 0.025]] },
 };
 
 // names shown to players ("Tap to become: baby doll")
-export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate', longcounter: 'long counter', shortcounter: 'short counter' };
+export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate', longcounter: 'long counter', shortcounter: 'short counter', swivelchair: 'swivel chair', computer: 'desktop computer', pencup: 'pen cup', plant: 'potted plant' };
 export const propName = (type) => PROP_NAMES[type] || type;
 
 // ---------------- shared temps ----------------
@@ -110,6 +126,67 @@ function buildGeometry() {
     return mergeParts(p);
   };
   GEO.longcounter = counter(4.0);
+  const Sph = (r, w = 10, h = 8) => new THREE.SphereGeometry(r, w, h);
+  const Cyl2 = (a, b, h, s = 12) => new THREE.CylinderGeometry(a, b, h, s);
+  // office desk: wood top, wood pedestal with dark drawer lines, metal handles
+  GEO.desk = mergeParts([
+    { geo: Box(1.4, 0.05, 0.7), mat: 0, m: M4(0, 0.735, 0) },
+    { geo: Box(0.36, 0.71, 0.64), mat: 0, m: M4(-0.5, 0.355, 0) },
+    { geo: Box(0.04, 0.71, 0.64), mat: 0, m: M4(0.66, 0.355, 0) },
+    { geo: Box(1.12, 0.48, 0.024), mat: 0, m: M4(0.08, 0.45, -0.31) },
+    ...[0.18, 0.4, 0.6].map((y) => ({ geo: Box(0.3, 0.012, 0.01), mat: 2, m: M4(-0.5, y + 0.08, 0.322) })),
+    ...[0.22, 0.44, 0.64].map((y) => ({ geo: Box(0.1, 0.015, 0.02), mat: 1, m: M4(-0.5, y, 0.33) })),
+  ]);
+  // swivel chair: black fabric seat + back, metal base / column / arms, little wheels
+  GEO.swivelchair = mergeParts([
+    ...[0, 1, 2, 3, 4].map((k) => ({ geo: Box(0.3, 0.035, 0.05), mat: 1, m: M4(Math.cos(k * 1.2566) * 0.15, 0.06, -Math.sin(k * 1.2566) * 0.15, 0, k * 1.2566, 0) })),
+    ...[0, 1, 2, 3, 4].map((k) => ({ geo: Sph(0.03, 6, 4), mat: 2, m: M4(Math.cos(k * 1.2566) * 0.29, 0.03, -Math.sin(k * 1.2566) * 0.29) })),
+    { geo: Cyl2(0.028, 0.028, 0.4, 8), mat: 1, m: M4(0, 0.26, 0) },
+    { geo: Box(0.5, 0.09, 0.48), mat: 0, m: M4(0, 0.49, 0) },
+    { geo: Box(0.46, 0.56, 0.07), mat: 0, m: M4(0, 0.84, 0.21, -0.08, 0, 0) },
+    { geo: Box(0.04, 0.2, 0.04), mat: 1, m: M4(0, 0.6, 0.2) },
+    ...[-0.24, 0.24].flatMap((x) => [{ geo: Box(0.05, 0.05, 0.32), mat: 2, m: M4(x, 0.64, 0) }, { geo: Box(0.03, 0.12, 0.03), mat: 1, m: M4(x, 0.57, 0.05) }]),
+  ]);
+  // monitor: dark plastic shell + stand, lit screen on the front (+z)
+  GEO.computer = mergeParts([
+    { geo: Box(0.22, 0.024, 0.16), mat: 0, m: M4(0, 0.012, 0) },
+    { geo: Box(0.04, 0.18, 0.03), mat: 0, m: M4(0, 0.11, -0.02) },
+    { geo: Box(0.58, 0.36, 0.05), mat: 0, m: M4(0, 0.32, 0) },
+    { geo: Box(0.54, 0.32, 0.004), mat: 1, m: M4(0, 0.325, 0.026) },
+  ]);
+  GEO.keyboard = mergeParts([
+    { geo: Box(0.44, 0.022, 0.15), mat: 0, m: M4(0, 0.011, 0) },
+    { geo: Box(0.42, 0.006, 0.13), mat: 1, m: M4(0, 0.025, 0, 0.06, 0, 0) },
+  ]);
+  GEO.pencup = mergeParts([
+    { geo: Cyl2(0.04, 0.036, 0.1, 12), mat: 0, m: M4(0, 0.05, 0) },
+    { geo: Cyl2(0.005, 0.005, 0.16, 6), mat: 1, m: M4(0.012, 0.12, 0.006, 0.12, 0, 0.1) },
+    { geo: Cyl2(0.005, 0.005, 0.15, 6), mat: 2, m: M4(-0.014, 0.115, 0.01, -0.08, 0, -0.14) },
+    { geo: Cyl2(0.005, 0.005, 0.15, 6), mat: 3, m: M4(0.002, 0.118, -0.014, -0.15, 0, 0.04) },
+  ]);
+  // couch: fabric body, separate seat cushions and back cushions, dark little feet
+  GEO.couch = mergeParts([
+    { geo: Box(1.86, 0.3, 0.86), mat: 0, m: M4(0, 0.21, 0) },
+    ...[-0.43, 0.43].map((x) => ({ geo: Box(0.85, 0.13, 0.76), mat: 0, m: M4(x, 0.42, -0.05) })),
+    { geo: Box(2.0, 0.6, 0.18), mat: 0, m: M4(0, 0.62, 0.36) },
+    ...[-0.43, 0.43].map((x) => ({ geo: Box(0.84, 0.36, 0.12), mat: 0, m: M4(x, 0.64, 0.24, -0.12, 0, 0) })),
+    ...[-0.93, 0.93].map((x) => ({ geo: Box(0.14, 0.4, 0.9), mat: 0, m: M4(x, 0.42, 0) })),
+    ...[[-0.9, -0.38], [0.9, -0.38], [-0.9, 0.38], [0.9, 0.38]].map(([x, z]) => ({ geo: Box(0.06, 0.06, 0.06), mat: 1, m: M4(x, 0.03, z) })),
+  ]);
+  // potted plant: terracotta pot, dark soil, a bushy clump of leaves
+  {
+    const p = [{ geo: Cyl2(0.2, 0.15, 0.38, 14), mat: 0, m: M4(0, 0.19, 0) }, { geo: Cyl2(0.215, 0.215, 0.05, 14), mat: 0, m: M4(0, 0.36, 0) }, { geo: Cyl2(0.18, 0.18, 0.02, 12), mat: 1, m: M4(0, 0.375, 0) }];
+    const lv = [[0, 0.62, 0, 0.17], [0.13, 0.75, 0.05, 0.15], [-0.12, 0.78, -0.06, 0.15], [0.04, 0.92, -0.08, 0.14], [-0.06, 0.88, 0.12, 0.13], [0.1, 0.55, -0.14, 0.12], [-0.15, 0.58, 0.1, 0.12], [0, 1.0, 0.02, 0.1]];
+    for (const [x, y, z, r] of lv) p.push({ geo: Sph(r, 8, 6), mat: 2, m: M4(x, y, z, x * 3, y * 2, z * 4) });
+    GEO.plant = mergeParts(p);
+  }
+  // mobile whiteboard: white board with a writing texture, grey frame, legs and feet
+  GEO.whiteboard = mergeParts([
+    { geo: Box(1.76, 0.96, 0.03), mat: 0, m: M4(0, 1.35, 0) },
+    { geo: Box(1.8, 0.03, 0.05), mat: 1, m: M4(0, 1.85, 0) }, { geo: Box(1.8, 0.03, 0.05), mat: 1, m: M4(0, 0.86, 0) },
+    { geo: Box(1.7, 0.02, 0.1), mat: 1, m: M4(0, 0.84, 0.05) },
+    ...[-0.86, 0.86].flatMap((x) => [{ geo: Box(0.04, 1.3, 0.04), mat: 1, m: M4(x, 0.65, 0) }, { geo: Box(0.06, 0.05, 0.6), mat: 1, m: M4(x, 0.03, 0) }]),
+  ]);
   GEO.shortcounter = counter(2.0);
   // long crate: four crate-sized sections in a row (so the planks aren't stretched) with dark frame bands
   GEO.longcrate = mergeParts([
@@ -201,6 +278,14 @@ function propMaterials(T, type, i = 0) {
   switch (type) {
     case 'box': return [new THREE.MeshLambertMaterial({ map: T.cardboard })];
     case 'crate': return [new THREE.MeshLambertMaterial({ map: T.crate })];
+    case 'desk': return [new THREE.MeshLambertMaterial({ map: T.deskWood }), new THREE.MeshLambertMaterial({ color: 0xb8bcc2 }), new THREE.MeshLambertMaterial({ color: 0x3a2a1c })];
+    case 'swivelchair': return [new THREE.MeshLambertMaterial({ map: T.fabricDark }), new THREE.MeshLambertMaterial({ map: T.metal, color: 0x9aa0a8 }), new THREE.MeshLambertMaterial({ color: 0x1b1b1d })];
+    case 'computer': return [new THREE.MeshLambertMaterial({ map: T.plasticDark }), new THREE.MeshBasicMaterial({ map: T.screen })];
+    case 'keyboard': return [new THREE.MeshLambertMaterial({ map: T.plasticDark }), new THREE.MeshLambertMaterial({ map: T.keys })];
+    case 'pencup': return [new THREE.MeshLambertMaterial({ map: T.metal, color: 0x6f7c8a }), new THREE.MeshLambertMaterial({ color: 0xe0b020 }), new THREE.MeshLambertMaterial({ color: 0x2050c0 }), new THREE.MeshLambertMaterial({ color: 0xc02a2a })];
+    case 'couch': return [new THREE.MeshLambertMaterial({ map: [T.fabricBlue, T.fabricGreen, T.fabricBrown][i % 3] }), new THREE.MeshLambertMaterial({ color: 0x2a1d14 })];
+    case 'plant': return [new THREE.MeshLambertMaterial({ map: T.terracotta }), new THREE.MeshLambertMaterial({ color: 0x2e2015 }), new THREE.MeshLambertMaterial({ map: T.leaves })];
+    case 'whiteboard': return [new THREE.MeshLambertMaterial({ map: T.whiteboard }), new THREE.MeshLambertMaterial({ map: T.metal, color: 0xc8ccd2 })];
     case 'longcounter': case 'shortcounter': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ color: 0xcfc9bd }), new THREE.MeshLambertMaterial({ color: 0x2a201a })];
     case 'longcrate': return [new THREE.MeshLambertMaterial({ map: T.crate }), new THREE.MeshLambertMaterial({ color: 0x4a3420 })];
     case 'chair': case 'table': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ map: T.metal })];
@@ -573,6 +658,8 @@ export class PropSystem {
       // speed going into the prop (before the bump slows you down)
       const into = -((ch.vx || 0) * nx + (ch.vz || 0) * nz);
       if (!low) {
+        // pushing into a piece of furniture: a prop can climb it like a wall
+        if (into > 0.2 || best > 0.02) ch.climbT = 0.2;
         ch.x += nx * best * soft; ch.z += nz * best * soft;
         // bumping into furniture takes some of your speed (it goes into pushing it instead)
         if (soft > 0 && into > 0) { ch.vx += nx * into * 0.55; ch.vz += nz * into * 0.55; }
