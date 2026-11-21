@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=300';
-import { CONFIG } from './config.js?v=300';
-import { store, makeCode, clamp } from './util.js?v=300';
-import { makeTextures } from './textures.js?v=300';
-import { GameMap } from './map.js?v=300';
-import { NavGrid } from './nav.js?v=300';
-import { Input, isTouchDevice } from './input.js?v=300';
-import { UI } from './ui.js?v=300';
-import { Audio } from './audio.js?v=300';
-import { Game } from './game.js?v=300';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=300';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=300';
+import * as THREE from '../vendor/three.module.min.js?v=310';
+import { CONFIG } from './config.js?v=310';
+import { store, makeCode, clamp } from './util.js?v=310';
+import { makeTextures } from './textures.js?v=310';
+import { GameMap } from './map.js?v=310';
+import { NavGrid } from './nav.js?v=310';
+import { Input, isTouchDevice } from './input.js?v=310';
+import { UI } from './ui.js?v=310';
+import { Audio } from './audio.js?v=310';
+import { Game } from './game.js?v=310';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=310';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=310';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -73,6 +73,7 @@ const SCHEMA = [
 // ---------------- renderer / scene ----------------
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !!settings.antialias, powerPreference: 'high-performance' });
+renderer.localClippingEnabled = true;   // blood / bullet marks are cut off at the edge of the surface they're on
 renderer.setClearColor(0x8fbbe8);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;

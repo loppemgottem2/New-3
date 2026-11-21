@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=300';
-import { CONFIG } from './config.js?v=300';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=300';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=300';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=300';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=300';
-import { Ragdoll } from './ragdoll.js?v=300';
-import { Audio } from './audio.js?v=300';
-import { initBrain, updateBots } from './bots.js?v=300';
+import * as THREE from '../vendor/three.module.min.js?v=310';
+import { CONFIG } from './config.js?v=310';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=310';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=310';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=310';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=310';
+import { Ragdoll } from './ragdoll.js?v=310';
+import { Audio } from './audio.js?v=310';
+import { initBrain, updateBots } from './bots.js?v=310';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -26,7 +26,7 @@ const INV = CONFIG.INVENTORY;
 const r2 = (v) => Math.round(v * 100) / 100;
 const FLASH_GEO = new THREE.SphereGeometry(0.12, 8, 6);
 const DECAL_GEO = new THREE.PlaneGeometry(1, 1);
-const MAX_DECALS = 160;
+const MAX_DECALS = 360;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // Flags packed into snapshots
@@ -584,7 +584,68 @@ export class Game {
     this.emit({ e: 'blood', id: target.id, w, p: [r2(p.x), r2(p.y), r2(p.z)], d: [r2(d.x), r2(d.y), r2(d.z)], g: gun ? 1 : 0 });
   }
 
-  addDecal(tex, p, n, w, h, life, prop = null, parentObj = null) {
+  // ----- cutting marks off at the edge of the surface they're on -----
+  // planes (THREE.Plane, world space) around the flat map surface at p (normal n): a wall face, a floor / counter top,
+  // a ceiling or a light fixture. Anything of the mark outside them is not drawn, so it never hangs in the air.
+  mapClip(p, n) {
+    const map = this.map, CELL = 2, CEIL = 6, ROOF_TOP = 6.55, MAXC = 3;
+    const keep = (nx, ny, nz, c) => new THREE.Plane(new THREE.Vector3(nx, ny, nz), c);
+    const cx0 = Math.floor(p.x / CELL), cz0 = Math.floor(p.z / CELL);
+    const scan = (ok, horizontalAxis) => {
+      // contiguous cells (from the hit cell) along x and along z where the surface exists
+      let x0 = cx0, x1 = cx0, z0 = cz0, z1 = cz0;
+      if (horizontalAxis !== 'z') { while (x0 - 1 >= cx0 - MAXC && ok(x0 - 1, cz0)) x0--; while (x1 + 1 <= cx0 + MAXC && ok(x1 + 1, cz0)) x1++; }
+      if (horizontalAxis !== 'x') { while (z0 - 1 >= cz0 - MAXC && ok(cx0, z0 - 1)) z0--; while (z1 + 1 <= cz0 + MAXC && ok(cx0, z1 + 1)) z1++; }
+      return [x0 * CELL, (x1 + 1) * CELL, z0 * CELL, (z1 + 1) * CELL];
+    };
+    if (Math.abs(n.y) > 0.5) {
+      if (n.y < 0 && Math.abs(p.y - (CEIL - 0.07)) < 0.03) {
+        // underside of a light fixture
+        const lx = (Math.floor(p.x / CELL / 3) * 3 + 1.5) * CELL, lz = (Math.floor(p.z / CELL / 3) * 3 + 1.5) * CELL;
+        return [keep(1, 0, 0, -(lx - 0.72)), keep(-1, 0, 0, lx + 0.72), keep(0, 0, 1, -(lz - 0.38)), keep(0, 0, -1, lz + 0.38)];
+      }
+      let ok;
+      if (n.y > 0 && Math.abs(p.y - ROOF_TOP) < 0.03) ok = (x, z) => map.roofedCell(x, z);
+      else if (n.y > 0) ok = (x, z) => map.inBounds(x, z) && Math.abs(map.cellHeight(x, z) - p.y) < 0.03;
+      else ok = (x, z) => map.roofedCell(x, z) && map.cellHeight(x, z) < CEIL;
+      const [x0, x1, z0, z1] = scan(ok);
+      return [keep(1, 0, 0, -x0), keep(-1, 0, 0, x1), keep(0, 0, 1, -z0), keep(0, 0, -1, z1)];
+    }
+    // wall face: solid cell on one side of the cell edge, open (lower) cell on the other
+    const alongX = Math.abs(n.x) > 0.5;
+    const sgn = alongX ? Math.sign(n.x) : Math.sign(n.z);
+    const solidC = Math.floor(((alongX ? p.x : p.z) - sgn * 0.01) / CELL), openC = solidC + sgn;
+    const face = (t) => {
+      const sx = alongX ? solidC : t, sz = alongX ? t : solidC, ox = alongX ? openC : t, oz = alongX ? t : openC;
+      return map.cellHeight(sx, sz) > p.y && map.cellHeight(ox, oz) <= p.y;
+    };
+    const t0 = alongX ? cz0 : cx0;
+    let a = t0, b = t0;
+    while (a - 1 >= t0 - MAXC && face(a - 1)) a--;
+    while (b + 1 <= t0 + MAXC && face(b + 1)) b++;
+    const solidH = map.cellHeight(alongX ? solidC : cx0, alongX ? cz0 : solidC);
+    const openH = map.cellHeight(alongX ? openC : cx0, alongX ? cz0 : openC);
+    const indoor = !map.isOutdoor(p.x + n.x * 0.3, p.z + n.z * 0.3);
+    const top = Math.min(solidH, indoor ? CEIL : solidH), bottom = Math.max(0, openH);
+    const planes = [keep(0, 1, 0, -bottom), keep(0, -1, 0, top)];
+    if (alongX) planes.push(keep(0, 0, 1, -a * CELL), keep(0, 0, -1, (b + 1) * CELL));
+    else planes.push(keep(1, 0, 0, -a * CELL), keep(-1, 0, 0, (b + 1) * CELL));
+    return planes;
+  }
+
+  // the 4 side planes of the face of a furniture part that was hit, in the prop's own space (they move with it)
+  propClipLocal(part, axis) {
+    const h = part.h, out = [];
+    const m = new THREE.Matrix4().compose(part.c, part.q, new THREE.Vector3(1, 1, 1));
+    for (const ax of ['x', 'y', 'z']) {
+      if (ax === axis) continue;
+      const v = new THREE.Vector3(); v[ax] = 1;
+      out.push(new THREE.Plane(v.clone().negate(), h[ax]).applyMatrix4(m), new THREE.Plane(v.clone(), h[ax]).applyMatrix4(m));
+    }
+    return out;
+  }
+
+  addDecal(tex, p, n, w, h, life, prop = null, parentObj = null, clip = null) {
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const l = this.map.probe(p.x, p.z, true, [0, 0, 0]);
     const lum = Math.min(1.25, 0.3 * l[0] + 0.55 * l[1] + 0.15 * l[2]);
@@ -606,8 +667,19 @@ export class Game {
       m.matrix.decompose(m.position, m.quaternion, m.scale);
       parent.add(m);
     } else this.root.add(m);
-    this.decals.push({ m, life, max: life });
+    // edge clipping: map surfaces use fixed world planes; furniture planes follow the prop every frame
+    let local = null;
+    if (clip && clip.world) mat.clippingPlanes = clip.world;
+    else if (clip && clip.local && parent) { local = clip.local; mat.clippingPlanes = local.map((pl) => pl.clone().applyMatrix4(parent.matrixWorld)); }
+    else if (!parent) mat.clippingPlanes = this.mapClip(p, n);
+    this.decals.push({ m, life, max: life, local, parent: local ? parent : null });
     while (this.decals.length > MAX_DECALS) this.removeDecal(this.decals.shift());
+  }
+
+  // find the furniture part / face under a point on a prop (for clipping marks to that face)
+  propFaceClip(prop, p, n) {
+    const ph = this.props.raycast(p.x + n.x * 0.06, p.y + n.y * 0.06, p.z + n.z * 0.06, -n.x, -n.y, -n.z, 0.2);
+    return ph && ph.prop === prop && ph.part ? { local: this.propClipLocal(ph.part, ph.axis) } : null;
   }
   removeDecal(dc) { dc.m.parent?.remove(dc.m); dc.m.material.dispose(); }
 
@@ -637,7 +709,7 @@ export class Game {
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false;
     this.root.add(pts);
-    (this.bursts || (this.bursts = [])).push({ pts, vel, life: gun ? 1.6 : 1.2, max: gun ? 1.6 : 1.2, ground: groundHeight(this.map, p.x, p.z, 0.1, p.y) });
+    (this.bursts || (this.bursts = [])).push({ pts, vel, life: gun ? 1.6 : 1.2, max: gun ? 1.6 : 1.2, landed: new Uint8Array(n) });
   }
 
   updateBursts(dt) {
@@ -648,10 +720,28 @@ export class Game {
       if (b.life <= 0) { this.root.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); this.bursts.splice(i, 1); continue; }
       const a = b.pts.geometry.attributes.position, arr = a.array;
       for (let k = 0; k < b.vel.length; k++) {
+        if (b.landed[k]) continue;
         const v = b.vel[k];
-        if (arr[k * 3 + 1] <= b.ground + 0.01) continue;           // landed on the floor
         v[1] -= 14 * dt;
-        arr[k * 3] += v[0] * dt; arr[k * 3 + 1] = Math.max(b.ground + 0.01, arr[k * 3 + 1] + v[1] * dt); arr[k * 3 + 2] += v[2] * dt;
+        const x = arr[k * 3], y = arr[k * 3 + 1], z = arr[k * 3 + 2];
+        const len = Math.hypot(v[0], v[1], v[2]) * dt || 1e-6, dx = v[0] * dt / len, dy = v[1] * dt / len, dz = v[2] * dt / len;
+        // did the drop hit a wall, the floor or furniture on the way? -> it stops there and leaves a drop mark
+        const tw = raycastMap(this.map, x, y, z, dx, dy, dz, len);
+        const ph = this.props.raycast(x, y, z, dx, dy, dz, Math.min(tw, len));
+        const t = ph ? ph.t : tw;
+        if (t < len) {
+          const hp = { x: x + dx * t, y: y + dy * t, z: z + dz * t };
+          arr[k * 3] = hp.x; arr[k * 3 + 1] = hp.y; arr[k * 3 + 2] = hp.z;
+          b.landed[k] = 1;
+          if (k % 2 === 0) {     // every other drop leaves a mark (keeps it light on phones)
+            const nrm = ph ? ph.normal : this.mapNormal(hp, { x: dx, y: dy, z: dz });
+            const sz = rand(0.1, 0.26);
+            const clip = ph && ph.part ? { local: this.propClipLocal(ph.part, ph.axis) } : null;
+            this.addDecal(this.T.bloodDrop[(Math.random() * this.T.bloodDrop.length) | 0], hp, nrm, sz, sz, rand(35, 45), ph ? ph.prop : null, null, clip);
+          }
+          continue;
+        }
+        arr[k * 3] = x + v[0] * dt; arr[k * 3 + 1] = y + v[1] * dt; arr[k * 3 + 2] = z + v[2] * dt;
       }
       a.needsUpdate = true;
       b.pts.material.opacity = Math.min(1, b.life / (b.max * 0.4));
@@ -688,7 +778,15 @@ export class Game {
 
   // client: splash blood onto nearby walls / floor / furniture / people (and a wound on the one who was hit)
   spawnBlood(p, d, gun, victim = null, w = 's') {
-    const T = this.T, n = gun ? 10 : 5, range = gun ? 4.5 : 1.8;
+    const T = this.T, n = gun ? 16 : 8, range = gun ? 5 : 2.2;
+    // a big pool of blood on the floor under the hit
+    {
+      const tf = raycastMap(this.map, p.x, p.y, p.z, 0, -1, 0, 4);
+      if (tf < 4) {
+        const fp = { x: p.x, y: p.y - tf, z: p.z }, sz = gun ? rand(1.3, 2.1) : rand(0.7, 1.1);
+        this.addDecal(T.bloodPool[(Math.random() * T.bloodPool.length) | 0], fp, { x: 0, y: 1, z: 0 }, sz, sz, rand(40, 50));
+      }
+    }
     // the prop that was hit gets the weapon's own mark where it was hit (bullet hole / knife cut / crowbar scratches)
     if (victim) {
       const back = { x: p.x - d.x * 1.2, y: p.y - d.y * 1.2, z: p.z - d.z * 1.2 };
@@ -718,7 +816,8 @@ export class Game {
       let size = (gun ? rand(0.85, 1.7) : rand(0.32, 0.7)) * (0.8 + Math.min(1, t / range) * 0.5);
       if (pc) size *= 0.45;                        // smaller on a body
       const set = gun && i > 0 ? T.bloodSpray : T.blood;
-      this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, rand(35, 45), pc ? null : ph ? ph.prop : null, pc ? pc.obj : null);
+      const clip = pc ? null : ph ? (ph.part ? { local: this.propClipLocal(ph.part, ph.axis) } : null) : null;
+      this.addDecal(set[(Math.random() * set.length) | 0], hp, nrm, size, size, rand(35, 45), pc ? null : ph ? ph.prop : null, pc ? pc.obj : null, clip);
     }
   }
 
@@ -1027,9 +1126,10 @@ export class Game {
       case 'imp': {
         const p = { x: ev.p[0], y: ev.p[1], z: ev.p[2] }, n = { x: ev.n[0], y: ev.n[1], z: ev.n[2] };
         const prop = ev.pid >= 0 ? this.props.list[ev.pid] : null;
-        if (ev.k === 'b') this.addDecal(this.T.bulletHole, p, n, 0.11, 0.11, 30, prop);
-        else if (ev.k === 'c') { const sz = rand(0.28, 0.4); this.addDecal(this.T.scratch[(Math.random() * this.T.scratch.length) | 0], p, n, sz, sz, 30, prop); }
-        else { const sz = rand(0.32, 0.5); this.addDecal(this.T.slash[(Math.random() * this.T.slash.length) | 0], p, n, sz, sz * 0.25, 30, prop); }
+        const clip = prop ? this.propFaceClip(prop, p, n) : null;
+        if (ev.k === 'b') this.addDecal(this.T.bulletHole, p, n, 0.11, 0.11, 30, prop, null, clip);
+        else if (ev.k === 'c') { const sz = rand(0.28, 0.4); this.addDecal(this.T.scratch[(Math.random() * this.T.scratch.length) | 0], p, n, sz, sz, 30, prop, null, clip); }
+        else { const sz = rand(0.32, 0.5); this.addDecal(this.T.slash[(Math.random() * this.T.slash.length) | 0], p, n, sz, sz * 0.25, 30, prop, null, clip); }
         break;
       }
       case 'blood': {
@@ -1477,6 +1577,7 @@ export class Game {
       dc.life -= dt;
       if (dc.life <= 0) { this.removeDecal(dc); this.decals.splice(i, 1); continue; }
       if (dc.life < 4) dc.m.material.opacity = dc.life / 4;
+      if (dc.local) { const cp = dc.m.material.clippingPlanes; for (let k = 0; k < cp.length; k++) cp[k].copy(dc.local[k]).applyMatrix4(dc.parent.matrixWorld); }
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
