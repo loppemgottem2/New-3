@@ -33,11 +33,12 @@ const DEFAULTS = {
   volume: 1, footVol: 1,
   fps: false, crosshair: 'dot', hudScale: 1, hints: true,
 };
-const settings = { ...DEFAULTS, ...store.get('killermystery-settings', {}) };
+// (falls back to Killer Mystery's saved settings, so your character comes along)
+const settings = { ...DEFAULTS, ...store.get('findthethings-settings', store.get('killermystery-settings', {})) };
 settings.look = sanitizeLook(settings.look);
 // v3: everyone starts with the white skin tone (you can still change it in the editor)
-if (!settings.lookV3) { settings.look.skin = WHITE_SKIN; settings.lookV3 = true; store.set('killermystery-settings', settings); }
-const saveSettings = () => store.set('killermystery-settings', settings);
+if (!settings.lookV3) { settings.look.skin = WHITE_SKIN; settings.lookV3 = true; store.set('findthethings-settings', settings); }
+const saveSettings = () => store.set('findthethings-settings', settings);
 const pct = (v) => `${Math.round(v * 100)}%`;
 const SCHEMA = [
   { tab: 'Controls', key: 'touchSens', label: 'Touch look sensitivity', type: 'range', min: 1, max: 20, step: 0.5, fmt: (v) => v.toFixed(1) },
@@ -491,6 +492,8 @@ function netErrorText(e) {
   return e.message || String(e.type || e);
 }
 
+$('btn-inv-close').onclick = () => ui.toggleInventory(null, false);
+
 // ---------------- the match ----------------
 function startGame(mode, net, opts) {
   ui.notice('');
@@ -545,7 +548,7 @@ function step(dt, background = false) {
   if (inp.menu && !ui.overlayOpen) openSettings();
   game.update(dt, inp);
 }
-const emptyInput = () => ({ fwd: 0, strafe: 0, run: false, jump: false, attack: false, attackHeld: false, equip: false, throw: false, next: false, x: false, score: false, scoreUp: false, lookDX: 0, lookDY: 0, zoom: 0, toggleView: false, menu: false });
+const emptyInput = () => ({ fwd: 0, strafe: 0, run: false, jump: false, attack: false, attackHeld: false, equip: false, throw: false, next: false, slot: -1, inv: false, tap: null, x: false, score: false, scoreUp: false, lookDX: 0, lookDY: 0, zoom: 0, toggleView: false, menu: false });
 
 function frame(now) {
   requestAnimationFrame(frame);

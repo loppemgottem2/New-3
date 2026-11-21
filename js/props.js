@@ -131,6 +131,74 @@ function buildGeometry() {
   return GEO;
 }
 
+// list of prop types (index is sent over the network for disguises)
+export const PROP_LIST = Object.keys(PROP_TYPES);
+
+let _glow = null;
+const GLOW_MAT = () => _glow || (_glow = new THREE.MeshBasicMaterial({ color: 0xffe1a8, side: THREE.DoubleSide }));
+function propMaterials(T, type, i = 0) {
+  switch (type) {
+    case 'box': return [new THREE.MeshLambertMaterial({ map: T.cardboard })];
+    case 'crate': return [new THREE.MeshLambertMaterial({ map: T.crate })];
+    case 'chair': case 'table': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ map: T.metal })];
+    case 'barrel': return [new THREE.MeshLambertMaterial({ map: T.barrel }), new THREE.MeshLambertMaterial({ map: T.metal })];
+    case 'mattress': return [new THREE.MeshLambertMaterial({ map: T.mattress })];
+    case 'lamp': return [new THREE.MeshLambertMaterial({ map: T.metal }), new THREE.MeshLambertMaterial({ color: 0x333333 }), GLOW_MAT()];
+    case 'bottle': return [new THREE.MeshLambertMaterial({ color: 0x8a4a16, transparent: true, opacity: 0.9 }), new THREE.MeshLambertMaterial({ color: 0xc9a227 }), new THREE.MeshLambertMaterial({ color: i % 2 ? 0xe8dcc0 : 0xd8c070 })];
+    case 'trashcan': return [new THREE.MeshLambertMaterial({ map: T.metal, color: 0x8a8f86, side: THREE.DoubleSide }), new THREE.MeshLambertMaterial({ color: 0x2a2620 }), new THREE.MeshLambertMaterial({ map: T.cardboard })];
+    case 'takeout': return [new THREE.MeshLambertMaterial({ map: T.takeout }), new THREE.MeshLambertMaterial({ color: 0x999999 })];
+    default: return [new THREE.MeshLambertMaterial({ color: 0x888888 })];
+  }
+}
+
+// A prop-team player disguised as furniture: same mesh as the real prop, origin at the feet.
+export class DisguiseMesh {
+  constructor(T, type) {
+    this.type = type;
+    this.mats = propMaterials(T, type, 0);
+    for (const m of this.mats) m.userData.base = m.color.clone();
+    this.mesh = new THREE.Mesh(buildGeometry()[type], this.mats.length > 1 ? this.mats : this.mats[0]);
+    this.mats = this.mats.filter((m) => m !== GLOW_MAT());
+    let top = 0;
+    for (const [, cy, , , hy] of PROP_TYPES[type].parts) top = Math.max(top, cy + hy);
+    this.height = top;
+  }
+  setLight(l) {
+    const lum = 0.3 * l[0] + 0.55 * l[1] + 0.15 * l[2];
+    const tr = lum * 0.8 + l[0] * 0.2, tg = lum * 0.8 + l[1] * 0.2, tb = lum * 0.8 + l[2] * 0.2;
+    for (const m of this.mats) { const b = m.userData.base; m.color.setRGB(b.r * tr, b.g * tg, b.b * tb); }
+  }
+  dispose() { for (const m of this.mats) m.dispose(); }
+}
+
+// height of a prop type (camera / hit tests for disguised players)
+export function propHeight(type) {
+  let top = 0;
+  for (const [, cy, , , hy] of PROP_TYPES[type].parts) top = Math.max(top, cy + hy);
+  return top;
+}
+
+// Ray vs. a prop shape standing upright at (x,y,z) turned by yaw. Returns distance or -1.
+export function rayVsPropShape(type, x, y, z, yaw, ox, oy, oz, dx, dy, dz, pad = 0) {
+  const def = PROP_TYPES[type];
+  if (!def) return -1;
+  let best = -1;
+  const c = Math.cos(-yaw), s = Math.sin(-yaw);
+  // into the prop's own space (yaw only)
+  const lx = ox - x, lz = oz - z;
+  const o0 = { x: lx * c + lz * s, y: oy - y, z: -lx * s + lz * c };
+  const d0 = { x: dx * c + dz * s, y: dy, z: -dx * s + dz * c };
+  for (const [cx, cy, cz, hx, hy, hz, py = 0] of def.parts) {
+    const pc = Math.cos(-py), ps = Math.sin(-py);
+    const ax = o0.x - cx, az = o0.z - cz;
+    const o = { x: ax * pc + az * ps, y: o0.y - cy, z: -ax * ps + az * pc };
+    const d = { x: d0.x * pc + d0.z * ps, y: d0.y, z: -d0.x * ps + d0.z * pc };
+    const t = slab(o, d, { x: hx + pad, y: hy + pad, z: hz + pad });
+    if (t >= 0 && (best < 0 || t < best)) best = t;
+  }
+  return best;
+}
+
 // =====================================================================
 export class PropSystem {
   constructor(map, root, T, isHost) {
@@ -142,21 +210,9 @@ export class PropSystem {
     this.fullT = 0;
     this.events = [];
     const G = buildGeometry();
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffe1a8, side: THREE.DoubleSide });
-    const matsFor = (type, i) => {
-      switch (type) {
-        case 'box': return [new THREE.MeshLambertMaterial({ map: T.cardboard })];
-        case 'crate': return [new THREE.MeshLambertMaterial({ map: T.crate })];
-        case 'chair': case 'table': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ map: T.metal })];
-        case 'barrel': return [new THREE.MeshLambertMaterial({ map: T.barrel }), new THREE.MeshLambertMaterial({ map: T.metal })];
-        case 'mattress': return [new THREE.MeshLambertMaterial({ map: T.mattress })];
-        case 'lamp': return [new THREE.MeshLambertMaterial({ map: T.metal }), new THREE.MeshLambertMaterial({ color: 0x333333 }), glowMat];
-        case 'bottle': return [new THREE.MeshLambertMaterial({ color: 0x8a4a16, transparent: true, opacity: 0.9 }), new THREE.MeshLambertMaterial({ color: 0xc9a227 }), new THREE.MeshLambertMaterial({ color: i % 2 ? 0xe8dcc0 : 0xd8c070 })];
-        case 'trashcan': return [new THREE.MeshLambertMaterial({ map: T.metal, color: 0x8a8f86, side: THREE.DoubleSide }), new THREE.MeshLambertMaterial({ color: 0x2a2620 }), new THREE.MeshLambertMaterial({ map: T.cardboard })];
-        case 'takeout': return [new THREE.MeshLambertMaterial({ map: T.takeout }), new THREE.MeshLambertMaterial({ color: 0x999999 })];
-        default: return [new THREE.MeshLambertMaterial({ color: 0x888888 })];
-      }
-    };
+    this.T = T;
+    const glowMat = GLOW_MAT();
+    const matsFor = (type, i) => propMaterials(T, type, i);
     map.propSpawns.forEach((s, id) => {
       const def = PROP_TYPES[s.type];
       // parts relative to the center of mass

@@ -45,6 +45,8 @@ export class Input {
         if (k === 'Tab') this.press('score');
         if (k === 'KeyV') this.press('toggleView');
         if (k === 'KeyP' || k === 'Escape') this.press('menu');
+        if (k === 'KeyI' || k === 'KeyB') this.press('inv');
+        if (/^Digit[1-9]$/.test(k)) this.slotKey = +k.slice(5) - 1;   // hotbar 1-5
       }
       this.keys.add(k);
     });
@@ -122,7 +124,8 @@ export class Input {
         this.joyBase.style.top = `${t.clientY}px`;
         this.joyKnob.style.transform = 'translate(-50%,-50%)';
       } else {
-        this.lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+        // sx/sy/t0/moved: lets a quick tap (not a drag) on the screen pick things (props: tap furniture to become it)
+        this.lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY, t0: performance.now() });
       }
     }
   }
@@ -180,6 +183,10 @@ export class Input {
         this.joy.id = null; this.joy.x = 0; this.joy.y = 0;
         this.joyBase.style.display = 'none';
       }
+      const lt = this.lookTouches.get(t.identifier);
+      if (lt && !lt.btn && lt.t0 && performance.now() - lt.t0 < 300 && Math.hypot(t.clientX - lt.sx, t.clientY - lt.sy) < 14) {
+        this.tap = { x: t.clientX, y: t.clientY };
+      }
       this.lookTouches.delete(t.identifier);
       const b = this.btnTouches.get(t.identifier);
       if (b) {
@@ -236,6 +243,9 @@ export class Input {
       equip: !!this.edges.equip,
       throw: !!this.edges.throw,
       next: !!this.edges.next,
+      slot: this.slotKey ?? -1,
+      inv: !!this.edges.inv,
+      tap: this.tap || null,
       x: !!this.edges.x,
       score: !!this.edges.score,
       zoom: this.zoom,
@@ -246,6 +256,7 @@ export class Input {
       lookDY: clamp(this.lookDY, -2, 2) * (this.invertY ? -1 : 1),
     };
     this.edges = {};
+    this.slotKey = null; this.tap = null;
     this.lookDX = 0; this.lookDY = 0; this.zoom = 0;
     return out;
   }

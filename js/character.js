@@ -348,7 +348,7 @@ export class CharacterModel {
   removeFrom(scene) { scene.remove(this.root); scene.remove(this.blob); }
   setVisible(v) { this.root.visible = v; this.blob.visible = v; }
 
-  // shirt color = your secret identity color during a round
+  // recolor the shirt (keeps your own color unless something calls this)
   setColor(hex) {
     this.mats.shirt.userData.base = hex; this.mats.sleeve.userData.base = hex;
     this.applyLight();
@@ -377,6 +377,8 @@ export class CharacterModel {
     const air = Math.min(1, Math.max(0, (s.y - groundY) / 1.2));
     this.blob.material.opacity = 1 - air * 0.7;
     this.setWeapon(s.weapon);
+
+    if (s.tpose) { this.tPose(s.pitch); return; }
 
     const speed = s.speed || 0;
     const moving = Math.min(1, speed / 3.8);
@@ -432,6 +434,20 @@ export class CharacterModel {
       this.armR.sh.rotation.set(inAir ? 0.7 : armSw * 0.9, 0, inAir ? 0.2 : 0.1);        // forward, angled down
       this.armR.el.rotation.x = elbowBend;
     }
+  }
+
+  // Prop team: stiff T-pose, no animation at all (walking, running and jumping look the same)
+  tPose(pitch = 0) {
+    this.pelvis.joint.position.y = 0.92;
+    this.pelvis.joint.rotation.set(0, 0, 0);
+    this.torso.joint.rotation.set(0, 0, 0);
+    this.head.joint.rotation.set(pitch * 0.4, 0, 0);
+    this.legL.hip.rotation.set(0, 0, 0); this.legR.hip.rotation.set(0, 0, 0);
+    this.legL.kn.rotation.set(0, 0, 0); this.legR.kn.rotation.set(0, 0, 0);
+    this.armL.sh.quaternion.identity(); this.armR.sh.quaternion.identity();
+    this.armL.sh.rotation.set(0, 0, -Math.PI / 2);   // arms straight out to the sides
+    this.armR.sh.rotation.set(0, 0, Math.PI / 2);
+    this.armL.el.rotation.set(0, 0, 0); this.armR.el.rotation.set(0, 0, 0);
   }
 
   // Two-bone IK: bend the left arm so the left hand wraps the revolver grip held in the right hand

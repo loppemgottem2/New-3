@@ -1,47 +1,64 @@
 // =====================================================================
-//  GAME.JS — one match. Runs in 3 modes:
+//  GAME.JS — one match of FIND THE THINGS (prop hunt). Runs in 3 modes:
 //    'offline' : you + bots, no network
 //    'host'    : you run the server (authoritative) + bots, others join
 //    'client'  : you joined someone else's server
 //
-//  The HOST decides everything important (roles, hits, deaths, pickups,
+//  Two teams: SEEKERS (knife + revolver, hotbar + inventory) and PROPS
+//  (stiff T-posing people who can turn into any piece of furniture).
+//  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
 import * as THREE from '../vendor/three.module.min.js';
 import { CONFIG } from './config.js';
 import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js';
 import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, hasLOS, groundHeight, pushOutOfProps } from './physics.js';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeGunMesh, randomLook, sanitizeLook } from './character.js';
-import { PropSystem } from './props.js';
+import { CharacterModel, ViewModel, makeKnifeMesh, randomLook, sanitizeLook } from './character.js';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, rayVsPropShape } from './props.js';
 import { Ragdoll } from './ragdoll.js';
 import { Audio } from './audio.js';
-import { initBrain, updateBots, botsOnKill, botsOnShot } from './bots.js';
+import { initBrain, updateBots } from './bots.js';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
+const TM = CONFIG.TEAMS;
+const INV = CONFIG.INVENTORY;
 const r2 = (v) => Math.round(v * 100) / 100;
 const FLASH_GEO = new THREE.SphereGeometry(0.12, 8, 6);
 
 // Flags packed into snapshots
-const F_ALIVE = 1, F_KNIFE = 2, F_GUN = 4, F_GROUND = 8, F_RUN = 16;
+const F_ALIVE = 1, F_KNIFE = 2, F_GUN = 4, F_GROUND = 8, F_RUN = 16, F_SEEKER = 32, F_PROP = 64;
+
+export const ITEM_NAMES = { knife: 'Knife', revolver: 'Revolver' };
 
 export function newChar(id, nick, isBot, look) {
   return {
     id, nick, isBot, cid: null, look: sanitizeLook(look),
-    bname: '', color: 0x888888,
+    color: CONFIG.TEAM_COLORS.none,
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0,
     onGround: true, speed: 0, running: false, stamina: P.STAMINA_MAX, exhausted: false,
     alive: false, spectator: true,
-    role: 'none', hasKnife: false, hasGun: false, equipped: false, gunBanned: false,
+    team: 'none', hp: TM.SEEKER_HP,
+    disguise: null, morphCd: 0,           // prop team: furniture type you look like (null = T-posing person)
+    hasKnife: false, hasGun: false,       // seekers: knife can be thrown away, then picked back up
+    hotbar: new Array(INV.HOTBAR).fill(null), backpack: new Array(INV.BACKPACK).fill(null),
+    slot: -1, lastSlot: 0,                // selected hotbar slot (-1 = hands empty)
     attackCd: 0,
     // render state (smoothed)
     rx: 0, ry: 0, rz: 0, ryaw: 0, rpitch: 0, rspeed: 0, rground: true,
-    weaponVis: 0, model: null, stepAcc: 0,
+    weaponVis: 0, model: null, dmesh: null, stepAcc: 0,
     brain: null,
   };
 }
 
-export const weaponOf = (c) => (!c.equipped ? 0 : c.hasKnife ? 1 : c.hasGun ? 2 : 0);
+// 0 = nothing in hand, 1 = knife, 2 = revolver
+export function weaponOf(c) {
+  if (c.slot < 0) return 0;
+  const it = c.hotbar[c.slot];
+  if (it === 'knife' && c.hasKnife) return 1;
+  if (it === 'revolver' && c.hasGun) return 2;
+  return 0;
+}
 
 export class Game {
   constructor(o) {
@@ -60,17 +77,13 @@ export class Game {
 
     this.chars = new Map();
     this.localId = null;
-    this.items = new Map();       // id -> {id,type:'gun'|'knife',x,y,z,vx,vy,vz,flying,owner}
+    this.items = new Map();       // thrown knives: id -> {id,type:'knife',x,y,z,vx,vy,vz,flying,owner}
     this.itemMeshes = new Map();
-    this.partSpots = [];          // positions of the 5 parts this round
-    this.myParts = new Set();     // indices I collected
-    this.partsVisible = false;
-    this.partMeshes = [];
     this.ragdolls = new Map();    // char id -> Ragdoll
     this.tracers = [];
     this.phase = 'waiting';
     this.timeLeft = 0;
-    this.myRole = 'none';
+    this.myTeam = 'none';
     this.deathT = 0;
     this.specId = null;
     this.lastLocalShot = 0;
@@ -82,8 +95,6 @@ export class Game {
     // host-only
     this.nextId = 1;
     this.nextItem = 1;
-    this.partsCollected = new Map(); // charId -> Set
-    this.craftedBy = null;
     this.corpses = [];
     this.snapT = 0;
     this.sendT = 0;
@@ -132,7 +143,6 @@ export class Game {
   // ---------------------------------------------------------------
   addChar(c) {
     c.model = new CharacterModel(this.T, c.look);
-    c.model.setColor(c.color);
     c.model.addTo(this.root);
     c.model.setVisible(false);
     this.chars.set(c.id, c);
@@ -144,6 +154,7 @@ export class Game {
     const c = this.chars.get(id);
     if (!c) return;
     c.model.removeFrom(this.root);
+    this.setDisguiseMesh(c, null);
     const rd = this.ragdolls.get(id);
     if (rd) { rd.dispose(); this.ragdolls.delete(id); }
     c.model.dispose();
@@ -151,7 +162,7 @@ export class Game {
   }
 
   roster() {
-    return [...this.chars.values()].map((c) => ({ id: c.id, nick: c.nick, bname: c.bname, color: c.color, bot: c.isBot ? 1 : 0, ap: c.look }));
+    return [...this.chars.values()].map((c) => ({ id: c.id, nick: c.nick, color: c.color, bot: c.isBot ? 1 : 0, ap: c.look, team: c.team }));
   }
 
   // ---------------------------------------------------------------
@@ -188,14 +199,6 @@ export class Game {
     }
   }
 
-  partsEventFor(c) {
-    const have = [...(this.partsCollected.get(c.id) || [])];
-    return { e: 'parts', spots: this.craftedBy == null ? this.partSpots.map((p) => [r2(p.x), r2(p.y), r2(p.z)]) : null, have };
-  }
-  sendPartsToAll() {
-    for (const c of this.humans()) this.emit(this.partsEventFor(c), [c.id]);
-  }
-
   startRound() {
     this.ensureBots();
     const all = [...this.chars.values()];
@@ -203,28 +206,23 @@ export class Game {
     this.emit({ e: 'reset' });
     this.items.clear();
     this.corpses = [];
-    this.craftedBy = null;
     this.props.reset();
-    this.partsCollected.clear();
 
-    // gun parts
-    const spots = shuffle(this.map.partSpots.slice()).slice(0, CONFIG.GUNPARTS.COUNT);
-    this.partSpots = spots.map((s) => ({ x: s.x, y: groundHeight(this.map, s.x, s.z, 0.1, 9), z: s.z }));
-
-    // identities
-    const ids = shuffle(CONFIG.IDENTITIES.slice());
-    all.forEach((c, i) => { const [n, col] = ids[i % ids.length]; c.bname = n; c.color = col; c.model.setColor(col); });
-
-    // roles
+    // teams: about a third seekers (at least one), the rest props
     const order = shuffle(all.slice());
-    const murderer = order[0], sheriff = order[1];
+    const nSeek = clamp(Math.round(all.length * TM.SEEKER_SHARE), 1, all.length - 1);
     const spawns = shuffle(this.map.spawns.slice());
-    all.forEach((c, i) => {
-      c.role = c === murderer ? 'murderer' : c === sheriff ? 'sheriff' : 'innocent';
-      c.hasKnife = c === murderer;
-      c.hasGun = c === sheriff;
-      c.equipped = false;
-      c.gunBanned = false;
+    order.forEach((c, i) => {
+      const seeker = i < nSeek;
+      c.team = seeker ? 'seeker' : 'prop';
+      c.color = CONFIG.TEAM_COLORS[c.team];
+      c.hasKnife = seeker; c.hasGun = seeker;
+      c.hotbar = new Array(INV.HOTBAR).fill(null);
+      c.backpack = new Array(INV.BACKPACK).fill(null);
+      if (seeker) INV.START.forEach((it, k) => { if (k < INV.HOTBAR) c.hotbar[k] = it; else c.backpack[k - INV.HOTBAR] = it; });
+      c.slot = -1; c.lastSlot = 0;
+      c.hp = TM.SEEKER_HP;
+      c.disguise = null; c.morphCd = 0;
       c.attackCd = 0;
       c.alive = true; c.spectator = false;
       const s = spawns[i % spawns.length];
@@ -234,52 +232,50 @@ export class Game {
       c.stamina = P.STAMINA_MAX; c.exhausted = false;
       c.rx = c.x; c.ry = c.y; c.rz = c.z; c.ryaw = c.yaw;
       if (c.isBot) c.brain = initBrain(c);
-      this.partsCollected.set(c.id, new Set());
     });
 
     this.emit({ e: 'roster', list: this.roster() });
     for (const c of all) {
       if (c.isBot) continue;
       this.emit({ e: 'spawn', x: r2(c.x), y: r2(c.y), z: r2(c.z), yaw: r2(c.yaw) }, [c.id]);
-      this.emit({ e: 'role', role: c.role }, [c.id]);
-      this.emit(this.partsEventFor(c), [c.id]);
+      this.emit({ e: 'team', team: c.team }, [c.id]);
     }
     this.phase = 'pre';
-    this.timeLeft = CONFIG.ROUND.PRE_TIME;
+    this.timeLeft = CONFIG.ROUND.HIDE_TIME;
     this.emit({ e: 'phase', phase: 'pre', tl: this.timeLeft });
   }
 
   endRound(winner, reason = '') {
     if (this.phase !== 'play' && this.phase !== 'pre') return;
-    const m = [...this.chars.values()].find((c) => c.role === 'murderer');
     this.phase = 'post';
     this.timeLeft = CONFIG.ROUND.POST_TIME;
-    this.emit({
-      e: 'phase', phase: 'post', tl: this.timeLeft, winner, reason,
-      murderer: m ? { bname: m.bname, color: m.color, nick: m.nick } : null,
-    });
+    const survivors = [...this.chars.values()].filter((c) => c.alive && c.team === 'prop').map((c) => c.nick);
+    this.emit({ e: 'phase', phase: 'post', tl: this.timeLeft, winner, reason, survivors });
   }
+
+  teamCount(team) { let n = 0; for (const c of this.chars.values()) if (c.alive && c.team === team) n++; return n; }
 
   hostTick(dt) {
     this.timeLeft -= dt;
     if (this.phase === 'waiting' && this.timeLeft <= 0) this.startRound();
-    else if (this.phase === 'pre' && this.timeLeft <= 0) {
-      this.phase = 'play';
-      this.timeLeft = CONFIG.ROUND.TIME_LIMIT;
-      this.emit({ e: 'phase', phase: 'play', tl: this.timeLeft });
-    } else if (this.phase === 'play') {
-      const all = [...this.chars.values()];
-      const m = all.find((c) => c.role === 'murderer');
-      const innocentsAlive = all.filter((c) => c.alive && c.role !== 'murderer').length;
-      if (!m || !m.alive) this.endRound('bystanders', m ? '' : 'The murderer left the game.');
-      else if (innocentsAlive === 0) this.endRound('murderer');
-      else if (this.timeLeft <= 0) this.endRound('bystanders', 'The murderer ran out of time.');
+    else if (this.phase === 'pre' || this.phase === 'play') {
+      const seekers = this.teamCount('seeker'), props = this.teamCount('prop');
+      if (props === 0) this.endRound('seekers', 'Every prop was found.');
+      else if (seekers === 0) this.endRound('props', 'All seekers are down.');
+      else if (this.timeLeft <= 0) {
+        if (this.phase === 'pre') {
+          this.phase = 'play';
+          this.timeLeft = CONFIG.ROUND.TIME_LIMIT;
+          this.emit({ e: 'phase', phase: 'play', tl: this.timeLeft });
+        } else this.endRound('props', 'The props hid until time ran out.');
+      }
     } else if (this.phase === 'post' && this.timeLeft <= 0) {
       this.startRound();
     }
 
     for (const c of this.chars.values()) {
       if (c.attackCd > 0) c.attackCd -= dt;
+      if (c.morphCd > 0) c.morphCd -= dt;
       // live knife slash: keep checking for a short moment after the swing
       if (c.slashT > 0) {
         c.slashT -= dt;
@@ -322,15 +318,17 @@ export class Game {
       if (w === 2) f |= F_GUN;
       if (c.onGround) f |= F_GROUND;
       if (c.running) f |= F_RUN;
-      cs.push([c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.yaw), r2(c.pitch), f, r2(c.speed)]);
+      if (c.team === 'seeker') f |= F_SEEKER;
+      if (c.team === 'prop') f |= F_PROP;
+      cs.push([c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.yaw), r2(c.pitch), f, r2(c.speed), c.disguise ? PROP_LIST.indexOf(c.disguise) : -1]);
     }
-    const it = [...this.items.values()].map((i) => [i.id, i.type === 'gun' ? 0 : 1, r2(i.x), r2(i.y), r2(i.z), i.flying ? 1 : 0]);
+    const it = [...this.items.values()].map((i) => [i.id, 1, r2(i.x), r2(i.y), r2(i.z), i.flying ? 1 : 0]);
     const pr = this.props.snapshot(1 / CONFIG.NET.SNAPSHOT_RATE);
     for (const c of this.humans()) {
       if (c.cid == null) continue;
       this.net.send(c.cid, {
         t: 'snap', ph: this.phase, tl: r2(this.timeLeft), c: cs, it, pr,
-        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, eq: c.equipped ? 1 : 0, cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
+        me: { k: c.hasKnife ? 1 : 0, g: c.hasGun ? 1 : 0, sl: c.slot, hb: c.hotbar, bp: c.backpack, hp: Math.round(c.hp), cd: r2(Math.max(0, c.attackCd)), al: c.alive ? 1 : 0 },
       });
     }
   }
@@ -350,7 +348,6 @@ export class Game {
       c.cid = cid;
       this.cidToId.set(cid, c.id);
       // the new player spectates until next round; a bot leaves at round end
-      c.bname = '???'; c.color = 0x777777;
       this.net.send(cid, {
         t: 'welcome', id: c.id, roster: this.roster(), phase: this.phase, tl: r2(this.timeLeft),
         server: this.serverLabel, code: this.code, props: this.props.fullState(),
@@ -365,6 +362,7 @@ export class Game {
     if (!c) return;
     if (m.t === 'in') {
       if (!c.alive || !Array.isArray(m.p)) return;
+      if (c.team === 'seeker' && this.phase === 'pre') return; // seekers are frozen while the props hide
       const [x, y, z] = m.p;
       if (![x, y, z].every(Number.isFinite)) return;
       // basic sanity: ignore teleports (except right after spawn)
@@ -376,7 +374,7 @@ export class Game {
     } else if (m.t === 'act') {
       if (Number.isFinite(m.yw)) c.yaw = m.yw;
       if (Number.isFinite(m.pt)) c.pitch = clamp(m.pt, -1.6, 1.6);
-      this.hostAction(c, m.a);
+      this.hostAction(c, m.a, m.n);
     } else if (m.t === 'chat') {
       const text = String(m.m || '').slice(0, 120);
       if (text) this.emit({ e: 'chat', from: c.nick, color: c.color, text });
@@ -388,25 +386,66 @@ export class Game {
     this.cidToId.delete(cid);
     const c = this.chars.get(id);
     if (!c) return;
-    const wasMurderer = c.role === 'murderer' && c.alive;
-    if (c.hasGun && c.alive) this.dropGun(c);
     this.removeChar(id);
     this.emit({ e: 'roster', list: this.roster() });
     this.emit({ e: 'msg', text: `${c.nick} left the server`, color: '#9ad' });
-    if (wasMurderer) this.endRound('bystanders', 'The murderer left the game.');
+    // if a whole team is gone, hostTick ends the round
   }
 
   // ----- host: actions (from local input, clients, or bots) -----
-  hostAction(c, a) {
+  hostAction(c, a, n) {
     if (!c || !c.alive) return;
     if (a === 'suicide') { this.kill(c, null, 'suicide', { x: Math.random() - 0.5, y: 0, z: Math.random() - 0.5 }); return; }
+
+    // ---------- prop team ----------
+    if (c.team === 'prop') {
+      if (a === 'disguise') {
+        const p = this.props.list[n | 0];
+        if (!p || c.morphCd > 0 || (this.phase !== 'pre' && this.phase !== 'play')) return;
+        const d = Math.hypot(p.pos.x - c.x, p.pos.z - c.z);
+        if (d > TM.DISGUISE_RANGE + p.r + 1) return;
+        c.morphCd = TM.DISGUISE_COOLDOWN;
+        c.disguise = p.type;
+        this.emit({ e: 'morph', id: c.id, type: p.type });
+      } else if (a === 'undisguise' && c.disguise) {
+        c.morphCd = TM.DISGUISE_COOLDOWN;
+        c.disguise = null;
+        this.emit({ e: 'morph', id: c.id, type: null });
+      }
+      return;
+    }
+    if (c.team !== 'seeker') return;
+
+    // ---------- seekers: hotbar / inventory ----------
+    if (a === 'slot') {
+      const k = n | 0;
+      if (k < 0 || k >= INV.HOTBAR) return;
+      if (c.slot === k) { c.lastSlot = k; c.slot = -1; } else c.slot = k;
+      return;
+    }
     if (a === 'equip') {
-      if (c.hasKnife || c.hasGun) c.equipped = !c.equipped;
+      if (c.slot >= 0) { c.lastSlot = c.slot; c.slot = -1; } else c.slot = c.lastSlot;
+      return;
+    }
+    if (a === 'inv') {
+      // swap two inventory slots: 0..HOTBAR-1 = hotbar, HOTBAR.. = backpack
+      if (!Array.isArray(n)) return;
+      const [i, j] = n.map((v) => v | 0), N = INV.HOTBAR + INV.BACKPACK;
+      if (i === j || i < 0 || j < 0 || i >= N || j >= N) return;
+      const get = (k) => (k < INV.HOTBAR ? c.hotbar[k] : c.backpack[k - INV.HOTBAR]);
+      const set = (k, v) => { if (k < INV.HOTBAR) c.hotbar[k] = v; else c.backpack[k - INV.HOTBAR] = v; };
+      const a1 = get(i), a2 = get(j);
+      set(i, a2); set(j, a1);
       return;
     }
     if (a === 'attack') {
       const w = weaponOf(c);
-      if (w === 0) { if (c.hasKnife || c.hasGun) c.equipped = true; return; }
+      if (w === 0) {
+        // nothing in hand: take out the first weapon in the hotbar
+        const k = c.hotbar.findIndex((it) => (it === 'knife' && c.hasKnife) || (it === 'revolver' && c.hasGun));
+        if (k >= 0) c.slot = k;
+        return;
+      }
       if (this.phase !== 'play' || c.attackCd > 0) return;
       if (w === 1) this.knifeAttack(c);
       else this.gunAttack(c);
@@ -415,7 +454,7 @@ export class Game {
     if (a === 'throw') {
       if (weaponOf(c) !== 1 || this.phase !== 'play' || c.attackCd > 0) return;
       c.attackCd = W.KNIFE_THROW_COOLDOWN;
-      c.hasKnife = false; c.equipped = false;
+      c.hasKnife = false;
       const d = dirFromAngles(c.yaw, c.pitch + 0.03);
       const id = this.nextItem++;
       this.items.set(id, {
@@ -427,13 +466,40 @@ export class Game {
     }
   }
 
+  // Can a weapon from `c` hurt `o`? Seekers only hurt props (no friendly fire).
+  canHurt(c, o) { return o !== c && o.alive && c.team === 'seeker' && o.team === 'prop'; }
+
+  // Ray vs. a character: a person (capsule) or, when disguised, the furniture shape it copies.
+  hitTest(o, ox, oy, oz, dx, dy, dz, pad = 0, smooth = false) {
+    const x = smooth ? o.rx : o.x, y = smooth ? o.ry : o.y, z = smooth ? o.rz : o.z;
+    if (o.disguise) return rayVsPropShape(o.disguise, x, y, z, smooth ? o.ryaw : o.yaw, ox, oy, oz, dx, dy, dz, pad);
+    return rayVsCharacter(ox, oy, oz, dx, dy, dz, { x, y, z }, 0.36 + pad);
+  }
+
+  // Seekers lose health for attacking real furniture (so they can't just shoot everything)
+  wrongProp(c) {
+    if (!c.alive || c.team !== 'seeker') return;
+    c.hp -= TM.WRONG_PROP_DAMAGE;
+    this.emit({ e: 'msg', text: `That was real furniture  −${TM.WRONG_PROP_DAMAGE} HP`, color: '#f88' }, [c.id]);
+    if (c.hp <= 0) this.kill(c, null, 'penalty', { x: 0, y: 0.5, z: 0 });
+  }
+
   // A stab is a slash that stays "live" for a short moment (KNIFE_SLASH_WINDOW):
   // if you swing a bit early and turn onto someone right after, it still hits.
   knifeAttack(c) {
     c.attackCd = W.KNIFE_COOLDOWN;
     c.slashT = W.KNIFE_SLASH_WINDOW;
     this.emit({ e: 'swing', id: c.id });
-    this.knifeHitCheck(c);
+    if (this.knifeHitCheck(c)) return;
+    // stabbed a real piece of furniture?
+    const d = dirFromAngles(c.yaw, c.pitch);
+    const ph = this.props.raycast(c.x, c.y + P.EYE, c.z, d.x, d.y, d.z, W.KNIFE_RANGE);
+    if (ph) {
+      this.props.impulseAt(ph.prop, ph.point, new THREE.Vector3(d.x * 2, d.y * 2, d.z * 2));
+      this.emit({ e: 'clink', p: [r2(ph.point.x), r2(ph.point.y), r2(ph.point.z)] });
+      c.slashT = 0;
+      this.wrongProp(c);
+    }
   }
 
   knifeHitCheck(c) {
@@ -441,7 +507,7 @@ export class Game {
     const cosA = Math.cos(W.KNIFE_ANGLE_DEG * DEG);
     let best = null, bd = Infinity;
     for (const o of this.chars.values()) {
-      if (o === c || !o.alive) continue;
+      if (!this.canHurt(c, o)) continue;
       const dx = o.x - c.x, dz = o.z - c.z;
       const d = Math.hypot(dx, dz);
       if (d > W.KNIFE_RANGE + P.RADIUS || Math.abs(o.y - c.y) > 1.3) continue;
@@ -453,7 +519,9 @@ export class Game {
       c.slashT = 0;
       const d = Math.hypot(best.x - c.x, best.z - c.z) || 1;
       this.kill(best, c, 'knife', { x: ((best.x - c.x) / d) * 3, y: 0.5, z: ((best.z - c.z) / d) * 3 });
+      return true;
     }
+    return false;
   }
 
   gunAttack(c, spread = 0) {
@@ -464,47 +532,27 @@ export class Game {
     const wall = raycastMap(this.map, ox, oy, oz, d.x, d.y, d.z, W.GUN_RANGE);
     let hit = null, ht = wall;
     for (const o of this.chars.values()) {
-      if (o === c || !o.alive) continue;
-      const t = rayVsCharacter(ox, oy, oz, d.x, d.y, d.z, o);
+      if (!this.canHurt(c, o)) continue;
+      const t = this.hitTest(o, ox, oy, oz, d.x, d.y, d.z);
       if (t >= 0 && t < ht) { ht = t; hit = o; }
     }
-    // furniture blocks bullets (and gets knocked around)
+    // real furniture blocks bullets (gets knocked around, and hurts the seeker)
     const ph = this.props.raycast(ox, oy, oz, d.x, d.y, d.z, ht);
     if (ph) {
       hit = null; ht = ph.t;
       this.props.impulseAt(ph.prop, ph.point, new THREE.Vector3(d.x * 7, d.y * 7 + 1, d.z * 7));
     }
     this.emit({ e: 'shot', id: c.id, f: [r2(ox), r2(oy - 0.15), r2(oz)], t: [r2(ox + d.x * ht), r2(oy + d.y * ht), r2(oz + d.z * ht)] });
-    botsOnShot(this, c, hit);
-    if (hit) {
-      this.kill(hit, c, 'gun', { x: d.x * 7, y: d.y * 7 + 1, z: d.z * 7 });
-      // shooting an innocent bystander costs the shooter's life (and the gun drops)
-      if (W.SHERIFF_DIES_ON_INNOCENT_KILL && c.role !== 'murderer' && hit.role !== 'murderer' && c.alive) {
-        this.emit({ e: 'msg', text: 'You shot a bystander', color: '#f55', big: 1 }, [c.id]);
-        this.kill(c, null, 'penalty', { x: -d.x * 1.5, y: 0.5, z: -d.z * 1.5 });
-      }
-    }
-  }
-
-  dropGun(c) {
-    if (!c.hasGun) return;
-    c.hasGun = false; c.equipped = false;
-    const id = this.nextItem++;
-    const fx = forwardX(c.yaw), fz = forwardZ(c.yaw);
-    let x = c.x + fx * 0.6, z = c.z + fz * 0.6;
-    if (this.map.heightAt(x, z) > P.STEP_HEIGHT) { x = c.x; z = c.z; }
-    this.items.set(id, { id, type: 'gun', x, y: groundHeight(this.map, x, z, 0.1, c.y + 0.5) + 0.05, z, flying: false });
-    if (this.craftedBy === c.id) {
-      this.craftedBy = null;
-      this.sendPartsToAll();
-    }
+    if (hit) this.kill(hit, c, 'gun', { x: d.x * 7, y: d.y * 7 + 1, z: d.z * 7 });
+    else if (ph) this.wrongProp(c);
+    return hit;
   }
 
   kill(target, killer, cause, impulse) {
     if (!target.alive) return;
     target.alive = false;
-    if (target.hasGun) this.dropGun(target);
-    target.equipped = false;
+    target.slot = -1;
+    target.disguise = null;
     this.corpses.push({ id: target.id, x: target.x, y: target.y, z: target.z, t: this.time });
     this.emit({
       e: 'death', id: target.id, cause,
@@ -512,7 +560,9 @@ export class Game {
       v: [r2(target.vx), r2(target.vy), r2(target.vz)],
       p: [r2(target.x), r2(target.y), r2(target.z)],
     });
-    botsOnKill(this, target, killer, cause);
+    if (killer && killer !== target) {
+      this.emit({ e: 'msg', text: `${killer.nick} found ${target.nick}`, color: '#ccc' });
+    }
   }
 
   hostItems(dt) {
@@ -528,9 +578,10 @@ export class Game {
         const wall = raycastMap(this.map, it.x, it.y, it.z, dx, dy, dz, len);
         // characters
         let hit = null, ht = wall;
+        const owner = this.chars.get(it.owner);
         for (const o of this.chars.values()) {
-          if (!o.alive || o.id === it.owner) continue;
-          const t = rayVsCharacter(it.x, it.y, it.z, dx, dy, dz, o, 0.4);
+          if (!o.alive || o.id === it.owner || o.team !== 'prop') continue;
+          const t = this.hitTest(o, it.x, it.y, it.z, dx, dy, dz, 0.04);
           if (t >= 0 && t <= ht) { ht = t; hit = o; }
         }
         const ph = this.props.raycast(it.x, it.y, it.z, dx, dy, dz, ht);
@@ -544,7 +595,6 @@ export class Game {
           break;
         }
         if (hit) {
-          const owner = this.chars.get(it.owner);
           this.kill(hit, owner || null, 'knife', { x: dx * 5, y: 1, z: dz * 5 });
           it.flying = false;
           it.x = hit.x; it.z = hit.z; it.y = groundHeight(this.map, it.x, it.z, 0.1, hit.y + 0.5) + 0.05;
@@ -565,47 +615,19 @@ export class Game {
   hostPickups() {
     if (this.phase !== 'play' && this.phase !== 'pre') return;
     for (const c of this.chars.values()) {
-      if (!c.alive) continue;
-      // items
+      if (!c.alive || c.team !== 'seeker' || c.hasKnife) continue;
+      // seekers pick thrown knives back up
       for (const it of this.items.values()) {
         if (it.flying) continue;
-        const d = Math.hypot(it.x - c.x, it.z - c.z);
-        if (Math.abs(it.y - c.y) > 1.5) continue;
-        if (it.type === 'gun' && d < W.GUN_PICKUP_RADIUS && c.role !== 'murderer' && !c.hasGun) {
-          this.items.delete(it.id);
-          c.hasGun = true; c.equipped = true;
-          this.emit({ e: 'msg', text: 'You picked up the revolver — you are the Sheriff now!', color: '#6af', snd: 'gun', big: 1 }, [c.id]);
-          break;
+        if (Math.abs(it.y - c.y) > 1.5 || Math.hypot(it.x - c.x, it.z - c.z) > W.KNIFE_PICKUP_RADIUS) continue;
+        this.items.delete(it.id);
+        c.hasKnife = true;
+        if (!c.hotbar.includes('knife') && !c.backpack.includes('knife')) {
+          const k = c.hotbar.indexOf(null);
+          if (k >= 0) c.hotbar[k] = 'knife'; else { const b = c.backpack.indexOf(null); if (b >= 0) c.backpack[b] = 'knife'; }
         }
-        if (it.type === 'knife' && d < W.KNIFE_PICKUP_RADIUS && c.role === 'murderer' && !c.hasKnife) {
-          this.items.delete(it.id);
-          c.hasKnife = true;
-          this.emit({ e: 'msg', text: 'You picked your knife back up.', color: '#f66', snd: 'pickup' }, [c.id]);
-          break;
-        }
-      }
-      // gun parts (only one crafted revolver can exist at a time)
-      if (this.craftedBy != null || c.role === 'murderer' || c.hasGun) continue;
-      const set = this.partsCollected.get(c.id) || new Set();
-      this.partsCollected.set(c.id, set);
-      for (let k = 0; k < this.partSpots.length; k++) {
-        if (set.has(k)) continue;
-        const s = this.partSpots[k];
-        if (Math.hypot(s.x - c.x, s.z - c.z) < CONFIG.GUNPARTS.PICKUP_RADIUS && Math.abs(s.y - c.y) < 1.2) {
-          set.add(k);
-          if (set.size >= CONFIG.GUNPARTS.COUNT) {
-            c.hasGun = true; c.equipped = true;
-            this.craftedBy = c.id;
-            set.clear();
-            this.emit({ e: 'msg', text: 'You built a revolver — you are the Sheriff now!', color: '#6af', snd: 'gun', big: 1 }, [c.id]);
-            for (const o of this.humans()) if (o.id !== c.id) this.emit({ e: 'msg', text: 'Someone built a revolver. The gun parts vanished.', color: '#ccc' }, [o.id]);
-            this.sendPartsToAll();
-          } else if (!c.isBot) {
-            this.emit(this.partsEventFor(c), [c.id]);
-            this.emit({ e: 'msg', text: `Gun part ${set.size}/${CONFIG.GUNPARTS.COUNT}`, color: '#fd6', snd: 'pickup' }, [c.id]);
-          }
-          break;
-        }
+        this.emit({ e: 'msg', text: 'You picked your knife back up.', color: '#f66', snd: 'pickup' }, [c.id]);
+        break;
       }
     }
   }
@@ -631,8 +653,7 @@ export class Game {
         c = newChar(r.id, r.nick, !!r.bot, r.ap);
         this.addChar(c);
       }
-      c.nick = r.nick; c.bname = r.bname; c.isBot = !!r.bot;
-      if (c.color !== r.color) { c.color = r.color; c.model.setColor(r.color); }
+      c.nick = r.nick; c.isBot = !!r.bot; c.color = r.color; c.team = r.team || 'none';
     }
     for (const id of [...this.chars.keys()]) if (!seen.has(id)) this.removeChar(id);
   }
@@ -645,9 +666,14 @@ export class Game {
         if (!c) continue;
         const f = s[6];
         c.weaponVis = f & F_KNIFE ? 1 : f & F_GUN ? 2 : 0;
+        c.team = f & F_SEEKER ? 'seeker' : f & F_PROP ? 'prop' : 'none';
+        c.disguise = s[8] >= 0 ? PROP_LIST[s[8]] || null : null;
         if (c.id === this.localId) {
           if (m.me) {
-            c.hasKnife = !!m.me.k; c.hasGun = !!m.me.g; c.equipped = !!m.me.eq;
+            c.hasKnife = !!m.me.k; c.hasGun = !!m.me.g; c.slot = m.me.sl;
+            if (m.me.hb) c.hotbar = m.me.hb;
+            if (m.me.bp) c.backpack = m.me.bp;
+            c.hp = m.me.hp;
             if (!m.me.al && c.alive) { c.alive = false; } // safety
           }
           continue;
@@ -663,7 +689,7 @@ export class Game {
       for (const [id, type, x, y, z, fl] of m.it) {
         seen.add(id);
         let it = this.items.get(id);
-        if (!it) { it = { id, type: type === 0 ? 'gun' : 'knife', x, y, z }; this.items.set(id, it); }
+        if (!it) { it = { id, type: 'knife', x, y, z }; this.items.set(id, it); }
         it.x = x; it.y = y; it.z = z; it.flying = !!fl;
       }
       for (const id of [...this.items.keys()]) if (!seen.has(id)) this.items.delete(id);
@@ -686,9 +712,9 @@ export class Game {
         for (const t of this.tracers) { this.root.remove(t.mesh); this.root.remove(t.flash); }
         this.tracers = [];
         if (!this.isHost) this.items.clear();
-        this.myParts.clear();
+        for (const c of this.chars.values()) { c.disguise = null; this.setDisguiseMesh(c, null); }
         this.specId = null;
-        this.myRole = 'none';
+        this.myTeam = 'none';
         break;
       case 'roster':
         if (!this.isHost) this.syncRoster(ev.list);
@@ -703,43 +729,43 @@ export class Game {
         this.deathT = 0;
         break;
       }
-      case 'role': {
-        this.myRole = ev.role;
+      case 'team': {
+        this.myTeam = ev.team;
         const me = this.me;
-        if (me) me.role = ev.role;
+        if (me) me.team = ev.team;
         const R = {
-          murderer: ['You are the Murderer', 'Kill everyone. Don\'t get caught.', '#e33'],
-          sheriff: ['You are the Sheriff', 'You have a revolver. Find the murderer and shoot them — but never an innocent.', '#4af'],
-          innocent: ['You are a Bystander', '', '#4af'],
-        }[ev.role];
-        if (R) ui.bigMessage(R[0], R[1], R[2], 4.5);
-        Audio.roundStart(ev.role === 'murderer');
+          seeker: ['You are a Seeker', `Wait while the props hide, then find them. Real furniture you hit costs you ${TM.WRONG_PROP_DAMAGE} HP.`, '#f55'],
+          prop: ['You are a Prop', `${this.ui.isTouch ? 'Tap' : 'Click'} on any furniture to turn into it. Hide before the seekers are released!`, '#4af'],
+        }[ev.team];
+        if (R) ui.bigMessage(R[0], R[1], R[2], 5);
+        Audio.roundStart(ev.team === 'seeker');
         break;
       }
-      case 'parts':
-        this.partSpots = ev.spots ? ev.spots.map(([x, y, z]) => ({ x, y, z })) : [];
-        this.myParts = new Set(ev.have || []);
-        this.partsVisible = !!ev.spots;
-        this.rebuildPartMeshes();
-        break;
       case 'phase':
         this.phase = ev.phase; this.timeLeft = ev.tl;
-        if (ev.phase === 'play') ui.toast('The round has started', '#ddd');
+        if (ev.phase === 'play') { ui.toast('The seekers are coming!', '#fd6'); Audio.roundStart(true); }
         if (ev.phase === 'post') {
-          const good = ev.winner === 'bystanders';
-          const m = ev.murderer;
-          const sub = (m ? `The murderer was <b style="color:${textColor(m.color)}">${escapeHtml(m.nick)}</b>` : '') + (ev.reason ? `<br>${ev.reason}` : '');
-          ui.bigMessage(good ? 'Bystanders Win!' : 'The Murderer Wins!', sub, good ? '#4af' : '#e33', CONFIG.ROUND.POST_TIME - 0.5, true);
-          const meGood = this.myRole !== 'murderer';
-          Audio.roundEnd(good === meGood);
+          const seekersWon = ev.winner === 'seekers';
+          const surv = ev.survivors && ev.survivors.length ? `Survivors: ${ev.survivors.map(escapeHtml).join(', ')}` : '';
+          const sub = [ev.reason ? escapeHtml(ev.reason) : '', surv].filter(Boolean).join('<br>');
+          ui.bigMessage(seekersWon ? 'Seekers Win!' : 'Props Win!', sub, seekersWon ? '#f55' : '#4af', CONFIG.ROUND.POST_TIME - 0.5, true);
+          Audio.roundEnd(seekersWon === (this.myTeam === 'seeker'));
         }
         break;
+      case 'morph': {
+        const c = this.chars.get(ev.id);
+        if (!c) break;
+        c.disguise = ev.type;
+        Audio.pickup(); // little "poof"
+        break;
+      }
       case 'death': {
         const c = this.chars.get(ev.id);
         if (!c) break;
         c.alive = false;
         const vel = { x: ev.v[0], y: ev.v[1], z: ev.v[2] };
         if (c.id !== this.localId) { c.x = ev.p[0]; c.y = ev.p[1]; c.z = ev.p[2]; }
+        c.disguise = null; this.setDisguiseMesh(c, null);
         this.spawnRagdoll(c, vel, { x: ev.i[0], y: ev.i[1], z: ev.i[2] });
         const pos = { x: ev.p[0], y: ev.p[1] + 1, z: ev.p[2] };
         if (ev.cause === 'knife') Audio.stab(pos);
@@ -747,7 +773,7 @@ export class Game {
         if (ev.cause !== 'suicide' && Math.random() < 0.6) Audio.scream(pos);
         if (c.id === this.localId) {
           this.deathT = 0;
-          this.ui.toast(ev.cause === 'suicide' ? 'You are now spectating. Press X again for the menu.' : 'You died! Press X for the main menu.', '#f66', 3);
+          this.ui.toast(ev.cause === 'suicide' ? 'You are now spectating. Press X again for the menu.' : ev.cause === 'penalty' ? 'You hit too much real furniture! Press X for the main menu.' : 'You were found! Press X for the main menu.', '#f66', 3);
         }
         break;
       }
@@ -793,7 +819,7 @@ export class Game {
     const old = this.ragdolls.get(c.id);
     if (old) old.dispose();
     // make sure the model pose matches where the character is right now
-    c.model.update(0, { x: c.rx, y: c.ry, z: c.rz, yaw: c.ryaw, pitch: 0, speed: c.rspeed, onGround: true, weapon: 0 }, c.ry);
+    c.model.update(0, { x: c.rx, y: c.ry, z: c.rz, yaw: c.ryaw, pitch: 0, speed: c.rspeed, onGround: true, weapon: 0, tpose: c.team === 'prop' }, c.ry);
     const rd = new Ragdoll(this.root, c.model, this.map, vel, impulse);
     this.ragdolls.set(c.id, rd);
     c.model.setVisible(false);
@@ -812,39 +838,18 @@ export class Game {
     this.tracers.push({ mesh: line, flash, t: 0.12 });
   }
 
-  rebuildPartMeshes() {
-    for (const m of this.partMeshes) this.root.remove(m);
-    this.partMeshes = [];
-    if (!this.partsVisible) return;
-    this.partSpots.forEach((s, k) => {
-      const g = new THREE.Group();
-      const metal = new THREE.MeshLambertMaterial({ color: 0x8a8f96, emissive: 0x332a00 });
-      const variants = [
-        () => new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.28, 8), metal),           // barrel
-        () => new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 10), metal),          // cylinder
-        () => new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.08), new THREE.MeshLambertMaterial({ color: 0x6a4020, emissive: 0x221100 })), // grip
-        () => new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.05), metal),                   // frame
-        () => new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 6, 12), metal),               // trigger guard
-      ];
-      const piece = variants[k % variants.length]();
-      piece.rotation.z = Math.PI / 2;
-      g.add(piece);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.3, 24), new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
-      ring.rotation.x = -Math.PI / 2; ring.position.y = -0.33;
-      g.add(ring);
-      g.position.set(s.x, s.y + 0.35, s.z);
-      g.userData.k = k;
-      g.userData.piece = piece;
-      this.root.add(g);
-      this.partMeshes.push(g);
-    });
+  // show / hide the furniture mesh of a disguised prop player
+  setDisguiseMesh(c, type) {
+    if (c.dmesh && c.dmesh.type === type) return;
+    if (c.dmesh) { this.root.remove(c.dmesh.mesh); c.dmesh.dispose(); c.dmesh = null; }
+    if (type) { c.dmesh = new DisguiseMesh(this.T, type); this.root.add(c.dmesh.mesh); }
   }
 
   syncItemMeshes(dt) {
     for (const [id, it] of this.items) {
       let m = this.itemMeshes.get(id);
       if (!m) {
-        const inner = it.type === 'gun' ? makeGunMesh() : makeKnifeMesh();
+        const inner = makeKnifeMesh();
         inner.scale.setScalar(1.6);
         m = new THREE.Group(); m.add(inner); m.userData.inner = inner;
         m.rotation.order = 'YXZ';
@@ -912,7 +917,10 @@ export class Game {
   // ---------------------------------------------------------------
   //  LOCAL PLAYER
   // ---------------------------------------------------------------
-  thirdPerson() { return this.camDist > 0.25; }
+  // props always see themselves from behind (third person)
+  thirdPerson() { const me = this.me; return this.camDist > 0.25 || !!(me && me.alive && me.team === 'prop'); }
+  camDistance() { const me = this.me; return me && me.alive && me.team === 'prop' ? Math.max(2.6, this.camDist) : this.camDist; }
+  eyeHeight(c) { return c.disguise ? Math.max(0.6, propHeight(c.disguise) + 0.35) : P.EYE; }
 
   // Direction the player is aiming. In third person we aim where the
   // camera's crosshair points, so shots land where you look.
@@ -923,7 +931,7 @@ export class Game {
     let t = raycastMap(this.map, cp.x, cp.y, cp.z, d.x, d.y, d.z, 90);
     for (const c of this.chars.values()) {
       if (c === me || !c.alive) continue;
-      const tc = rayVsCharacter(cp.x, cp.y, cp.z, d.x, d.y, d.z, { x: c.rx, y: c.ry, z: c.rz });
+      const tc = this.hitTest(c, cp.x, cp.y, cp.z, d.x, d.y, d.z, 0, true);
       if (tc >= 0 && tc < t) t = tc;
     }
     const tx = cp.x + d.x * t, ty = cp.y + d.y * t, tz = cp.z + d.z * t;
@@ -932,17 +940,38 @@ export class Game {
     return { yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)) };
   }
 
-  localAction(a) {
+  localAction(a, n) {
     const me = this.me;
     const aim = (a === 'attack' || a === 'throw') ? this.aimAngles() : { yaw: me.yaw, pitch: me.pitch };
     if (this.isHost) {
       const y = me.yaw, pt = me.pitch;
       me.yaw = aim.yaw; me.pitch = aim.pitch;
-      this.hostAction(me, a);
+      this.hostAction(me, a, n);
       if (me.alive) { me.yaw = y; me.pitch = pt; }
       return;
     }
-    this.net?.send({ t: 'act', a, yw: r2(aim.yaw), pt: r2(aim.pitch) });
+    this.net?.send({ t: 'act', a, n, yw: r2(aim.yaw), pt: r2(aim.pitch) });
+  }
+
+  // called by the hotbar / inventory UI
+  selectSlot(k) { if (this.me?.alive) this.localAction('slot', k); }
+  invSwap(i, j) { if (this.me?.alive) this.localAction('inv', [i, j]); }
+  toggleDisguise() { const me = this.me; if (me?.alive && me.disguise) this.localAction('undisguise'); }
+
+  // which real prop is under the crosshair (or under a tap on the screen)?
+  pickProp(screen = null) {
+    const cam = this.camera, me = this.me;
+    let o = cam.position, d;
+    if (screen) {
+      const v = new THREE.Vector3((screen.x / window.innerWidth) * 2 - 1, -(screen.y / window.innerHeight) * 2 + 1, 0.5).unproject(cam);
+      d = v.sub(cam.position).normalize();
+    } else d = dirFromAngles(me.yaw, me.pitch);
+    const reach = TM.DISGUISE_RANGE + (this._camActualDist || 0) + 1;
+    const wall = raycastMap(this.map, o.x, o.y, o.z, d.x, d.y, d.z, reach);
+    const ph = this.props.raycast(o.x, o.y, o.z, d.x, d.y, d.z, wall);
+    if (!ph) return null;
+    if (Math.hypot(ph.prop.pos.x - me.x, ph.prop.pos.z - me.z) > TM.DISGUISE_RANGE + ph.prop.r + 0.5) return null;
+    return ph.prop;
   }
 
   updateLocal(dt, inp) {
@@ -964,14 +993,25 @@ export class Game {
     me.yaw = wrapAngle(me.yaw - inp.lookDX);
     me.pitch = clamp(me.pitch - inp.lookDY, -1.5, 1.5);
 
+    if (inp.inv) this.ui.toggleInventory?.(this);
     if (!me.alive) {
       if (inp.next || inp.attack) this.cycleSpectate();
       return;
     }
 
-    if (inp.equip) this.localAction('equip');
+    if (me.team === 'prop') {
+      // tap / click furniture to turn into it; the equip button turns you back into a person
+      const target = inp.tap ? this.pickProp(inp.tap) : inp.attack ? this.pickProp() : null;
+      if (target) this.localAction('disguise', target.id);
+      else if (inp.attack && !inp.tap) this.ui.toast('Aim at furniture to turn into it', '#ccc', 1.5);
+      if (inp.equip && me.disguise) this.localAction('undisguise');
+    }
+    if (me.team === 'seeker') {
+      if (inp.slot >= 0) this.localAction('slot', inp.slot);
+      if (inp.equip) this.localAction('equip');
+    }
     if (inp.throw && this.localWeapon() === 1) this.localAction('throw');
-    if (inp.attack || (inp.attackHeld && this.localWeapon() === 2)) {
+    if (me.team === 'seeker' && (inp.attack || (inp.attackHeld && this.localWeapon() === 2))) {
       const w = this.localWeapon();
       if (w === 0) this.localAction('attack');
       else if (this.phase === 'play' && this.localGunCd <= 0) {
@@ -994,9 +1034,11 @@ export class Game {
     // movement
     const fx = forwardX(me.yaw), fz = forwardZ(me.yaw);
     const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
-    const mx = fx * inp.fwd + rx * inp.strafe, mz = fz * inp.fwd + rz * inp.strafe;
+    let mx = fx * inp.fwd + rx * inp.strafe, mz = fz * inp.fwd + rz * inp.strafe;
+    const frozen = me.team === 'seeker' && this.phase === 'pre';   // seekers wait blindfolded while props hide
+    if (frozen) mx = mz = 0;
     const wasGround = me.onGround;
-    moveCharacter(me, { mx, mz, run: inp.run, jump: inp.jump }, dt, this.map);
+    moveCharacter(me, { mx, mz, run: inp.run, jump: inp.jump && !frozen }, dt, this.map);
     if (me.landed > 5) { Audio.land(null, me.landed); this.shake = Math.min(0.3, me.landed * 0.02); }
     if (wasGround && !me.onGround && me.vy > 0) Audio.jump(null);
 
@@ -1057,11 +1099,17 @@ export class Game {
       if (this.isHost) c.weaponVis = weaponOf(c);
       else if (c === me) c.weaponVis = weaponOf(c);
 
-      const showModel = c.alive && !(c === me && !this.ownBodyVisible());
+      this.setDisguiseMesh(c, c.alive ? c.disguise : null);
+      const showModel = c.alive && !c.disguise && !(c === me && !this.ownBodyVisible());
       c.model.setVisible(showModel);
+      if (c.dmesh) {
+        c.dmesh.mesh.position.set(c.rx, c.ry, c.rz);
+        c.dmesh.mesh.rotation.y = c.ryaw;
+        c.dmesh.mesh.visible = !(c === me && !this.ownBodyVisible());
+      }
       if (c.alive) {
         const gy = groundHeight(this.map, c.rx, c.rz, 0.2, c.ry + 0.1);
-        c.model.update(dt, { x: c.rx, y: c.ry, z: c.rz, yaw: c.ryaw, pitch: c.rpitch, speed: c.rspeed, onGround: c.rground, weapon: c.weaponVis }, gy);
+        c.model.update(dt, { x: c.rx, y: c.ry, z: c.rz, yaw: c.ryaw, pitch: c.rpitch, speed: c.rspeed, onGround: c.rground, weapon: c.weaponVis, tpose: c.team === 'prop' }, gy);
         // lighting: tint by the light probe at this spot (indoor lamps, shade, sun)
         c.model.lightT -= dt;
         if (c.model.lightT <= 0) {
@@ -1074,6 +1122,7 @@ export class Game {
         if (tl) {
           const L = c.model.light, kk = Math.min(1, dt * 6);
           c.model.setLight(L[0] + (tl[0] - L[0]) * kk, L[1] + (tl[1] - L[1]) * kk, L[2] + (tl[2] - L[2]) * kk);
+          if (c.dmesh) c.dmesh.setLight(c.model.light);
         }
         // footsteps (you can hear people coming)
         if (c.rground && c.rspeed > 1) {
@@ -1098,13 +1147,6 @@ export class Game {
       if (t.t <= -0.1) { this.root.remove(t.mesh); this.root.remove(t.flash); t.mesh.geometry.dispose(); t.mesh.material.dispose(); t.flash.material.dispose(); this.tracers.splice(i, 1); }
     }
     this.syncItemMeshes(dt);
-    // gun part meshes: hide the ones I already have
-    for (const g of this.partMeshes) {
-      const k = g.userData.k;
-      g.visible = this.partsVisible && !this.myParts.has(k);
-      g.userData.piece.rotation.y += dt * 1.5;
-      g.position.y = this.partSpots[k].y + 0.35 + Math.sin(this.time * 2 + k) * 0.05;
-    }
 
     this.updateCamera(dt);
     this.updateHud(dt);
@@ -1122,15 +1164,16 @@ export class Game {
     if (me.alive) {
       const bobOn = this.settings.viewBob !== false;
       const bob = bobOn && me.onGround ? Math.sin(this.time * 9) * 0.035 * Math.min(1, me.speed / 4) : 0;
-      const ex = me.x, ey = me.y + P.EYE + bob, ez = me.z;
+      const ex = me.x, ey = me.y + this.eyeHeight(me) + bob, ez = me.z;
       if (this.thirdPerson()) {
         // over-the-shoulder camera, pulled in when a wall is in the way
         const d = dirFromAngles(me.yaw, me.pitch);
         const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
         // weapon out -> tighter over-the-right-shoulder view for aiming
         const aiming = weaponOf(me) !== 0;
-        const tSide = aiming ? 0.68 : 0.38 * Math.min(1, this.camDist / 1.5);
-        const tDist = aiming ? Math.min(this.camDist, 1.8) : this.camDist;
+        const cd = this.camDistance();
+        const tSide = aiming ? 0.68 : me.team === 'prop' ? 0 : 0.38 * Math.min(1, cd / 1.5);
+        const tDist = aiming ? Math.min(Math.max(cd, 1.2), 1.8) : cd;
         const kk = Math.min(1, dt * 8);
         this._side = (this._side ?? tSide) + (tSide - (this._side ?? tSide)) * kk;
         this._tdist = (this._tdist ?? tDist) + (tDist - (this._tdist ?? tDist)) * kk;
@@ -1197,8 +1240,16 @@ export class Game {
       let bt = wall;
       for (const c of this.chars.values()) {
         if (c === me || !c.alive) continue;
-        const t = rayVsCharacter(cp.x, cp.y, cp.z, d.x, d.y, d.z, { x: c.rx, y: c.ry, z: c.rz }, 0.4);
+        const t = this.hitTest(c, cp.x, cp.y, cp.z, d.x, d.y, d.z, 0.04, true);
         if (t >= 0 && t < bt) { bt = t; look = c; }
+      }
+      // a disguised prop only shows its name to its own team (seekers just see furniture)
+      if (look && look.disguise && look.team !== me.team) look = null;
+      if (look) look = { nick: look.nick, color: look.color };
+      if (!look && me.team === 'prop') {
+        this._pickT = (this._pickT || 0) - dt;
+        if (this._pickT <= 0) { this._pickT = 0.1; this._pick = this.pickProp(); }
+        if (this._pick) look = { nick: `${this.ui.isTouch ? 'Tap' : 'Click'} to become: ${this._pick.type}`, color: 0xffffff };
       }
       if (!look) {
         for (const rd of this.ragdolls.values()) {
@@ -1210,13 +1261,17 @@ export class Game {
     }
     const spec = !me.alive ? this.chars.get(this.specId) : null;
     this.ui.updateHud({
-      me, role: this.myRole, phase: this.phase, timeLeft: this.timeLeft,
+      me, team: me.team, phase: this.phase, timeLeft: this.timeLeft,
       look, spec, weapon: weaponOf(me), hasKnife: me.hasKnife, hasGun: me.hasGun,
-      parts: this.partsVisible && this.myRole !== 'murderer' && !me.hasGun ? this.myParts.size : -1,
+      hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, disguise: me.disguise,
+      propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
+      blind: me.alive && me.team === 'seeker' && this.phase === 'pre',
       server: this.serverLabel, code: this.code, players: this.chars.size,
       deathT: this.deathT, third: this.thirdPerson(),
     });
   }
+
+  countAlive(team) { let n = 0; for (const c of this.chars.values()) if (c.alive && c.team === team) n++; return n; }
 
   // ---------------------------------------------------------------
   //  Leave the match
@@ -1234,6 +1289,7 @@ export class Game {
   }
 
   dispose() {
+    this.ui.toggleInventory?.(this, false);
     for (const id of [...this.trails.keys()]) this.updateTrail(id, 0, 0, 0, false, true);
     for (const id of [...this.chars.keys()]) this.removeChar(id);
     for (const rd of this.ragdolls.values()) rd.dispose();

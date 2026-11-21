@@ -1,4 +1,4 @@
-/* ============ Killer Mystery — styles ============ */
+/* ============ Find the Things — styles ============ */
 :root {
   --panel: rgba(28, 28, 30, 0.92);
   --panel-2: rgba(48, 48, 52, 0.95);
@@ -47,7 +47,8 @@ p { margin: 0; line-height: 1.45; font-size: 14px; }
 .muted { color: var(--muted); font-size: 13px; }
 .logo { text-align: center; margin-bottom: 4px; }
 .logo-title {
-  font-family: Georgia, "Times New Roman", serif; font-weight: 900; font-size: 52px; letter-spacing: 6px;
+  font-family: Georgia, "Times New Roman", serif; font-weight: 900; font-size: clamp(40px, 7vw, 60px); letter-spacing: 5px;
+  text-transform: uppercase; text-wrap: balance;
   color: var(--accent-2); text-shadow: 0 3px 0 #5a0d0d, 0 0 24px rgba(229, 57, 53, 0.35);
   line-height: 1;
 }
@@ -114,9 +115,8 @@ input[type=range] { padding: 0; accent-color: var(--accent-2); }
 }
 #hud-name { font-size: 28px; font-weight: bold; line-height: 1.05; }
 #hud-role { font-size: 14px; color: #ddd; }
-#hud-role.murderer { color: #ff4444; font-weight: bold; }
-#hud-weapon, #hud-parts { font-size: 12px; color: #ccc; }
-#hud-parts { color: #ffd54f; }
+#hud-role.seeker { color: #ff5555; font-weight: bold; }
+#hud-weapon { font-size: 12px; color: #ccc; }
 #hud-stamina { position: absolute; left: 50%; bottom: calc(14px + var(--sa-b)); width: 160px; height: 6px; margin-left: -80px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; }
 #hud-stamina div { height: 100%; background: #e0e0e0; }
 #hud-stamina.tired div { background: #e53935; }
@@ -232,6 +232,41 @@ body.lefty #tb-run { left: auto; right: calc(22px + var(--sa-r)); }
 #crosshair.cross::after { top: 8px; left: 0; height: 2px; width: 18px; }
 #crosshair.circle { width: 16px; height: 16px; margin: -8px 0 0 -8px; background: none; border: 2px solid rgba(255,255,255,0.85); }
 #crosshair.none { display: none !important; }
-#hud-role.sheriff { color: #5cb8ff; font-weight: bold; }
+#hud-role.prop { color: #5cb8ff; font-weight: bold; }
 .editor-panel > .row:last-child, #settings .panel > .row:last-child { position: sticky; bottom: -18px; background: var(--panel); padding: 8px 0 4px; margin-bottom: -8px; }
 .editor-panel { gap: 6px; }
+
+/* ============ prop hunt HUD ============ */
+#hud-count { position: absolute; top: calc(16px + var(--sa-t)); left: calc(50% + 62px); font-size: 13px; color: #ddd; zoom: var(--hud-scale); }
+#hud-hp { position: relative; width: 150px; height: 14px; margin: 4px 0 2px; background: rgba(0,0,0,0.55); border-radius: 3px; overflow: hidden; }
+#hud-hp div { height: 100%; background: linear-gradient(#e85050, #b02020); }
+#hud-hp span { position: absolute; inset: 0; font-size: 10px; line-height: 14px; text-align: center; color: #fff; }
+#blind { position: fixed; inset: 0; z-index: 8; background: #050505; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ddd; font-size: 22px; text-align: center; pointer-events: none; }
+#blind .blind-t { font-size: 64px; font-weight: bold; color: #ff5555; margin: 8px 0; }
+#blind small { color: #888; font-size: 13px; }
+#hotbar { position: fixed; z-index: 9; left: 50%; bottom: calc(22px + var(--sa-b)); transform: translateX(-50%); display: flex; gap: 5px; zoom: var(--hud-scale); }
+.hb-slot { position: relative; width: 52px; height: 52px; background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.25); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: none; }
+.hb-slot.sel { border-color: #ffd54f; background: rgba(255,213,79,0.18); }
+.hb-slot.gone .ico { opacity: 0.25; }
+.hb-slot .hb-n { position: absolute; left: 4px; top: 1px; font-size: 10px; color: #bbb; }
+.hb-bag { font-size: 24px; margin-left: 6px; }
+.ico { width: 38px; height: 38px; }
+#inventory { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); padding: 16px; }
+.inv-label { font-size: 12px; color: #aaa; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+.inv-grid { display: grid; grid-template-columns: repeat(5, 58px); gap: 6px; justify-content: center; }
+.inv-slot { width: 58px; height: 58px; background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.18); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; touch-action: none; }
+.inv-slot small { font-size: 9px; color: #ccc; }
+.inv-slot .ico { width: 30px; height: 30px; }
+.inv-slot.pick { border-color: #ffd54f; background: rgba(255,213,79,0.2); }
+.inv-slot.gone .ico { opacity: 0.25; }
+#inventory .btn { margin-top: 12px; }
+#tb-inv { right: calc(132px + var(--sa-r)); bottom: calc(212px + var(--sa-b)); width: 50px; height: 50px; font-size: 22px; }
+body.lefty #tb-inv { right: auto; left: calc(132px + var(--sa-l)); }
+body.touch #hotbar { bottom: calc(8px + var(--sa-b)); }
+body.touch .hb-slot { width: 46px; height: 46px; }
+body.touch .hb-bag { display: none; }
+.sb-row { display: flex; justify-content: space-between; gap: 12px; }
+.sb-row.dead { opacity: 0.5; }
+.sb-team { font-size: 12px; color: #aaa; }
+#hud-stamina { bottom: calc(86px + var(--sa-b)); }
+body.touch #hud-stamina { bottom: calc(66px + var(--sa-b)); }

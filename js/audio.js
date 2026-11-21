@@ -180,9 +180,9 @@ export const Audio = {
     if (!ctx) return;
     this._tone(master, 660, 0.12, 0.3, 'square'); this._tone(master, 990, 0.12, 0.3, 'square', 0.1); this._tone(master, 1320, 0.25, 0.3, 'square', 0.2);
   },
-  roundStart(murderer) {
+  roundStart(seeker) {
     if (!ctx) return;
-    if (murderer) { this._tone(master, 110, 1.2, 0.5, 'sawtooth', 0, 55); this._tone(master, 116, 1.2, 0.3, 'sawtooth'); }
+    if (seeker) { this._tone(master, 110, 1.2, 0.5, 'sawtooth', 0, 55); this._tone(master, 116, 1.2, 0.3, 'sawtooth'); }
     else { this._tone(master, 330, 0.5, 0.3, 'triangle'); this._tone(master, 440, 0.6, 0.3, 'triangle', 0.15); }
   },
   roundEnd(good) {
