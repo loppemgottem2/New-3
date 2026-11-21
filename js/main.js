@@ -2,18 +2,19 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=550';
-import { CONFIG } from './config.js?v=550';
-import { store, makeCode, clamp } from './util.js?v=550';
-import { makeTextures } from './textures.js?v=550';
-import { GameMap } from './map.js?v=550';
-import { NavGrid } from './nav.js?v=550';
-import { Input, isTouchDevice } from './input.js?v=550';
-import { UI } from './ui.js?v=550';
-import { Audio } from './audio.js?v=550';
-import { Game } from './game.js?v=550';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=550';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=550';
+import * as THREE from '../vendor/three.module.min.js?v=590';
+import { CONFIG } from './config.js?v=590';
+import { store, makeCode, clamp } from './util.js?v=590';
+import { makeTextures } from './textures.js?v=590';
+import { GameMap } from './map.js?v=590';
+import { NavGrid } from './nav.js?v=590';
+import { Input, isTouchDevice } from './input.js?v=590';
+import { UI } from './ui.js?v=590';
+import { Audio } from './audio.js?v=590';
+import { Game } from './game.js?v=590';
+import { PropSystem } from './props.js?v=590';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=590';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=590';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -682,8 +683,25 @@ $('slbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPr
 $('anchorbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game?.toggleAnchor(); });
 
 // ---------------- the match ----------------
+// The furnished map behind the menu: the same furniture as in a game (just standing still).
+// It's removed while you play (the game builds its own) and comes back when you leave.
+let menuProps = null;
+const menuRoot = new THREE.Group();
+function showMenuProps() {
+  if (menuProps || game || !map) return;
+  if (!menuRoot.parent) scene.add(menuRoot);
+  menuProps = new PropSystem(map, menuRoot, textures, false);
+  menuProps.render(0, false);
+}
+function hideMenuProps() {
+  if (!menuProps) return;
+  menuProps.dispose();
+  menuProps = null;
+}
+
 function startGame(mode, net, opts) {
   ui.notice('');
+  hideMenuProps();
   Audio.unlock();
   if (preview) preview.model.setVisible(false);
   game = new Game({
@@ -692,6 +710,7 @@ function startGame(mode, net, opts) {
     serverLabel: opts.serverLabel, code: opts.code, welcome: opts.welcome,
     onExit: (reason) => {
       game = null;
+      showMenuProps();
       input.setActive(false);
       ui.openOverlay(false);
       ui.show('menu'); ui.current = 'menu';
@@ -821,6 +840,7 @@ async function init() {
   $('loading-cancel').style.display = '';
   applyAll();
   ui.show('menu'); ui.current = 'menu';
+  setTimeout(showMenuProps, 30);       // furniture behind the menu right after it appears (menu shows up sooner)
   requestAnimationFrame(frame);
 }
 init();

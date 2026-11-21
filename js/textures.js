@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=550';
+import * as THREE from '../vendor/three.module.min.js?v=590';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -969,20 +969,45 @@ export function makeTextures(renderer, quality = 'medium') {
   T.pants = {}; T.hips = {};
   for (const p of ['jeans', 'slacks', 'cargo', 'shorts', 'sweats']) { T.pants[p] = pantsTex(p); T.hips[p] = hipsTex(p); }
 
-  // Sky
+  // Sky: bright baby-blue, lighter toward the horizon, with soft fluffy cumulus clouds
+  // (equirectangular: x = all the way around, y = straight up (0) to straight down (512), horizon at 256)
   {
-    const [c, ctx] = canvas(1024, 512);
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0, '#2f63ad'); g.addColorStop(0.5, '#86b4e3'); g.addColorStop(1, '#e4ecf2');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 1024, 512);
-    const img = ctx.getImageData(0, 0, 1024, 512);
+    const W = 1024, H = 512, HZ = 256;
+    const [c, ctx] = canvas(W, H);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#6cc3f7'); g.addColorStop(0.3, '#89cff0'); g.addColorStop(0.46, '#b8e2fb'); g.addColorStop(0.5, '#e0f2ff'); g.addColorStop(1, '#e8f3fb');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const img = ctx.getImageData(0, 0, W, H);
     const d = img.data;
-    for (let y = 0; y < 300; y++) for (let x = 0; x < 1024; x++) {
-      const n = fbm(x / 1024, y / 512, 4, 5, 191);
-      const top = Math.min(1, Math.max(0, (y - 60) / 90));       // fade clouds out toward the zenith
-      const cl = Math.max(0, n - 0.52) * 3 * (1 - y / 300) * top;
-      const i = (y * 1024 + x) * 4;
-      d[i] += (255 - d[i]) * cl; d[i + 1] += (255 - d[i + 1]) * cl; d[i + 2] += (255 - d[i + 2]) * cl;
+    // cloud density at a sky pixel: noise squashed toward the horizon (perspective), billowy shapes
+    const dens = (x, y) => {
+      const e = Math.max(0.02, 1 - y / HZ);                         // 1 overhead .. 0 at the horizon
+      const nx = x / W, ny = 0.35 / (e + 0.12);
+      const base = fbm(nx * 2, ny * 0.9, 4, 6, 301);
+      const puff = fbm(nx * 6, ny * 2.6, 8, 4, 302);
+      return base * 0.75 + puff * 0.35;
+    };
+    // density on a 4x coarser grid (fast), smoothly interpolated per pixel
+    const GW = W / 2, GH = HZ / 2, grid = new Float32Array((GW + 1) * (GH + 2));
+    for (let gy = 0; gy <= GH + 1; gy++) for (let gx = 0; gx <= GW; gx++) grid[gy * (GW + 1) + gx] = dens((gx % GW) * 2, gy * 2);
+    const densAt = (x, y) => {
+      const fx = x / 2, fy = Math.min(GH, y / 2), x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0, x1 = Math.min(GW, x0 + 1);
+      const a = grid[y0 * (GW + 1) + x0], b = grid[y0 * (GW + 1) + x1], c2 = grid[(y0 + 1) * (GW + 1) + x0], d2 = grid[(y0 + 1) * (GW + 1) + x1];
+      return (a * (1 - tx) + b * tx) * (1 - ty) + (c2 * (1 - tx) + d2 * tx) * ty;
+    };
+    for (let y = 8; y < HZ - 4; y++) for (let x = 0; x < W; x++) {
+      const e = 1 - y / HZ;
+      const v = densAt(x, y);
+      const cover = Math.min(1, Math.max(0, (v - 0.52) / 0.16));     // soft edges
+      if (cover <= 0) continue;
+      const fade = Math.min(1, e * 6) * (0.65 + 0.35 * Math.min(1, e * 2));   // thin out near the horizon
+      // light from above: brighter where the cloud gets denser upward, grey-blue undersides
+      const below = densAt(x, y + 3);
+      const lit = Math.min(1, Math.max(0, 0.75 + (v - below) * 9));
+      const cr = 196 + 59 * lit, cg = 206 + 49 * lit, cb = 222 + 33 * lit;
+      const a = cover * fade;
+      const i = (y * W + x) * 4;
+      d[i] += (cr - d[i]) * a; d[i + 1] += (cg - d[i + 1]) * a; d[i + 2] += (cb - d[i + 2]) * a;
     }
     ctx.putImageData(img, 0, 0);
     T.sky = new THREE.CanvasTexture(c); T.sky.colorSpace = THREE.SRGBColorSpace; T.sky.wrapS = THREE.RepeatWrapping;
