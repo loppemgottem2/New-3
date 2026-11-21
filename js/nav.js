@@ -1,9 +1,9 @@
 // Navigation grid + A* pathfinding for bots.
 // The nav grid is 2x finer than the map grid (1 m nodes), so bots keep
 // a margin from walls and can walk around crates / pillars.
-import { CELL } from './map.js?v=310';
-import { CONFIG } from './config.js?v=310';
-import { circleFree } from './physics.js?v=310';
+import { CELL } from './map.js?v=320';
+import { CONFIG } from './config.js?v=320';
+import { circleFree } from './physics.js?v=320';
 
 const SUB = 2;                   // nav nodes per map cell (each axis)
 const NODE = CELL / SUB;         // 1 meter
@@ -75,22 +75,6 @@ export class NavGrid {
       if (d >= minD && d <= maxD) return p;
     }
     return this.randomPoint();
-  }
-
-  // Find a point far away from a threat, reachable from (x,z)
-  fleePoint(x, z, tx, tz) {
-    let best = null, bestScore = -Infinity;
-    for (let t = 0; t < 30; t++) {
-      const p = this.randomPoint();
-      const dMe = Math.hypot(p.x - x, p.z - z);
-      if (dMe < 8 || dMe > 45) continue;
-      const dThreat = Math.hypot(p.x - tx, p.z - tz);
-      // prefer points away from the threat and in the direction away from it
-      const away = ((p.x - x) * (x - tx) + (p.z - z) * (z - tz)) / (dMe * (Math.hypot(x - tx, z - tz) + 0.01));
-      const score = dThreat + away * 12 - dMe * 0.15;
-      if (score > bestScore) { bestScore = score; best = p; }
-    }
-    return best || this.randomPoint();
   }
 
   // A* (8-directional, no corner cutting). Returns smoothed list of world points, or null.

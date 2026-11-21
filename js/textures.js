@@ -3,7 +3,7 @@
 //  startup (no image files). Uses fractal noise for concrete, dirt,
 //  wood grain, fabric etc.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=310';
+import * as THREE from '../vendor/three.module.min.js?v=320';
 
 // ---------------- noise helpers ----------------
 function hash(x, y, s) {
@@ -459,43 +459,6 @@ function floorDirty(S) {
     else if (rnd() < 0.7) { ctx.save(); ctx.translate(x, y); ctx.rotate(rnd() * 6); ctx.fillStyle = `rgba(${200 + rnd() * 40 | 0},${195 + rnd() * 40 | 0},180,0.85)`; ctx.fillRect(-8, -6, 14 + rnd() * 10, 10 + rnd() * 6); ctx.restore(); }
     else { ctx.fillStyle = '#d8c8a0'; ctx.fillRect(x, y, 6, 2); ctx.fillStyle = '#a05020'; ctx.fillRect(x + 6, y, 2, 2); }
   }
-  return c;
-}
-
-// Painted block wall covered in spray-paint tags, peeling paint and grime
-function wallGraffiti(S) {
-  // covers 4 m of wall (2x2 tiles worth of blocks) so the tags repeat less
-  const c = wallPainted(S, 2); const ctx = c.getContext('2d');
-  const img = ctx.getImageData(0, 0, S, S), d = img.data;
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    const n = fbm(x / S, y / S, 3, 4, 411);
-    const k = 0.72 + n * 0.3;
-    const i = (y * S + x) * 4; d[i] *= k; d[i + 1] *= k * 0.96; d[i + 2] *= k * 0.88;
-  }
-  ctx.putImageData(img, 0, 0);
-  const cols = ['#e0245e', '#18a0e8', '#f2c200', '#2ecc40', '#ff6a00', '#9d4edd', '#111111', '#f5f5f5'];
-  const words = ['KM', 'ZOOT', 'REKT', 'NOPE', 'WAS HERE', 'XO', 'BOOM', 'LOL', 'RUN'];
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (let i = 0; i < 6; i++) {
-    const x = rnd() * S * 0.8, y = S * 0.3 + rnd() * S * 0.6;
-    ctx.save(); ctx.translate(x, y); ctx.rotate((rnd() - 0.5) * 0.4);
-    ctx.font = `bold ${Math.floor(22 + rnd() * 22)}px Impact, Arial Black, sans-serif`;
-    const col = cols[Math.floor(rnd() * cols.length)];
-    ctx.strokeStyle = cols[Math.floor(rnd() * cols.length)]; ctx.lineWidth = 6; ctx.globalAlpha = 0.8;
-    const w = words[Math.floor(rnd() * words.length)];
-    ctx.strokeText(w, 0, 0); ctx.fillStyle = col; ctx.fillText(w, 0, 0);
-    // paint drips
-    ctx.fillStyle = col; for (let k = 0; k < 4; k++) ctx.fillRect(rnd() * 80, 4, 2, 8 + rnd() * 24);
-    ctx.restore();
-  }
-  // squiggles
-  for (let i = 0; i < 5; i++) {
-    ctx.strokeStyle = cols[Math.floor(rnd() * cols.length)]; ctx.globalAlpha = 0.7; ctx.lineWidth = 3 + rnd() * 3;
-    ctx.beginPath(); let x = rnd() * S, y = S * 0.3 + rnd() * S * 0.5; ctx.moveTo(x, y);
-    for (let k = 0; k < 6; k++) { x += (rnd() - 0.3) * 50; y += (rnd() - 0.5) * 40; ctx.quadraticCurveTo(x - 20, y - 30, x, y); }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
   return c;
 }
 

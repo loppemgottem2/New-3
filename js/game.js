@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=310';
-import { CONFIG } from './config.js?v=310';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=310';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=310';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=310';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=310';
-import { Ragdoll } from './ragdoll.js?v=310';
-import { Audio } from './audio.js?v=310';
-import { initBrain, updateBots } from './bots.js?v=310';
+import * as THREE from '../vendor/three.module.min.js?v=320';
+import { CONFIG } from './config.js?v=320';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=320';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=320';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=320';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=320';
+import { Ragdoll } from './ragdoll.js?v=320';
+import { Audio } from './audio.js?v=320';
+import { initBrain, updateBots } from './bots.js?v=320';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -32,7 +32,6 @@ const r3 = (v) => Math.round(v * 1000) / 1000;
 // Flags packed into snapshots
 const F_ALIVE = 1, F_KNIFE = 2, F_GUN = 4, F_GROUND = 8, F_RUN = 16, F_SEEKER = 32, F_PROP = 64, F_CROWBAR = 128;
 
-export const ITEM_NAMES = { knife: 'Knife', revolver: 'Revolver', crowbar: 'Crowbar' };
 // melee weapons (the crowbar works exactly like the knife)
 const isMelee = (w) => w === 1 || w === 3;
 
@@ -143,7 +142,8 @@ export class Game {
       this.localId = me.id;
       this.ensureBots();
       this.phase = 'waiting';
-      this.timeLeft = 2;
+      // offline starts right away; a host gives joiners a moment to connect
+      this.timeLeft = this.mode === 'offline' ? 0.05 : 1;
     } else {
       this.applyWelcome(o.welcome);
     }
@@ -682,15 +682,26 @@ export class Game {
     return ph && ph.prop === prop && ph.part ? { local: this.propClipLocal(ph.part, ph.axis) } : null;
   }
   removeDecal(dc) { dc.m.parent?.remove(dc.m); dc.m.material.dispose(); }
+  // remove every mark and blood burst (round reset / leaving the game)
+  clearMarks() {
+    for (const dc of this.decals) this.removeDecal(dc);
+    this.decals = [];
+    for (const b of this.bursts || []) { this.root.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); }
+    this.bursts = [];
+  }
+  clearTracers() {
+    for (const t of this.tracers) { this.root.remove(t.mesh); this.root.remove(t.flash); t.mesh.geometry.dispose(); t.mesh.material.dispose(); t.flash.material.dispose(); }
+    this.tracers = [];
+  }
 
   // Blood drops bursting out of a hit prop and falling (more for gunshots); they fade after a moment
   bloodBurst(p, d, gun) {
-    if (!this._dropTex) {
+    if (!DROP_TEX) {
       const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
       const g = x.createRadialGradient(28, 28, 2, 32, 32, 30);
       g.addColorStop(0, 'rgba(150,20,16,1)'); g.addColorStop(0.45, 'rgba(95,8,6,1)'); g.addColorStop(0.8, 'rgba(60,3,3,0.9)'); g.addColorStop(1, 'rgba(50,2,2,0)');
       x.fillStyle = g; x.beginPath(); x.arc(32, 32, 30, 0, Math.PI * 2); x.fill();
-      this._dropTex = new THREE.CanvasTexture(c); this._dropTex.colorSpace = THREE.SRGBColorSpace;
+      DROP_TEX = new THREE.CanvasTexture(c); DROP_TEX.colorSpace = THREE.SRGBColorSpace;
     }
     const n = gun ? 46 : 18;
     const pos = new Float32Array(n * 3), vel = [];
@@ -704,7 +715,7 @@ export class Game {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const l = this.map.probe(p.x, p.z, true, [0, 0, 0]), lum = Math.min(1.2, 0.3 * l[0] + 0.55 * l[1] + 0.15 * l[2]);
-    const mat = new THREE.PointsMaterial({ map: this._dropTex, size: gun ? 0.15 : 0.12, transparent: true, depthWrite: false, sizeAttenuation: true, opacity: 1, alphaTest: 0.05 });
+    const mat = new THREE.PointsMaterial({ map: DROP_TEX, size: gun ? 0.15 : 0.12, transparent: true, depthWrite: false, sizeAttenuation: true, opacity: 1, alphaTest: 0.05 });
     mat.color.setRGB(lum, lum, lum);
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false;
@@ -1043,12 +1054,8 @@ export class Game {
       case 'reset':
         for (const rd of this.ragdolls.values()) rd.dispose();
         this.ragdolls.clear();
-        for (const t of this.tracers) { this.root.remove(t.mesh); this.root.remove(t.flash); }
-        this.tracers = [];
-        for (const dc of this.decals) this.removeDecal(dc);
-        this.decals = [];
-        for (const b of this.bursts || []) { this.root.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); }
-        this.bursts = [];
+        this.clearTracers();
+        this.clearMarks();
         if (!this.isHost) this.items.clear();
         for (const c of this.chars.values()) { c.disguise = null; this.setDisguiseMesh(c, null); }
         this.specId = null;
@@ -1595,7 +1602,6 @@ export class Game {
 
   // own body is drawn in third person (only on this screen; others always see you)
   ownBodyVisible() { return this.thirdPerson() && (this._camActualDist ?? 9) > 0.55; }
-  firstPerson() { const me = this.me; return me && me.alive && !this.thirdPerson(); }
 
   updateCamera(dt) {
     const cam = this.camera, me = this.me;
@@ -1745,13 +1751,19 @@ export class Game {
     for (const id of [...this.chars.keys()]) this.removeChar(id);
     for (const rd of this.ragdolls.values()) rd.dispose();
     this.ragdolls.clear();
+    this.clearMarks();
+    this.clearTracers();
+    for (const m of this.itemMeshes.values()) this.root.remove(m);
+    this.itemMeshes.clear();
+    this.props.dispose();
     this.scene.remove(this.root);
     this.camera.remove(this.viewModel.group);
   }
 }
 
+let DROP_TEX = null;   // round blood-drop sprite, shared by every game
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-export { escapeHtml, rand, pick };

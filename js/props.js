@@ -10,9 +10,9 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=310';
-import { CONFIG } from './config.js?v=310';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=310';
+import * as THREE from '../vendor/three.module.min.js?v=320';
+import { CONFIG } from './config.js?v=320';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=320';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -331,6 +331,13 @@ export class PropSystem {
     });
     map.propSys = this;
     map.props = this.list;
+  }
+
+  // free the per-prop materials when the game ends (geometry is shared and kept)
+  dispose() {
+    for (const p of this.list) { this.root.remove(p.mesh); for (const m of p.mats) m.dispose(); }
+    this.list = [];
+    if (this.map.propSys === this) { this.map.propSys = null; this.map.props = []; }
   }
 
   // keep simple fields used elsewhere: x/z center, y bottom, top, h, r (horizontal reach)
