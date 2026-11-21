@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=410';
-import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=410';
+import { CONFIG } from './config.js?v=400';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=400';
 const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
 const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
 // Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the

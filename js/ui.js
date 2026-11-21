@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=410';
-import { hexToCss, textColor } from './util.js?v=410';
+import { CONFIG } from './config.js?v=400';
+import { hexToCss, textColor } from './util.js?v=400';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

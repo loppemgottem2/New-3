@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=410';
-import { CONFIG } from './config.js?v=410';
-import { store, makeCode, clamp } from './util.js?v=410';
-import { makeTextures } from './textures.js?v=410';
-import { GameMap } from './map.js?v=410';
-import { NavGrid } from './nav.js?v=410';
-import { Input, isTouchDevice } from './input.js?v=410';
-import { UI } from './ui.js?v=410';
-import { Audio } from './audio.js?v=410';
-import { Game } from './game.js?v=410';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=410';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=410';
+import * as THREE from '../vendor/three.module.min.js?v=400';
+import { CONFIG } from './config.js?v=400';
+import { store, makeCode, clamp } from './util.js?v=400';
+import { makeTextures } from './textures.js?v=400';
+import { GameMap } from './map.js?v=400';
+import { NavGrid } from './nav.js?v=400';
+import { Input, isTouchDevice } from './input.js?v=400';
+import { UI } from './ui.js?v=400';
+import { Audio } from './audio.js?v=400';
+import { Game } from './game.js?v=400';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=400';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=400';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
