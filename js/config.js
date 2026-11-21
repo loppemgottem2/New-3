@@ -65,7 +65,6 @@ export const CONFIG = {
     FLUTTER_WINDOW: 1.0,
     FLUTTER_GRAVITY: 0.4,   // fluttering props fall with this much of normal gravity
     FLUTTER_JUMP_DELAY: 0.35, // fluttering props can jump again in the air at most this often
-    FLUTTER_MAX_JUMPS: 3,   // extra air jumps before you have to land again (and never above WALL_CLIMB_MAX)
     WALK_STEP: 0.28,        // tiny auto step-up, ONLY while walking/running on the ground (enough for a mattress); none while jumping
     STAMINA_MAX: 100,
     STAMINA_DRAIN: 16,      // per second while sprinting
