@@ -10,9 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=500';
-import { CONFIG } from './config.js?v=500';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=500';
+import * as THREE from '../vendor/three.module.min.js?v=510';
+import { CONFIG } from './config.js?v=510';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=510';
+import { footWorld } from './physics.js?v=510';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -247,6 +248,28 @@ export function propShape(type) {
     h = Math.max(h, cy + hy);
   }
   return (SHAPES[type] = { r: Math.min(0.75, Math.max(0.12, r)), h: Math.max(0.15, h) });
+}
+
+// Collision footprint of a prop type (for players disguised as it): circles covering every part's
+// real outline, each at its own height band. Long things get a row of circles along their length.
+const FOOTS = {};
+export function propFoot(type) {
+  if (FOOTS[type]) return FOOTS[type];
+  const out = [];
+  for (const [cx, cy, cz, hx, hy, hz, yaw = 0] of PROP_TYPES[type].parts) {
+    const r = Math.max(0.06, Math.min(hx, hz)), long = Math.max(hx, hz), alongX = hx >= hz;
+    const n = long > r + 1e-3 ? Math.min(12, Math.ceil((2 * (long - r)) / r) + 1) : 1;
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    for (let k = 0; k < n; k++) {
+      const t = n === 1 ? 0 : -(long - r) + (2 * (long - r) * k) / (n - 1);
+      const lx = alongX ? t : 0, lz = alongX ? 0 : t;
+      const f = { x: cx + lx * c + lz * s, z: cz - lx * s + lz * c, r, y0: cy - hy, y1: cy + hy };
+      // skip circles already covered by a bigger one at the same height
+      if (out.some((o) => Math.hypot(o.x - f.x, o.z - f.z) + f.r <= o.r + 1e-3 && o.y0 <= f.y0 + 0.02 && o.y1 >= f.y1 - 0.02)) continue;
+      out.push(f);
+    }
+  }
+  return (FOOTS[type] = out);
 }
 
 // height of a prop type (camera / hit tests for disguised players)
@@ -510,11 +533,14 @@ export class PropSystem {
   // Keeps a character out of props. soft = 0..1 how much of the overlap moves the character.
   // With push=true (host) the character shoves the prop (impulse at the contact point -> it can tip over).
   collideChar(ch, soft, push, dt = 1 / 60) {
-    const R = ch.shapeR || P.RADIUS, H = ch.shapeH || P.HEIGHT;
+    const H = ch.shapeH || P.HEIGHT;
     const s = t1, l = t2, q = t3;
+    // every circle of the body's footprint (T-posed arms, every part of a disguise) collides
+    const circles = footWorld(ch, ch.x, ch.z, this._foot || (this._foot = []));
+    let span = 0; for (const f of circles) span = Math.max(span, Math.hypot(f.x - ch.x, f.z - ch.z) + f.r);
     for (const p of this.list) {
       const dx = p.pos.x - ch.x, dz = p.pos.z - ch.z;
-      const reach = p.bound + R + 0.1;
+      const reach = p.bound + span + 0.1;
       if (dx * dx + dz * dz > reach * reach) continue;
       if (ch.y > p.top - 0.02 || ch.y + H < p.y) continue;
       // low things (bottles, food boxes, mattresses) are walked over and kicked, not blocking
@@ -524,10 +550,13 @@ export class PropSystem {
       const samples = low ? KICK_SAMPLES : CHAR_SAMPLES;
       let best = 0, nx = 0, nz = 0;
       const bq = new V();
-      for (const part of p.parts) {
-        for (const hs of samples) {
-          if (hs > H) break;
-          s.set(ch.x, ch.y + hs, ch.z);
+      for (const fc of circles) for (const part of p.parts) {
+        const R = fc.r;
+        // sample heights inside this circle's band (always at least its middle)
+        const hsList = samples.filter((h) => h <= H && h >= fc.y0 - 1e-3 && h <= fc.y1 + 1e-3);
+        if (!hsList.length) hsList.push((fc.y0 + fc.y1) / 2);
+        for (const hs of hsList) {
+          s.set(fc.x, ch.y + hs, fc.z);
           this.toPartLocal(p, part, s, l);
           const inside = Math.abs(l.x) < part.h.x && Math.abs(l.y) < part.h.y && Math.abs(l.z) < part.h.z;
           l.set(Math.max(-part.h.x, Math.min(part.h.x, l.x)), Math.max(-part.h.y, Math.min(part.h.y, l.y)), Math.max(-part.h.z, Math.min(part.h.z, l.z)));
@@ -535,7 +564,7 @@ export class PropSystem {
           if (Math.abs(s.y - q.y) > 0.04) continue; // above / below this part
           let hx = s.x - q.x, hz = s.z - q.z, dh = Math.hypot(hx, hz);
           let pen;
-          if (inside || dh < 1e-4) { hx = ch.x - p.pos.x; hz = ch.z - p.pos.z; dh = Math.hypot(hx, hz) || 1; pen = R * 0.6; }
+          if (inside || dh < 1e-4) { hx = fc.x - p.pos.x; hz = fc.z - p.pos.z; dh = Math.hypot(hx, hz) || 1; pen = R * 0.6; }
           else pen = R - dh;
           if (pen > best) { best = pen; nx = hx / dh; nz = hz / dh; bq.copy(q); }
         }

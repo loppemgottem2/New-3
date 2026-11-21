@@ -19,8 +19,8 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=500';
-import { fbm } from './textures.js?v=500';
+import * as THREE from '../vendor/three.module.min.js?v=510';
+import { fbm } from './textures.js?v=510';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -104,8 +104,8 @@ const SUN_COL = [1.15, 1.05, 0.88];
 const SKY_COL = [0.42, 0.5, 0.62];
 const INDOOR_AMB = [0.13, 0.125, 0.12];
 const LAMP_COL = [1.0, 0.96, 0.9];
-const LAMP_INT = 2.3;
-const LAMP_RANGE = 10;
+const LAMP_INT = 2.6;
+const LAMP_RANGE = 14;     // ceiling lights are downward spotlights that reach all the way to the floor
 
 export class GameMap {
   constructor(layout = LAYOUT) {
@@ -340,8 +340,9 @@ export class GameMap {
           if (d > LAMP_RANGE || d < 1e-3) continue;
           const ndl = hasN ? (vx * nx + vy * ny + vz * nz) / d : 0.75;
           if (ndl <= 0) continue;
-          const emit = 0.3 + 0.7 * Math.max(0, vy / d);
-          const fall = (1 / (1 + (d / 2.4) ** 2)) * (1 - d / LAMP_RANGE);
+          const down = Math.max(0, vy / d);
+          const emit = 0.15 + 0.85 * down * Math.sqrt(down);               // spotlight: strongest straight down
+          const fall = (1 / (1 + (d / 5) ** 2)) * (1 - d / LAMP_RANGE);
           const k = LAMP_INT * ndl * emit * fall;
           if (k < 0.01) continue;
           if (this.ray(ox, oy, oz, vx / d, vy / d, vz / d, d - 0.15) < d - 0.2) continue;
@@ -545,8 +546,9 @@ export class GameMap {
       }
       // tops of low furniture
       if (h < WALL_H) {
-        const key = kind === K.SHELF ? 'shelf-top' : 'counter';
-        B(key, kind === K.SHELF ? T.metal : T.counter).gridY(x * CELL, z * CELL, (x + 1) * CELL, (z + 1) * CELL, h, false, 2);
+        const books = kind === K.SHELF && FLOOR_LIST[this.floor[i]] === 'carpet';
+        const key = books ? 'shelf-top-books' : kind === K.SHELF ? 'shelf-top' : 'counter';
+        B(key, books ? T.bookTop : kind === K.SHELF ? T.metal : T.counter).gridY(x * CELL, z * CELL, (x + 1) * CELL, (z + 1) * CELL, h, false, 2);
       }
     }
     onProgress?.(0.85);

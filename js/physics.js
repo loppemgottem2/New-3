@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=500';
-import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=500';
+import { CONFIG } from './config.js?v=510';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=510';
 const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
 const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
 // Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the
@@ -12,6 +12,49 @@ function solidH(map, cx, cz, feetY, H) {
 }
 
 const P = CONFIG.PLAYER;
+
+// ---------------------------------------------------------------------
+//  Collision footprint. A character's body is a set of circles in its own frame
+//  ({x, z, r, y0, y1}: offset, radius, height band above the feet), turned with its yaw:
+//  a normal person is one circle; a human prop also has its T-posed arms; a disguised prop
+//  covers every part of its furniture (so a long crate is solid along its whole length).
+// ---------------------------------------------------------------------
+export function footWorld(ch, x = ch.x, z = ch.z, out = []) {
+  out.length = 0;
+  const foot = ch.foot;
+  if (!foot) { out.push({ x, z, r: ch.shapeR || P.RADIUS, y0: 0, y1: ch.shapeH || P.HEIGHT }); return out; }
+  const c = Math.cos(ch.yaw || 0), s = Math.sin(ch.yaw || 0);
+  for (const f of foot) out.push({ x: x + f.x * c + f.z * s, z: z - f.x * s + f.z * c, r: f.r, y0: f.y0, y1: f.y1 });
+  return out;
+}
+const _fw = [], _fw2 = [];
+// push the whole footprint out of the walls (every circle at its own height band)
+export function resolveFoot(map, pos, ch) {
+  if (!ch.foot) { resolveWalls(map, pos, ch.shapeR || P.RADIUS, ch.y, ch.shapeH || P.HEIGHT); return; }
+  const tmp = { x: 0, z: 0 };
+  for (let iter = 0; iter < 3; iter++) {
+    let moved = false;
+    for (const f of footWorld(ch, pos.x, pos.z, _fw)) {
+      tmp.x = f.x; tmp.z = f.z;
+      resolveWalls(map, tmp, f.r, ch.y + f.y0, Math.max(0.05, f.y1 - f.y0));
+      if (tmp.x !== f.x || tmp.z !== f.z) { pos.x += tmp.x - f.x; pos.z += tmp.z - f.z; moved = true; }
+    }
+    if (!moved) break;
+  }
+}
+// how far (and which way) a must move to stop overlapping b (footprint against footprint)
+export function footOverlap(a, ax, az, b, bx, bz) {
+  let best = 0, nx = 0, nz = 0;
+  for (const fa of footWorld(a, ax, az, _fw)) for (const fb of footWorld(b, bx, bz, _fw2)) {
+    if (a.y + fa.y1 <= b.y + fb.y0 + 0.05 || b.y + fb.y1 <= a.y + fa.y0 + 0.05) continue;   // different heights
+    let dx = fa.x - fb.x, dz = fa.z - fb.z, d = Math.hypot(dx, dz);
+    const pen = fa.r + fb.r - d;
+    if (pen <= best) continue;
+    if (d < 1e-4) { dx = ax - bx || 1e-3; dz = az - bz; d = Math.hypot(dx, dz); }
+    best = pen; nx = dx / d; nz = dz / d;
+  }
+  return best > 0 ? { pen: best, nx, nz } : null;
+}
 
 // ---------------------------------------------------------------------
 //  Walls: push a circle (x,z,r) out of every cell that is taller than
@@ -165,7 +208,7 @@ export function moveCharacter(ch, input, dt, map) {
   const pos = { x: ch.x, z: ch.z };
   for (let i = 0; i < n; i++) {
     pos.x += (ch.vx * dt) / n; pos.z += (ch.vz * dt) / n;
-    resolveWalls(map, pos, r, ch.y, H);
+    resolveFoot(map, pos, ch);
   }
   // touching a wall while pushing into it (used for props sticking to / climbing walls)
   if (dt > 0 && moving) {
@@ -226,22 +269,19 @@ export function separateCharacters(list, map, movable) {
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
       if (!b.alive) continue;
-      const r2 = (a.shapeR || P.RADIUS) + (b.shapeR || P.RADIUS);
-      // vertical overlap of the two bodies (a bottle can sit under someone jumping over it)
-      if (b.y > a.y + (a.shapeH || P.HEIGHT) * 0.95 || a.y > b.y + (b.shapeH || P.HEIGHT) * 0.95) continue;
-      let dx = b.x - a.x, dz = b.z - a.z;
-      let d = Math.hypot(dx, dz);
-      if (d >= r2) continue;
-      if (d < 1e-4) { dx = Math.random() - 0.5; dz = Math.random() - 0.5; d = Math.hypot(dx, dz); }
-      const push = (r2 - d) * 0.5;
+      if (Math.abs(b.x - a.x) > 6 || Math.abs(b.z - a.z) > 6) continue;
+      // footprints against footprints (arms, long furniture), only where their heights overlap
+      const o = footOverlap(a, a.x, a.z, b, b.x, b.z);
+      if (!o) continue;
+      const push = o.pen * 0.5;
       const ma = movable(a), mb = movable(b);
       const fa = ma && mb ? 1 : ma ? 2 : 0, fb = ma && mb ? 1 : mb ? 2 : 0;
-      a.x -= (dx / d) * push * fa; a.z -= (dz / d) * push * fa;
-      b.x += (dx / d) * push * fb; b.z += (dz / d) * push * fb;
+      a.x += o.nx * push * fa; a.z += o.nz * push * fa;
+      b.x -= o.nx * push * fb; b.z -= o.nz * push * fb;
     }
   }
   for (const c of list) if (c.alive && movable(c)) {
-    const p = { x: c.x, z: c.z }; resolveWalls(map, p, c.shapeR || P.RADIUS, c.y, c.shapeH || P.HEIGHT); c.x = p.x; c.z = p.z;
+    const p = { x: c.x, z: c.z }; resolveFoot(map, p, c); c.x = p.x; c.z = p.z;
   }
 }
 

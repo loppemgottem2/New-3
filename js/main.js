@@ -2,18 +2,18 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=500';
-import { CONFIG } from './config.js?v=500';
-import { store, makeCode, clamp } from './util.js?v=500';
-import { makeTextures } from './textures.js?v=500';
-import { GameMap } from './map.js?v=500';
-import { NavGrid } from './nav.js?v=500';
-import { Input, isTouchDevice } from './input.js?v=500';
-import { UI } from './ui.js?v=500';
-import { Audio } from './audio.js?v=500';
-import { Game } from './game.js?v=500';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=500';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=500';
+import * as THREE from '../vendor/three.module.min.js?v=510';
+import { CONFIG } from './config.js?v=510';
+import { store, makeCode, clamp } from './util.js?v=510';
+import { makeTextures } from './textures.js?v=510';
+import { GameMap } from './map.js?v=510';
+import { NavGrid } from './nav.js?v=510';
+import { Input, isTouchDevice } from './input.js?v=510';
+import { UI } from './ui.js?v=510';
+import { Audio } from './audio.js?v=510';
+import { Game } from './game.js?v=510';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN } from './character.js?v=510';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=510';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -109,10 +109,11 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
 function setDynLights(n) {
-  while (lightPool.length > n) scene.remove(lightPool.pop());
+  while (lightPool.length > n) { const l = lightPool.pop(); scene.remove(l); scene.remove(l.target); }
   while (lightPool.length < n) {
-    const l = new THREE.PointLight(0xffe2bc, 0, 11, 2);
-    scene.add(l); lightPool.push(l);
+    // ceiling lights are spotlights pointing straight down, reaching the floor
+    const l = new THREE.SpotLight(0xffe2bc, 0, 16, 1.1, 0.6, 1.4);
+    scene.add(l); scene.add(l.target); lightPool.push(l);
   }
 }
 let lightT = 0;
@@ -126,8 +127,9 @@ function updateDynLights(dt) {
   lightPool.forEach((l, i) => {
     const L = near[i] && near[i][0];
     if (!L) { l.intensity = 0; return; }
-    l.position.set(L.x, L.y - 0.3, L.z);
-    l.intensity = 9;
+    l.position.set(L.x, L.y - 0.1, L.z);
+    l.target.position.set(L.x, 0, L.z); l.target.updateMatrixWorld();
+    l.intensity = 30;
   });
 }
 
