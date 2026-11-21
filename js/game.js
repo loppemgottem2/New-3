@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=290';
-import { CONFIG } from './config.js?v=290';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=290';
-import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=290';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=290';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=290';
-import { Ragdoll } from './ragdoll.js?v=290';
-import { Audio } from './audio.js?v=290';
-import { initBrain, updateBots } from './bots.js?v=290';
+import * as THREE from '../vendor/three.module.min.js?v=300';
+import { CONFIG } from './config.js?v=300';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=300';
+import { moveCharacter, separateCharacters, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=300';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=300';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, rayVsPropShape, propName } from './props.js?v=300';
+import { Ragdoll } from './ragdoll.js?v=300';
+import { Audio } from './audio.js?v=300';
+import { initBrain, updateBots } from './bots.js?v=300';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -1364,18 +1364,7 @@ export class Game {
       if (this.faceT <= 0) me.pitch *= Math.exp(-dt * 4);
     }
     const wasGround = me.onGround;
-    // props: spamming the joystick (tapping it on/off or flicking it back and forth) = fluttering
-    let flutter = false;
-    if (me.team === 'prop') {
-      const now = this.time, on = Math.hypot(inp.fwd, inp.strafe) > 0.3;
-      const flip = on && this._lastMove && (inp.fwd * this._lastMove[0] + inp.strafe * this._lastMove[1]) < 0;
-      if ((on && !this._wasMoving) || flip) (this._spam || (this._spam = [])).push(now);
-      this._wasMoving = on;
-      if (on) this._lastMove = [inp.fwd, inp.strafe];
-      this._spam = (this._spam || []).filter((t) => now - t < P.FLUTTER_WINDOW);
-      flutter = this._spam.length >= P.FLUTTER_SPAM;
-    }
-    moveCharacter(me, { mx, mz, run: inp.run, jump: inp.jump && !frozen, wallClimb: me.team === 'prop', flutter }, dt, this.map);
+    moveCharacter(me, { mx, mz, run: inp.run, jump: inp.jump && !frozen, wallClimb: me.team === 'prop' }, dt, this.map);
     if (me.landed > 5) { Audio.land(null, me.landed); this.shake = Math.min(0.3, me.landed * 0.02); }
     if (wasGround && !me.onGround && me.vy > 0) Audio.jump(null);
 

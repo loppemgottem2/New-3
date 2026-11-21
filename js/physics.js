@@ -1,6 +1,6 @@
 // Character movement, collisions against the grid map, and raycasts.
-import { CONFIG } from './config.js?v=290';
-import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=290';
+import { CONFIG } from './config.js?v=300';
+import { CELL, CEIL_H, WALL_H, ROOF_T } from './map.js?v=300';
 const ROOF_TOP = WALL_H + ROOF_T;      // top of the thick roof slab
 const FIXTURE_H = 0.07;                // light fixtures hang this far below the ceiling
 // Solid height of a cell for a body from feetY to feetY+H: the roof slab (CEIL_H..ROOF_TOP) over the
@@ -142,12 +142,8 @@ export function moveCharacter(ch, input, dt, map) {
   // props can climb walls: pushing into a wall in the air, each jump kicks you higher (up to a limit)
   if (ch.wallJumpT > 0) ch.wallJumpT -= dt;
   const wallJump = input.wallClimb && ch.onWall && !ch.onGround && moving && !(ch.wallJumpT > 0) && ch.y < P.WALL_CLIMB_MAX;
-  // props "fluttering" (spamming the joystick) can jump again in the air, at most every FLUTTER_JUMP_DELAY
-  if (ch.airJumpT > 0) ch.airJumpT -= dt;
-  const airJump = input.flutter && !ch.onGround && !wallJump && !(ch.airJumpT > 0);
-  if (ch.jumpBuf > 0 && (ch.onGround || wallJump || airJump)) {
-    if (!ch.onGround && wallJump) ch.wallJumpT = 0.3;
-    if (!ch.onGround && !wallJump) ch.airJumpT = P.FLUTTER_JUMP_DELAY;
+  if (ch.jumpBuf > 0 && (ch.onGround || wallJump)) {
+    if (!ch.onGround) ch.wallJumpT = 0.3;
     ch.jumpBuf = 0;
     ch.vy = ch.onGround ? P.JUMP_SPEED : P.JUMP_SPEED * 0.85; ch.onGround = false; ch.jumped = true;
     // small forward boost when jumping while running (momentum)
@@ -157,8 +153,7 @@ export function moveCharacter(ch, input, dt, map) {
   // speed cap
   const hs = Math.hypot(ch.vx, ch.vz);
   if (hs > P.MAX_SPEED) { ch.vx *= P.MAX_SPEED / hs; ch.vz *= P.MAX_SPEED / hs; }
-  // fluttering props fall more slowly
-  ch.vy -= P.GRAVITY * (input.flutter && ch.vy < 0 ? P.FLUTTER_GRAVITY : 1) * dt;
+  ch.vy -= P.GRAVITY * dt;
   if (ch.vy < -40) ch.vy = -40;
 
   // Horizontal, in small sub-steps so we never tunnel through walls
@@ -206,6 +201,8 @@ export function moveCharacter(ch, input, dt, map) {
     ch.onGround = false;
   }
   // Ceiling
+  // invisible thick ceiling over the open outdoor areas, level with the top of the roof
+  if (map.isOutdoor(ch.x, ch.z) && ch.y + H > ROOF_TOP) { ch.y = ROOF_TOP - H; if (ch.vy > 0) ch.vy = 0; }
   // ceiling (and the light fixtures hanging from it) for anyone inside a room
   if (prevY + H <= CEIL_H + 0.05 && !map.isOutdoor(ch.x, ch.z)) {
     const top = map.underLight(ch.x, ch.z, r * 0.7) ? CEIL_H - FIXTURE_H : CEIL_H;
