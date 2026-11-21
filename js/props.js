@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=630';
-import { CONFIG } from './config.js?v=630';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=630';
-import { footWorld } from './physics.js?v=630';
+import * as THREE from '../vendor/three.module.min.js?v=640';
+import { CONFIG } from './config.js?v=640';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=640';
+import { footWorld } from './physics.js?v=640';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -506,7 +506,7 @@ export class PropSystem {
     this.fullT = 0;
   }
 
-  // Each new round a random 1-10% of the furniture is taken away (dropped far under the map, where nothing
+  // Each new round a random 5-35% of the furniture is taken away (dropped far under the map, where nothing
   // can touch it), so the rooms change a little and there are new hiding spots. Positions reach the
   // players through the normal prop sync. Whatever was resting on a removed piece falls down.
   removeRandom(minFrac = 0.01, maxFrac = 0.1) {
