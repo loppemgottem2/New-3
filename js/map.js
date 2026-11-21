@@ -19,9 +19,9 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=610';
-import { fbm } from './textures.js?v=610';
-import { furnish, DARK_ROOMS } from './furnish.js?v=610';
+import * as THREE from '../vendor/three.module.min.js?v=620';
+import { fbm } from './textures.js?v=620';
+import { furnish, DARK_ROOMS } from './furnish.js?v=620';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -105,7 +105,7 @@ const SUN_COL = [1.15, 1.05, 0.88];
 const SKY_COL = [0.42, 0.5, 0.62];
 const INDOOR_AMB = [0.13, 0.125, 0.12];
 const LAMP_COL = [1.0, 0.96, 0.9];
-const LAMP_INT = 0.75;      // about 1.4x the original light on the floor under a lamp
+const LAMP_INT = 0.55;      // same light on the floor under a lamp as the original lights
 const LAMP_RANGE = 14;     // ceiling lights are downward spotlights that reach all the way to the floor
 
 export class GameMap {

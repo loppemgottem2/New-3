@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=610';
-import { CONFIG } from './config.js?v=610';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=610';
-import { footWorld } from './physics.js?v=610';
+import * as THREE from '../vendor/three.module.min.js?v=620';
+import { CONFIG } from './config.js?v=620';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=620';
+import { footWorld } from './physics.js?v=620';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -175,7 +175,7 @@ function buildGeometry() {
   ]);
   // potted plant: terracotta pot, dark soil, a bushy clump of leaves
   {
-    const p = [{ geo: Cyl2(0.2, 0.15, 0.38, 14), mat: 0, m: M4(0, 0.19, 0) }, { geo: Cyl2(0.215, 0.215, 0.05, 14), mat: 0, m: M4(0, 0.36, 0) }, { geo: Cyl2(0.18, 0.18, 0.02, 12), mat: 1, m: M4(0, 0.375, 0) }];
+    const p = [{ geo: Cyl2(0.2, 0.15, 0.38, 14), mat: 0, m: M4(0, 0.19, 0) }, { geo: Cyl2(0.215, 0.215, 0.05, 14), mat: 0, m: M4(0, 0.36, 0) }, { geo: Cyl2(0.19, 0.19, 0.02, 14), mat: 1, m: M4(0, 0.387, 0) }];
     const lv = [[0, 0.62, 0, 0.17], [0.13, 0.75, 0.05, 0.15], [-0.12, 0.78, -0.06, 0.15], [0.04, 0.92, -0.08, 0.14], [-0.06, 0.88, 0.12, 0.13], [0.1, 0.55, -0.14, 0.12], [-0.15, 0.58, 0.1, 0.12], [0, 1.0, 0.02, 0.1]];
     for (const [x, y, z, r] of lv) p.push({ geo: Sph(r, 8, 6), mat: 2, m: M4(x, y, z, x * 3, y * 2, z * 4) });
     GEO.plant = mergeParts(p);
@@ -799,7 +799,16 @@ export class PropSystem {
       }
     }
     for (const p of awake) {
+      const oldTop = p.top, ox = p.x, oz = p.z;
       this.updateBounds(p);
+      // anything that was resting on this prop wakes up when it moves (so it falls instead of floating)
+      if (p.vel.lengthSq() > 0.0004 || p.ang.lengthSq() > 0.001) {
+        for (const q of this.list) {
+          if (!q.asleep || q === p || Math.abs(q.y - oldTop) > 0.15) continue;
+          const reach = p.r + q.r;
+          if ((q.x - ox) ** 2 + (q.z - oz) ** 2 < reach * reach) this.wake(q);
+        }
+      }
       if (p.vel.lengthSq() < 0.012 && p.ang.lengthSq() < 0.03) p.sleepT += dt; else p.sleepT = 0;
       if (p.sleepT > 0.6 || p.pos.y < -10) {
         p.asleep = true; p.vel.set(0, 0, 0); p.ang.set(0, 0, 0);

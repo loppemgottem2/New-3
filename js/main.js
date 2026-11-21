@@ -2,19 +2,19 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=610';
-import { CONFIG } from './config.js?v=610';
-import { store, makeCode, clamp } from './util.js?v=610';
-import { makeTextures } from './textures.js?v=610';
-import { GameMap, SUN_DIR } from './map.js?v=610';
-import { NavGrid } from './nav.js?v=610';
-import { Input, isTouchDevice } from './input.js?v=610';
-import { UI } from './ui.js?v=610';
-import { Audio } from './audio.js?v=610';
-import { Game } from './game.js?v=610';
-import { PropSystem } from './props.js?v=610';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=610';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=610';
+import * as THREE from '../vendor/three.module.min.js?v=620';
+import { CONFIG } from './config.js?v=620';
+import { store, makeCode, clamp } from './util.js?v=620';
+import { makeTextures } from './textures.js?v=620';
+import { GameMap, SUN_DIR } from './map.js?v=620';
+import { NavGrid } from './nav.js?v=620';
+import { Input, isTouchDevice } from './input.js?v=620';
+import { UI } from './ui.js?v=620';
+import { Audio } from './audio.js?v=620';
+import { Game } from './game.js?v=620';
+import { PropSystem } from './props.js?v=620';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=620';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=620';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -32,7 +32,7 @@ const DEFAULTS = {
   fov: CONFIG.GRAPHICS.FOV, camDist: 3, viewBob: true, shake: true, shiftLock: false,
   quality: touch ? 'medium' : 'high', ...CONFIG.GRAPHICS.PRESETS[touch ? 'medium' : 'high'], fog: true, antialias: !touch,
   volume: 1, footVol: 1,
-  fps: false, blood: false, shadows: true, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
+  fps: false, blood: false, shadows: !touch, crosshair: 'dot', crossSize: 4, hudScale: 1, hints: true,
 };
 // (falls back to Killer Mystery's saved settings, so your character comes along)
 const settings = { ...DEFAULTS, ...store.get('findthethings-settings', store.get('killermystery-settings', {})) };
@@ -43,8 +43,8 @@ if (!settings.lookV3) { settings.look.skin = WHITE_SKIN; settings.lookV3 = true;
 if (!settings.camV13) { if (!settings.camDist) settings.camDist = 3; settings.camV13 = true; store.set('findthethings-settings', settings); }
 // v1.4: look direction back to normal (turn off any "invert" that was switched on)
 if (!settings.lookV14 || 'invert' in settings) { delete settings.invert; delete settings.invertX; settings.lookV14 = true; store.set('findthethings-settings', settings); }
-// shadows are on by default for everyone now (phones too), once
-if (!settings.shadowsV2) { settings.shadows = true; settings.shadowsV2 = true; store.set('findthethings-settings', settings); }
+// shadows: on by default on computers, off by default on phones (switched back off once for phones)
+if (!settings.shadowsV3) { if (touch) settings.shadows = false; settings.shadowsV3 = true; store.set('findthethings-settings', settings); }
 const saveSettings = () => store.set('findthethings-settings', settings);
 const pct = (v) => `${Math.round(v * 100)}%`;
 const SCHEMA = [
@@ -205,7 +205,7 @@ function updateDynLights(dt) {
     if (!L) { l.intensity = 0; return; }
     l.position.set(L.x, L.y - 0.1, L.z);
     l.target.position.set(L.x, 0, L.z); l.target.updateMatrixWorld();
-    l.intensity = 9;
+    l.intensity = 6;
   });
 }
 

@@ -38,7 +38,7 @@ export function furnish() {
     add('desk', x, z, yaw);
     const [mx, mz] = at(x, z, yaw, 0.12, -0.16); add('computer', mx, mz, yaw + j(0.15));
     const [kx, kz] = at(x, z, yaw, 0.12, 0.14); add('keyboard', kx, kz, yaw + j(0.2));
-    if (pens) { const [px, pz] = at(x, z, yaw, -0.5, -0.12); add('pencup', px, pz, r() * 6); }
+    if (pens) { const [px, pz] = at(x, z, yaw, -0.36, -0.1); add('pencup', px, pz, r() * 6); }   // on the desk top, left of the monitor
     const [cx, cz] = at(x, z, yaw, 0.1 + j(0.2), 0.72 + chairOut); add('swivelchair', cx, cz, yaw + j(0.5));
   };
   // a table with chairs on its long sides, facing it
@@ -139,7 +139,6 @@ export function furnish() {
   // ------------------------------------------------------------------ loading yard (asphalt, outdoors)
   // shipping crates along the east wall, pallets of boxes, barrels, bins by the back door
   for (const z of [92.5, 97, 101.5, 106]) add('longcrate', 113.7, z, Math.PI / 2);
-  add('longcrate', 113.7, 94.75, Math.PI / 2);                                   // one stacked on top
   stack('box', 104, 110.5, 3); stack('box', 104.7, 111.2, 2); stack('box', 103.3, 111.3, 2);
   add('barrel', 93, 112, 0); add('barrel', 93.8, 112.6, 0); add('barrel', 92.6, 113, 0);
   for (const [oz, k] of [[-0.33, 0], [0.33, 1], [0, 2]]) add('barrel', 96.5, 113 + oz, 0, true, { tipAxis: 'z' });
