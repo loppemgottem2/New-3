@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   VERSION: '1.0.0',
-  TITLE: 'KILLER MYSTERY',
+  TITLE: 'FIND THE THINGS',
   SUBTITLE: '',
 
   // ---------------- Server / lobby ----------------
@@ -17,9 +17,25 @@ export const CONFIG = {
 
   // ---------------- Round timing (seconds) ----------------
   ROUND: {
-    PRE_TIME: 4,            // role reveal (no attacking yet)
-    TIME_LIMIT: 300,        // bystanders win if the murderer runs out of time
+    HIDE_TIME: 30,          // props hide, seekers are blindfolded and frozen
+    TIME_LIMIT: 240,        // props win if at least one survives this long
     POST_TIME: 8,           // results screen before next round
+  },
+
+  // ---------------- Teams ----------------
+  TEAMS: {
+    SEEKER_SHARE: 0.34,     // about a third of the players are seekers (always at least 1)
+    SEEKER_HP: 100,
+    WRONG_PROP_DAMAGE: 10,  // seekers lose this much health for shooting / stabbing real furniture
+    DISGUISE_RANGE: 6,      // props can turn into furniture this close (meters)
+    DISGUISE_COOLDOWN: 0.8,
+  },
+
+  // ---------------- Inventory (seekers) ----------------
+  INVENTORY: {
+    HOTBAR: 5,              // hotbar slots (keys 1-5)
+    BACKPACK: 15,           // extra inventory slots
+    START: ['knife', 'revolver'], // what seekers spawn with (in the hotbar)
   },
 
   // ---------------- Player movement / physics ----------------
@@ -58,14 +74,6 @@ export const CONFIG = {
     KNIFE_PICKUP_RADIUS: 1.2,
     GUN_RANGE: 90,
     GUN_COOLDOWN: 2.0,          // revolver fire rate
-    GUN_PICKUP_RADIUS: 1.1,
-    SHERIFF_DIES_ON_INNOCENT_KILL: true, // shooting a bystander kills the shooter too (and the gun drops)
-  },
-
-  // ---------------- Gun parts (build a revolver) ----------------
-  GUNPARTS: {
-    COUNT: 5,               // parts needed per player
-    PICKUP_RADIUS: 1.4,
   },
 
   // ---------------- Bots ----------------
@@ -76,31 +84,29 @@ export const CONFIG = {
     FOV_DEG: 120,           // field of view
     CLOSE_SENSE: 3.5,       // always notice people this close (hearing)
     THINK_INTERVAL: 0.2,    // seconds between perception updates
-    REACTION_MIN: 0.3,      // seconds before they react to a threat
+    REACTION_MIN: 0.3,      // seconds before they react
     REACTION_MAX: 0.75,
     TURN_SPEED: 5.0,        // radians/sec while aiming
     AIM_SPREAD_DEG: 2.4,    // random error when shooting
-    SHOOT_SUSPICION: 90,    // suspicion (0-100) needed to fire at someone
-    DRAW_SUSPICION: 60,     // suspicion needed to pull out the gun
-    SUSPICION_DECAY: 1.5,   // per second (witnessed murders never decay)
-    CORPSE_SUSPICION: 35,   // suspicion added to people standing near a fresh corpse
-    MURDER_FIRST_DELAY: [10, 22], // seconds before the murderer bot starts hunting
-    MURDER_NEXT_DELAY: [5, 16],   // pause after a kill
-    THROW_CHANCE: 0.35,     // chance murderer bot throws knife at a fleeing target
-    COLLECT_PARTS_CHANCE: 0.45,
-    COLLECT_PARTS_RANGE: 22,      // bots only go for parts this close
-    BRAVERY: 0.55,          // chance a bot goes to pick up a dropped gun
+    // seeker bots
+    MOVE_SUSPICION: 70,     // suspicion per second while watching a piece of "furniture" move (100 = attack it)
+    STARE_SUSPICION: 40,    // suspicion per second while a seeker looks at a disguised prop up close (more for skilled seekers)
+    CHECK_RANGE: 8,         // seekers sometimes test furniture this close
+    CHECK_CHANCE: 0.008,    // per think, chance to test a nearby prop (real disguised players are tested more by skilled bots)
+    // prop bots
+    HIDE_RANGE: 45,         // how far a prop bot walks to find furniture to copy
+    PANIC_RANGE: 3,         // a prop bot may run if a seeker comes this close
     JUMPINESS: 0.35,        // random hops per second while running away
     BLOCKS_BEFORE_DETOUR: 3, // a bot only walks around someone after being blocked by them this many times
     BLOCK_WAIT: 0.7,        // seconds standing still behind someone = one "block"
     // Each bot gets a random skill (0..1) every round. Higher skill =
-    //  sheriff: faster reactions, faster/steadier aim (less spread), back-pedals while shooting
-    //  murderer: throws knives, sprints until fully out of stamina, smarter target picking
+    //  seeker: faster reactions, steadier aim, spots moving props, tests the right furniture more often
+    //  prop: hides further away, copies furniture that is near it, stays still
   },
 
   // ---------------- Networking ----------------
   NET: {
-    PEER_PREFIX: 'killermystery-v1-', // change this to get your own isolated server network
+    PEER_PREFIX: 'findthethings-v1-', // change this to get your own isolated server network
     PUBLIC_SLOTS: 8,        // number of public server slots in the browser
     SNAPSHOT_RATE: 15,      // host -> clients updates per second
     INPUT_RATE: 20,         // client -> host updates per second
@@ -145,11 +151,6 @@ export const CONFIG = {
     SHIRT_COLORS: [0xc23b3b, 0x2f6fd8, 0x2fa84a, 0xe0c020, 0x9b40d0, 0xf0f0f0, 0x303030, 0xe07a20],
   },
 
-  // Bystander identities (re-shuffled every round, like the original gamemode style)
-  IDENTITIES: [
-    ['Alpha', 0xd03838], ['Bravo', 0x2f6fd8], ['Charlie', 0x2fa84a], ['Delta', 0xe0c020],
-    ['Echo', 0x9b40d0], ['Foxtrot', 0xe07a20], ['Golf', 0x20b8b8], ['Hotel', 0xe050a0],
-    ['India', 0x6b4a2a], ['Juliett', 0xf0f0f0], ['Kilo', 0x404448], ['Lima', 0x90d040],
-    ['Mike', 0x6070a0], ['November', 0xa02040],
-  ],
+  // team colors (names on the scoreboard / HUD)
+  TEAM_COLORS: { seeker: 0xe04040, prop: 0x3f8cff, none: 0x999999 },
 };

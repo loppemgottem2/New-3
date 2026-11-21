@@ -14,7 +14,7 @@
 //            f  takeout food boxes  p  pile of beer bottles   m  stack of mattresses
 //            V  two barrels stacked Y  pile of 3 barrels lying on their sides
 //            Z  two crates stacked  J  crate pyramid (2 crates + 1 on top)
-//   MARKERS  S  spawn point        G  gun part spot
+//   MARKERS  S  spawn point        (G = unused marker, plain floor)
 //  Markers / props / solid furniture take the floor type of their neighbours.
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
@@ -120,7 +120,6 @@ export class GameMap {
     this.floor = new Uint8Array(n);     // index into FLOOR_LIST
     this.outdoor = new Uint8Array(n);
     this.spawns = [];
-    this.partSpots = [];
     this.propSpawns = [];
     this.props = [];                    // live physics props (filled by the game)
     const chAt = (x, z) => (x < 0 || z < 0 || x >= this.w || z >= this.h ? '#' : layout[z][x] || '#');
@@ -149,7 +148,6 @@ export class GameMap {
       const cx = (x + 0.5) * CELL, cz = (z + 0.5) * CELL;
       if (SOLID[ch]) { [this.kinds[i], this.heights[i]] = SOLID[ch]; continue; }
       if (ch === 'S') this.spawns.push({ x: cx, z: cz });
-      if (ch === 'G') this.partSpots.push({ x: cx, z: cz });
       if (PROP_CH[ch]) {
         const type = PROP_CH[ch];
         // chairs face a neighbouring table / desk

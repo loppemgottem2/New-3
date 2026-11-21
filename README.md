@@ -1,18 +1,21 @@
-# KILLER MYSTERY
+# FIND THE THINGS
 
-A multiplayer murder-mystery game for phones and browsers, in the style of the classic sandbox-game "Murder" gamemode.
-One player is secretly the **Murderer** (has a knife), one bystander secretly has a **revolver**, and everyone else must
-survive, collect **gun parts**, and figure out who the killer is.
+A multiplayer **prop hunt** game for phones and browsers.
+Every round the players split into two teams:
 
-- 📱 Works on phones (touch joystick + drag to look) and computers (WASD + mouse)
+- 🪑 **Props** spawn as stiff, T-posing people. During the hiding time they tap / click any piece of furniture to
+  **turn into it**, then try to keep still. Moving furniture is a giveaway!
+- 🔫 **Seekers** wait blindfolded while the props hide, then spawn with a **knife** and a **revolver** in their
+  **hotbar** (plus an **inventory**). Hitting real furniture costs them health.
+- Seekers win when every prop is found. Props win if one survives until the time runs out.
+
+Also:
+- 📱 Works on phones (touch joystick + drag to look, tap furniture to become it) and computers (WASD + mouse)
 - 🌐 Real online multiplayer: **public servers** (Quick Play / Server Browser) and **private servers** with a 5-letter code
-- 🤖 Bots fill empty slots: A* pathfinding, line-of-sight vision, suspicion, fleeing, jumping, aiming with reaction time
-- 🏢 Big 120 m map: office, cafeteria, storage, lobby, gym, library, workshop, courtyard and parking lot
-- 💡 Pre-computed ("baked") lighting from every ceiling light + sun shadows + ambient occlusion + grime, and optional real-time lights
-- 🪑 Real rigid-body furniture (chairs, tables, boxes, crates, barrels, mattresses, lamps, bottles) with per-part hitboxes — push it, shoot it, knock it over, stand on it
-- 🧍 Character editor: name, hairstyle, face, skin, shirt and pants types/colors. Ragdolls on death
-- 🔪 Murderer (stab + throw knife), 🔫 Sheriff (shooting an innocent kills the Sheriff too), 🧩 5 gun parts → build a revolver
-- 🎥 First person or third person (zoom in/out), lots of settings, available mid-match from the ⚙ button
+- 🤖 Seeker bots and prop bots fill empty slots (A* pathfinding, vision, suspicion of moving furniture, skill levels)
+- 🏢 Big 120 m map with baked lighting and real rigid-body furniture (push it, shoot it, knock it over)
+- 🧍 Character editor: name, hairstyle, face, skin, shirt and pants. Ragdolls on death
+- 🎥 First person or third person (props always see themselves from behind), lots of settings, ⚙ mid-match
 - No build step, no server to pay for — just static files
 
 ---
@@ -22,7 +25,7 @@ survive, collect **gun parts**, and figure out who the killer is.
 1. Make the repository **public** (Settings → General → Danger Zone → Change visibility), or use a paid plan.
 2. Go to **Settings → Pages**.
 3. Under **Build and deployment**: Source = **Deploy from a branch**, Branch = the branch with this code
-   (e.g. `main` after merging, or `claude/gmod-murder-mobile-qz6xxb`), folder = **/ (root)** → **Save**.
+   (e.g. `main`), folder = **/ (root)** → **Save**.
 4. After ~1 minute your game is live at `https://<your-username>.github.io/<repo-name>/`.
    Send that link to friends. On a phone, use the browser's **"Add to Home Screen"** to get an app icon that opens fullscreen.
 
@@ -63,9 +66,12 @@ then open http://localhost:8000
 | Look | Drag on right side (also works while holding the attack button) | Mouse (click to lock) |
 | Sprint | RUN toggle or push stick to the edge | Shift |
 | Jump | JUMP | Space |
-| Draw / hide weapon | DRAW / HIDE | Q |
-| Stab / shoot | big red button | Left click |
-| Throw knife (murderer) | THROW | Right click / G |
+| Props: turn into furniture | Tap the furniture (or aim + BECOME) | Left click on it |
+| Props: turn back into a person | HUMAN | Q |
+| Seekers: hold an item | Tap a hotbar slot | 1–5 (Q = holster) |
+| Seekers: inventory | 🎒 | I |
+| Seekers: stab / shoot | big red button | Left click |
+| Seekers: throw knife | THROW | Right click / G |
 | Zoom camera / third person | Pinch with two fingers | Mouse wheel / V |
 | Settings | ⚙ | ⚙ / Esc / P |
 | Scoreboard | ☰ | Tab |
@@ -80,14 +86,14 @@ then open http://localhost:8000
 
 | File | What's in it |
 |---|---|
-| `js/config.js` | **Every tunable number**: speeds, jump, stamina, weapon range/cooldowns, round time, bot count, bot aim/vision/suspicion, network settings |
-| `js/map.js` | **The map as ASCII art** — edit the `LAYOUT` text to redesign the level (floors `. , ; _ o a ~`, `#` wall, `P` pillar, `Q` shelf, `W` counter, furniture `B C K T X M L b`, `S` spawn, `G` gun part spot). Also the baked lighting |
-| `js/props.js` | Rigid-body furniture: each prop's box hitboxes (`PROP_TYPES`), looks, physics |
-| `js/game.js` | Rounds, roles, combat, gun parts, item pickups, events, camera, network messages |
-| `js/bots.js` | Bot AI: perception, suspicion, flee, sheriff aiming, murderer hunting |
+| `js/config.js` | **Every tunable number**: round/hiding time, team sizes, seeker health, disguise range, inventory size + starting items, speeds, weapons, bots, network settings |
+| `js/map.js` | **The map as ASCII art** — edit the `LAYOUT` text to redesign the level (floors `. , ; _ o a ~`, `#` wall, `P` pillar, `Q` shelf, `W` counter, furniture `B C K T X M L b`, `S` spawn). Also the baked lighting |
+| `js/props.js` | Rigid-body furniture: each prop's box hitboxes (`PROP_TYPES`), looks, physics. Also the disguise meshes + hit tests |
+| `js/game.js` | Rounds, teams, disguises, hotbar/inventory, combat, events, camera, network messages |
+| `js/bots.js` | Bot AI: prop bots (find furniture, copy it, keep still or panic) and seeker bots (search, suspicion, test furniture, aim) |
 | `js/nav.js` | A* pathfinding grid + path smoothing |
 | `js/physics.js` | Movement, gravity, jumping, wall collision, raycasts |
-| `js/character.js` | Character body, hairstyles, clothing, animations, first-person arms |
+| `js/character.js` | Character body, hairstyles, clothing, animations (+ the props' T-pose), first-person arms |
 | `js/ragdoll.js` | Ragdoll physics (joints + limb constraints) |
 | `js/textures.js` | Procedurally drawn textures (floor grid, walls, grass, crates…) |
 | `js/input.js` | Touch joystick / look / buttons, keyboard & mouse |

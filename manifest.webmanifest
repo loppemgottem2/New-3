@@ -1,6 +1,6 @@
 {
-  "name": "Killer Mystery",
-  "short_name": "Killer Mystery",
+  "name": "Find the Things",
+  "short_name": "Find the Things",
   "start_url": "./index.html",
   "display": "fullscreen",
   "orientation": "landscape",
