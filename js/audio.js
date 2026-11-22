@@ -142,10 +142,11 @@ export const Audio = {
         this._grains(d, 3, 0.05, 2500, 4500, g * 0.07, 0.01);
         this._noise(d, 0.045, 900 * v, 1.2, 'bandpass', g * 0.3, toe);
         break;
-      default: // tile (and the trashed room): a crisp heel click and a lighter toe click
-        this._noise(d, 0.03, 1700 * v, 1.8, 'bandpass', g * 0.5);
-        this._noise(d, 0.05, 220 * v, 0.8, 'lowpass', g * 0.4);
-        this._noise(d, 0.025, 2000 * v, 1.8, 'bandpass', g * 0.28, toe);
+      default: // tile (and the trashed room): a gentle, quiet step on a smooth plastic-y floor -
+        // a soft muted tap with a little body (no bright click), then an even softer toe
+        this._noise(d, 0.045, 900 * v, 1.1, 'bandpass', g * 0.26);
+        this._noise(d, 0.06, 380 * v, 0.7, 'lowpass', g * 0.22);
+        this._noise(d, 0.04, 1000 * v, 1.1, 'bandpass', g * 0.13, toe);
         break;
     }
   },
