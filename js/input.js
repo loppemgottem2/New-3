@@ -1,8 +1,8 @@
 // Input: keyboard + mouse (pointer lock) on desktop, virtual joystick +
 // drag-to-look + buttons on touch screens. Each finger is tracked by its
 // touch identifier so moving, looking and pressing buttons all work at once.
-import { CONFIG } from './config.js?v=700';
-import { clamp } from './util.js?v=700';
+import { CONFIG } from './config.js?v=710';
+import { clamp } from './util.js?v=710';
 
 export const isTouchDevice = () =>
   ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
