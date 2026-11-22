@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=980';
-import { CONFIG } from './config.js?v=980';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=980';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=980';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=980';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=980';
-import { Ragdoll } from './ragdoll.js?v=980';
-import { Audio } from './audio.js?v=980';
-import { initBrain, updateBots } from './bots.js?v=980';
+import * as THREE from '../vendor/three.module.min.js?v=990';
+import { CONFIG } from './config.js?v=990';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=990';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=990';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=990';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=990';
+import { Ragdoll } from './ragdoll.js?v=990';
+import { Audio } from './audio.js?v=990';
+import { initBrain, updateBots } from './bots.js?v=990';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -34,6 +34,8 @@ const F_ALIVE = 1, F_KNIFE = 2, F_GUN = 4, F_GROUND = 8, F_RUN = 16, F_SEEKER = 
 
 // melee weapons (the crowbar works exactly like the knife)
 const isMelee = (w) => w === 1 || w === 3;
+
+const LATE_JOIN_WINDOW = 10;   // seconds after a real-players-only round starts that new players can still join it
 
 export function newChar(id, nick, isBot, look) {
   return {
@@ -306,7 +308,14 @@ export class Game {
     const pickFrom = (list) => list.filter((b) => b.alive)[0] ? list.filter((b) => b.alive)[Math.floor(Math.random() * list.filter((b) => b.alive).length)] : list[0];
     let b = pickFrom(bots.filter((x) => x.team === want)) || pickFrom(bots);
     if (!b) {
-      // no bots (a real-players-only round): just join the team that needs someone, at a spawn point
+      // no bots (a real-players-only round): only in the first 10 seconds of the round can you still jump in;
+      // after that you watch and play from the next round
+      const elapsed = this.phase === 'pre' ? CONFIG.ROUND.HIDE_TIME - this.timeLeft : Infinity;
+      if (elapsed > LATE_JOIN_WINDOW) {
+        this.emit({ e: 'msg', text: 'Round in progress: you will play from the next round', color: '#9ad' }, [c.id]);
+        return;
+      }
+      // join the team that needs someone, at a spawn point
       const sp = want === 'seeker' ? this.seekerSpawns(1)[0] : this.map.spawns[Math.floor(Math.random() * this.map.spawns.length)];
       b = { team: want, x: sp.x, z: sp.z, y: 0, yaw: Math.random() * Math.PI * 2, alive: false, id: null };
     }
@@ -438,7 +447,6 @@ export class Game {
       if (this.humans().length >= 2 && this.bots().length && this.phase !== 'waiting') {
         // a second real player: the bot game ends and a new round starts with only the real players
         // (startRound removes the bots and splits the players onto opposite teams)
-        this.emit({ e: 'msg', text: 'New round with real players only!', color: '#9ad', big: true });
         this.startRound();
         return;
       }
