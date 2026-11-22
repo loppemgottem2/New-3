@@ -227,4 +227,16 @@ export const Audio = {
     if (!ctx) return;
     this._tone(master, 900, 0.04, 0.12, 'sine');
   },
+  // menu / button press: a short, clean, snappy select tick (back = a touch lower, for close / back / no)
+  _lastUi: 0,
+  uiSelect(back = false) {
+    if (!ctx) return;
+    const t = performance.now();
+    if (t - this._lastUi < 40) return;      // one press = one tick
+    this._lastUi = t;
+    const f = back ? 820 : 1180;
+    this._tone(master, f, 0.055, 0.17, 'sine', 0, f * 0.72);            // the body of the tick
+    this._tone(master, f * 2.02, 0.03, 0.045, 'triangle');                // a little shine on top
+    this._noise(master, 0.014, 5200, 0.8, 'highpass', 0.06);              // the crisp click at the very start
+  },
 };
