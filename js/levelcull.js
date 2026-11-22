@@ -7,8 +7,8 @@
 //  don't), plus a two-cell safety margin. A chunk is drawn only if a cell it touches was marked.
 //  Above the roof or outside the map everything is drawn.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=980';
-import { CELL, WALL_H, CEIL_H } from './map.js?v=980';
+import * as THREE from '../vendor/three.module.min.js?v=990';
+import { CELL, WALL_H, CEIL_H } from './map.js?v=990';
 
 const CHUNK = 10;                         // cells per chunk side (20 m)
 const CULLED = /^(wall-|pillar|shelf|trim|graffiti|fixture|light-panel)/;
