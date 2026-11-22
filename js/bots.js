@@ -340,6 +340,20 @@ const BELONGS = {
   mattress: [['mattress', 'bluecouch', 'greencouch', 'babydoll'], 6], babydoll: [['mattress', 'bluecouch', 'greencouch'], 4],
   whiteboard: [['desk', 'table'], 8], table: [['chair', 'swivelchair', 'bluecouch', 'greencouch'], 3], desk: [['chair', 'swivelchair', 'computer'], 3],
 };
+// how many of each kind of furniture the map normally has in each area (the full layout, before any are taken away)
+function layoutCount(game) {
+  if (game._layoutCount) return game._layoutCount;
+  const m = new Map();
+  for (const q of game.props.list) { const k = areaKey(q.home.pos.x, q.home.pos.z) + '|' + q.type; m.set(k, (m.get(k) || 0) + 1); }
+  return (game._layoutCount = m);
+}
+function tooMany(game, type, x, z) {
+  const ak = areaKey(x, z), usual = layoutCount(game).get(ak + '|' + type) || 0;
+  let now = 0;
+  for (const q of game.props.list) if (!q.removed && q.type === type && areaKey(q.pos.x, q.pos.z) === ak) now++;
+  for (const o of game.chars.values()) if (o.alive && o.disguise === type && areaKey(o.x, o.z) === ak) now++;
+  return now > usual;
+}
 const HALLWAY_OK = new Set(['plant', 'trashcan', 'lamp', 'box', 'barrel', 'bottle', 'takeout']);
 function oddness(game, type, x, y, z, self = null) {
   let same = 0, around = 0, near5 = 0, fits = !BELONGS[type], under = null;
@@ -360,6 +374,9 @@ function oddness(game, type, x, y, z, self = null) {
     return same > 0 || around >= 2 ? 0.2 : 0.6;
   }
   let w = 1;
+  // "This room usually has 4 chairs... now there are 5?" Seekers know the map: more of a kind of furniture in
+  // an area than there ever is means one of them is fake (they don't know which one)
+  if (tooMany(game, type, x, z)) return Math.max(1.2, w) * 2.5;
   w *= same > 0 ? 0.3 : 1.5;                    // "there's another one right there": normal
   w *= around >= 2 ? 0.7 : around === 0 ? 1.5 : 1;
   w *= fits ? 0.5 : 2.2;                        // "does it go with what's around it?"
