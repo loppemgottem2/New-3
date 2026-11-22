@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=720';
-import { CONFIG } from './config.js?v=720';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=720';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=720';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=720';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=720';
-import { Ragdoll } from './ragdoll.js?v=720';
-import { Audio } from './audio.js?v=720';
-import { initBrain, updateBots } from './bots.js?v=720';
+import * as THREE from '../vendor/three.module.min.js?v=760';
+import { CONFIG } from './config.js?v=760';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=760';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=760';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=760';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=760';
+import { Ragdoll } from './ragdoll.js?v=760';
+import { Audio } from './audio.js?v=760';
+import { initBrain, updateBots } from './bots.js?v=760';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -739,8 +739,9 @@ export class Game {
     else if (clip && clip.local && parent) { local = clip.local; mat.clippingPlanes = local.map((pl) => pl.clone().applyMatrix4(parent.matrixWorld)); }
     else if (!parent) mat.clippingPlanes = this.mapClip(p, n);
     if (blood) m.visible = this.bloodShown;
-    this.decals.push({ m, local, parent: local ? parent : null, blood });
-    while (this.decals.length > MAX_DECALS) this.removeDecal(this.decals.shift());
+    this.decals.push({ m, local, parent: local ? parent : null, blood, wx: p.x, wy: p.y, wz: p.z, r: Math.max(w, h) * 0.6 });
+    const maxMarks = Math.min(MAX_DECALS, this.settings.maxMarks || MAX_DECALS);   // (Graphics setting)
+    while (this.decals.length > maxMarks) this.removeDecal(this.decals.shift());
   }
 
   // find the furniture part / face under a point on a prop (for clipping marks to that face)

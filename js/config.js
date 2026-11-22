@@ -142,10 +142,12 @@ export const CONFIG = {
     FOV: 75,
     // presets used by Settings -> Graphics quality
     PRESETS: {
-      low:    { renderScale: 0.6, dynLights: 0,  viewDist: 70,  glow: false },
-      medium: { renderScale: 0.85, dynLights: 0, viewDist: 110, glow: true },
-      high:   { renderScale: 1.0, dynLights: 6,  viewDist: 160, glow: true },
-      ultra:  { renderScale: 1.5, dynLights: 12, viewDist: 220, glow: true },
+      // renderScale = resolution (the biggest cost on phones), dynLights = real-time lights on people / furniture,
+      // shadows = real shadows (extra render passes), maxMarks = bullet holes / cuts / blood kept per round
+      low:    { renderScale: 0.5, dynLights: 0,  viewDist: 60,  glow: false, shadows: false, maxMarks: 120 },
+      medium: { renderScale: 0.75, dynLights: 0, viewDist: 100, glow: true, shadows: false, maxMarks: 250 },
+      high:   { renderScale: 1.0, dynLights: 4,  viewDist: 160, glow: true, shadows: true, maxMarks: 400 },
+      ultra:  { renderScale: 1.5, dynLights: 8, viewDist: 220, glow: true, shadows: true, maxMarks: 500 },
     },
   },
 
