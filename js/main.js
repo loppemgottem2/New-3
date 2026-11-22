@@ -2,20 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=760';
-import { CONFIG } from './config.js?v=760';
-import { store, makeCode, clamp } from './util.js?v=760';
-import { makeTextures } from './textures.js?v=760';
-import { GameMap, SUN_DIR } from './map.js?v=760';
-import { NavGrid } from './nav.js?v=760';
-import { Input, isTouchDevice } from './input.js?v=760';
-import { UI } from './ui.js?v=760';
-import { Audio } from './audio.js?v=760';
-import { Game } from './game.js?v=760';
-import { PropSystem } from './props.js?v=760';
-import { Culler } from './cull.js?v=760';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=760';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=760';
+import * as THREE from '../vendor/three.module.min.js?v=820';
+import { CONFIG } from './config.js?v=820';
+import { store, makeCode, clamp } from './util.js?v=820';
+import { makeTextures } from './textures.js?v=820';
+import { GameMap, SUN_DIR } from './map.js?v=820';
+import { NavGrid } from './nav.js?v=820';
+import { Input, isTouchDevice } from './input.js?v=820';
+import { UI } from './ui.js?v=820';
+import { Audio } from './audio.js?v=820';
+import { Game } from './game.js?v=820';
+import { PropSystem } from './props.js?v=820';
+import { Culler } from './cull.js?v=820';
+import { LevelCuller } from './levelcull.js?v=820';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=820';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=820';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -765,7 +766,7 @@ function startGame(mode, net, opts) {
 }
 
 // ---------------- skip drawing things hidden behind walls ----------------
-let culler = null;
+let culler = null, levelCuller = null;
 const cullItems = [];
 const cullFrom = new THREE.Vector3(), cullFwd = new THREE.Vector3();
 function cullHidden() {
@@ -800,6 +801,7 @@ function cullHidden() {
   if (game && game.me && game.me.alive && (inWall(cp.x, cp.z) || inWall(cp.x + 0.3, cp.z) || inWall(cp.x - 0.3, cp.z) || inWall(cp.x, cp.z + 0.3) || inWall(cp.x, cp.z - 0.3))) {
     const me = game.me; cullFrom.set(me.rx ?? me.x, (me.ry ?? me.y) + 1.5, me.rz ?? me.z); from = cullFrom;
   }
+  if (levelCuller) levelCuller.update(from.x, from.y, from.z);
   camera.getWorldDirection(cullFwd);
   const halfV = (camera.fov * Math.PI / 180) / 2, halfH = Math.atan(Math.tan(halfV) * camera.aspect);
   culler.apply(from, cullItems, cullFwd, Math.hypot(halfV, halfH));
@@ -896,11 +898,21 @@ async function init() {
   scene.add(skyDome);
   // soft glow around every ceiling light (one draw call)
   {
+    // walls and ceiling lights you can't see aren't drawn (see levelcull.js)
+    levelCuller = new LevelCuller(map, level);
+    // glows grouped in the same 20 m chunks, so hidden ones are skipped too
     const lit = map.lights.filter((L) => !L.off);          // no glow around switched-off lights
-    const pos = new Float32Array(lit.length * 3);
-    lit.forEach((L, i) => pos.set([L.x, L.y - 0.12, L.z], i * 3));
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    glow = new THREE.Points(g, new THREE.PointsMaterial({ map: textures.glow, size: 2.6, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe9c8 }));
+    const gmat = new THREE.PointsMaterial({ map: textures.glow, size: 2.6, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe9c8 });
+    glow = new THREE.Group();
+    const byChunk = new Map();
+    for (const L of lit) { const k = Math.floor(L.x / 20) + ',' + Math.floor(L.z / 20); if (!byChunk.has(k)) byChunk.set(k, []); byChunk.get(k).push(L); }
+    for (const list of byChunk.values()) {
+      const pos = new Float32Array(list.length * 3);
+      list.forEach((L, i) => pos.set([L.x, L.y - 0.12, L.z], i * 3));
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const pts = new THREE.Points(g, gmat); glow.add(pts);
+      levelCuller.add(pts, Math.min(...list.map((L) => L.x)) - 0.8, Math.min(...list.map((L) => L.z)) - 0.8, Math.max(...list.map((L) => L.x)) + 0.8, Math.max(...list.map((L) => L.z)) + 0.8);
+    }
     scene.add(glow);
   }
   $('loading-cancel').style.display = '';
@@ -917,4 +929,4 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 // debug handle (open the browser console and type GMM)
-window.GMM = { get game() { return game; }, get map() { return map; }, get nav() { return nav; }, scene, renderer, CONFIG, startGame, settings, applyAll };
+window.GMM = { get levelCuller() { return levelCuller; }, get game() { return game; }, get map() { return map; }, get nav() { return nav; }, scene, renderer, CONFIG, startGame, settings, applyAll };
