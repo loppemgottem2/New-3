@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=970';
-import { CONFIG } from './config.js?v=970';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=970';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=970';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=970';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=970';
-import { Ragdoll } from './ragdoll.js?v=970';
-import { Audio } from './audio.js?v=970';
-import { initBrain, updateBots } from './bots.js?v=970';
+import * as THREE from '../vendor/three.module.min.js?v=980';
+import { CONFIG } from './config.js?v=980';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=980';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=980';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=980';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=980';
+import { Ragdoll } from './ragdoll.js?v=980';
+import { Audio } from './audio.js?v=980';
+import { initBrain, updateBots } from './bots.js?v=980';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -189,7 +189,8 @@ export class Game {
   ensureBots() {
     const S = CONFIG.SERVER;
     const humans = this.humans().length;
-    const want = clamp(S.FILL_WITH_BOTS_TO - humans, 0, Math.max(0, S.MAX_PLAYERS - humans));
+    // bots only keep a lone player company: with 2+ real players the game is just the real players
+    const want = humans >= 2 ? 0 : clamp(S.FILL_WITH_BOTS_TO - humans, 0, Math.max(0, S.MAX_PLAYERS - humans));
     let bots = this.bots();
     while (bots.length > want) { const b = bots.pop(); this.removeChar(b.id); }
     while (bots.length < want) {
@@ -303,8 +304,12 @@ export class Game {
       : nS < nP ? 'seeker' : nP < nS ? 'prop' : (Math.random() < 0.5 ? 'seeker' : 'prop');
     const bots = [...this.chars.values()].filter((b) => b.isBot && (b.team === 'seeker' || b.team === 'prop'));
     const pickFrom = (list) => list.filter((b) => b.alive)[0] ? list.filter((b) => b.alive)[Math.floor(Math.random() * list.filter((b) => b.alive).length)] : list[0];
-    const b = pickFrom(bots.filter((x) => x.team === want)) || pickFrom(bots);
-    if (!b) return;
+    let b = pickFrom(bots.filter((x) => x.team === want)) || pickFrom(bots);
+    if (!b) {
+      // no bots (a real-players-only round): just join the team that needs someone, at a spawn point
+      const sp = want === 'seeker' ? this.seekerSpawns(1)[0] : this.map.spawns[Math.floor(Math.random() * this.map.spawns.length)];
+      b = { team: want, x: sp.x, z: sp.z, y: 0, yaw: Math.random() * Math.PI * 2, alive: false, id: null };
+    }
     const seeker = b.team === 'seeker';
     c.team = b.team; c.color = CONFIG.TEAM_COLORS[c.team];
     c.hasKnife = seeker; c.hasGun = seeker; c.hasCrowbar = seeker;
@@ -317,7 +322,7 @@ export class Game {
     c.x = b.x; c.y = b.alive ? b.y : 0; c.z = b.z; c.vx = c.vy = c.vz = 0; c.yaw = b.yaw; c.pitch = 0;
     c.rx = c.x; c.ry = c.y; c.rz = c.z; c.ryaw = c.yaw;
     c.spawnAt = performance.now();
-    this.removeChar(b.id);
+    if (b.id !== null) this.removeChar(b.id);
     this.emit({ e: 'spawn', x: r2(c.x), y: r2(c.y), z: r2(c.z), yaw: r2(c.yaw) }, [c.id]);
     this.emit({ e: 'team', team: c.team }, [c.id]);
   }
@@ -429,10 +434,17 @@ export class Game {
         t: 'welcome', id: c.id, roster: this.roster(), phase: this.phase, tl: r2(this.timeLeft),
         server: this.serverLabel, code: this.code, props: this.props.fullState(), blood: this.bloodLog,
       });
-      // joining in the middle of a round: take over a bot on the other team from the host
+      this.emit({ e: 'msg', text: `${nick} joined the server`, color: '#9ad' });
+      if (this.humans().length >= 2 && this.bots().length && this.phase !== 'waiting') {
+        // a second real player: the bot game ends and a new round starts with only the real players
+        // (startRound removes the bots and splits the players onto opposite teams)
+        this.emit({ e: 'msg', text: 'New round with real players only!', color: '#9ad', big: true });
+        this.startRound();
+        return;
+      }
+      // joining in the middle of a round: take over a bot / join the team that needs a real player
       if (this.phase === 'pre' || this.phase === 'play') this.joinRound(c);
       this.emit({ e: 'roster', list: this.roster() });
-      this.emit({ e: 'msg', text: `${nick} joined the server`, color: '#9ad' });
       if (this.phase === 'waiting') this.timeLeft = Math.min(this.timeLeft, 2);
       return;
     }

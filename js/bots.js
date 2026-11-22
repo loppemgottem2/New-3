@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=970';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=970';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=970';
-import { propHeight } from './props.js?v=970';
+import { CONFIG } from './config.js?v=980';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=980';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=980';
+import { propHeight } from './props.js?v=980';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -345,15 +345,19 @@ function pickSuspiciousArea(game, c) {
 
 function wanderThink(game, c, b) {
   b.state = 'wander';
-  b.run = !!b.path && !!b.wanderRun;                       // some walks through the rooms are at a run
+  // heading somewhere new: they run (mostly). Searching an area / inspecting furniture up close: they walk,
+  // and they slow to a walk for the last few metres to look properly
+  const goal = b.path && b.path[b.path.length - 1];
+  const left = goal ? Math.hypot(goal.x - c.x, goal.z - c.z) : 0;
+  b.run = !!b.path && !!b.wanderRun && left > 4;
   if (!b.path) {
     b.waitT -= B.THINK_INTERVAL;
     if (b.waitT <= 0) {
-      b.wanderRun = Math.random() < 0.25;
       // a suspicious room: keep searching around it for a while (longer stops, looking around)
       if (b.area && game.timeLeft > b.area.until) {
         const p = game.nav.randomPointNear(b.area.x, b.area.z, 1.5, 8);
         setPath(game, c, b, p.x, p.z);
+        b.wanderRun = Math.random() < 0.15;                       // inspecting the area: mostly walking
         b.waitT = rand(2.5, 5.5);
         return;
       }
@@ -364,6 +368,7 @@ function wanderThink(game, c, b) {
           b.area = { x: a.x, z: a.z, until: game.timeLeft - rand(10, 20) };
           const p = game.nav.randomPointNear(a.x, a.z, 1, 6);
           setPath(game, c, b, p.x, p.z);
+          b.wanderRun = Math.random() < 0.85;                     // heading over there: run
           b.waitT = rand(3, 6);
           return;
         }
@@ -376,6 +381,8 @@ function wanderThink(game, c, b) {
       }
       if (!p) p = game.nav.randomPointNear(c.x, c.z, 8, 40);
       setPath(game, c, b, p.x, p.z);
+      // going to a new room / spot: run (usually); a short hop nearby: usually walk
+      b.wanderRun = Math.random() < (Math.hypot(p.x - c.x, p.z - c.z) > 10 ? 0.85 : 0.3);
       b.waitT = rand(1.5, 4.5);
     }
   }
