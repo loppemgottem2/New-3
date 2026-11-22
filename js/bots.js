@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=910';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=910';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=910';
-import { propHeight } from './props.js?v=910';
+import { CONFIG } from './config.js?v=920';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=920';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=920';
+import { propHeight } from './props.js?v=920';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -245,7 +245,9 @@ function thinkSeeker(game, c, b) {
   }
 
   // now and then, test a nearby piece of furniture
-  const careful = c.hp <= TM.WRONG_PROP_DAMAGE * (1 + 4 * b.skill);   // low health: stop guessing
+  // low health: skilled seekers stop guessing. Careless ones (low skill) keep testing furniture
+  // and can end up killing themselves with the penalty.
+  const careful = b.skill > 0.45 && c.hp <= TM.WRONG_PROP_DAMAGE * (1 + 4 * b.skill);
   if (!careful && Math.random() < B.CHECK_CHANCE) {
     const cands = [];
     for (const p of game.props.list) {
@@ -265,6 +267,8 @@ function thinkSeeker(game, c, b) {
       b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0;
       if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); }
       else { b.targetId = null; b.targetProp = pickd.prop; }
+      // careless seekers hit / shoot the same thing a few times to be sure
+      b.testHits = Math.random() < 0.55 - 0.4 * b.skill ? (Math.random() < 0.5 ? 2 : 3) : 1;
       return;
     }
   }
@@ -390,12 +394,19 @@ function act(game, c, b, dt) {
       b.wKey = key; b.closeRolled = false;
       // already holding a melee weapon (knife or crowbar): maybe keep using it
       const held = weaponOf(c);
-      b.knife = (held === 1 || held === 3) && Math.random() < 0.25 + 0.45 * b.skill;
-      b.melee = held === 3 ? 'crowbar' : 'knife';
+      const randomMelee = () => (Math.random() < 0.5 ? 'crowbar' : 'knife');   // knife or crowbar, 50/50
+      if (tp) {
+        // testing a piece of furniture: often walk up and whack it with the crowbar or knife instead of shooting
+        b.knife = Math.random() < 0.45; b.melee = randomMelee();
+      } else {
+        b.knife = (held === 1 || held === 3) && Math.random() < 0.25 + 0.45 * b.skill;
+        b.melee = held === 3 ? 'crowbar' : held === 1 ? 'knife' : randomMelee();
+      }
     }
     if (!b.knife && !b.closeRolled && d < W.KNIFE_RANGE * 1.2) {
       b.closeRolled = true;
-      if (pro && Math.random() < 0.3 + (b.skill - 0.7)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }   // knife or crowbar, at random
+      // a prop right next to them: pros often go melee, everyone else now and then
+      if (Math.random() < (pro ? 0.3 + (b.skill - 0.7) : 0.25)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
     }
     if (b.knife && !pro && d > 6) b.knife = false;
     // (fall back to the other melee weapon if that one isn't in hand any more, e.g. it was thrown)
@@ -423,7 +434,7 @@ function act(game, c, b, dt) {
         if (Math.random() < 0.08 - 0.05 * b.skill) spread *= rand(1.6, 2.4);              // an occasional bad shot
         game.gunAttack(c, spread); b.shots++;
       }
-      if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; }   // tested it, move on
+      if (tp && b.shots >= (b.testHits || 1)) { b.targetProp = null; b.state = 'wander'; }   // tested it, move on
     }
     // positioning: get closer if far / no sight
     if (!sees && Math.hypot(realX - c.x, realZ - c.z) < 1.3) {
