@@ -10,8 +10,8 @@
 //   * Add ?local=1 to the URL to use a fake in-browser network
 //     (BroadcastChannel) — handy for testing with two tabs offline.
 // =====================================================================
-import { CONFIG } from './config.js?v=680';
-import { Emitter } from './util.js?v=680';
+import { CONFIG } from './config.js?v=700';
+import { Emitter } from './util.js?v=700';
 
 const params = new URLSearchParams(location.search);
 export const LOCAL_MODE = params.has('local');
@@ -52,6 +52,35 @@ function createPeer(id) {
 // ---------------------------------------------------------------------
 //  HOST
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+//  Big messages are split into small pieces. PeerJS refuses to send any JSON message of ~16 KB or more
+//  (it errors and the connection drops: the joining player saw "host disconnected"). The welcome for a
+//  player joining mid-round easily passes that (all the furniture + the round's blood), so anything over
+//  4000 characters goes out in 4000-character pieces (< 12 KB even with 3-byte characters) and is put
+//  back together on the other side (the channel is reliable and ordered).
+// ---------------------------------------------------------------------
+const PIECE = 4000;
+let pieceId = 1;
+function sendPacked(conn, msg, str = null) {
+  if (!conn || !conn.open) return;
+  const s = str || JSON.stringify(msg);
+  try {
+    if (s.length <= PIECE) { conn.send(msg); return; }
+    const k = pieceId++, n = Math.ceil(s.length / PIECE);
+    for (let i = 0; i < n; i++) conn.send({ t: '_pc', k, i, n, d: s.slice(i * PIECE, (i + 1) * PIECE) });
+  } catch { /* channel closing */ }
+}
+// returns the whole message once every piece is in (null while waiting), or the message itself
+function unpack(store, d) {
+  if (!d || d.t !== '_pc') return d;
+  let e = store.get(d.k);
+  if (!e) { e = { parts: new Array(d.n), got: 0 }; store.set(d.k, e); }
+  if (e.parts[d.i] === undefined) { e.parts[d.i] = d.d; e.got++; }
+  if (e.got < d.n) return null;
+  store.delete(d.k);
+  try { return JSON.parse(e.parts.join('')); } catch { return null; }
+}
+
 export class NetHost extends Emitter {
   static async create(peerId) {
     const peer = await createPeer(peerId);
@@ -72,6 +101,7 @@ export class NetHost extends Emitter {
       const now = performance.now();
       for (const [cid, e] of this.conns) {
         if (now - e.last > CONFIG.NET.CLIENT_TIMEOUT) this.kick(cid);
+        else this.send(cid, { t: 'hb' });          // heartbeat: "I'm still here" even if the game loop is paused
       }
     }, 2000);
   }
@@ -79,11 +109,12 @@ export class NetHost extends Emitter {
   _accept(conn) {
     const setup = () => {
       const cid = this.nextCid++;
-      const entry = { conn, last: performance.now() };
+      const entry = { conn, last: performance.now(), pieces: new Map() };
       this.conns.set(cid, entry);
       conn.on('data', (d) => {
         entry.last = performance.now();
-        if (d && typeof d === 'object') this.emit('message', cid, d);
+        const m = d && typeof d === 'object' ? unpack(entry.pieces, d) : null;
+        if (m && typeof m === 'object') this.emit('message', cid, m);
       });
       const drop = () => {
         if (!this.conns.has(cid)) return;
@@ -97,14 +128,16 @@ export class NetHost extends Emitter {
     if (conn.open) setup(); else conn.on('open', setup);
   }
 
-  send(cid, msg) {
+  send(cid, msg, str = null) {
     const e = this.conns.get(cid);
     if (!e || !e.conn.open) return;
-    try { e.conn.send(msg); } catch (err) { /* channel closing */ }
+    sendPacked(e.conn, msg, str);
   }
 
   broadcast(msg, exceptCid = null) {
-    for (const [cid] of this.conns) if (cid !== exceptCid) this.send(cid, msg);
+    if (!this.conns.size) return;
+    const str = JSON.stringify(msg);
+    for (const [cid] of this.conns) if (cid !== exceptCid) this.send(cid, msg, str);
   }
 
   kick(cid) {
@@ -141,18 +174,26 @@ export class NetClient extends Emitter {
     this.conn = conn;
     this.closed = false;
     this.last = performance.now();
-    conn.on('data', (d) => { this.last = performance.now(); if (d && typeof d === 'object') this.emit('message', d); });
+    this.pieces = new Map();
+    conn.on('data', (d) => {
+      this.last = performance.now();
+      const m = d && typeof d === 'object' ? unpack(this.pieces, d) : null;
+      if (m && typeof m === 'object') this.emit('message', m);
+    });
     const lost = (why) => { if (this.closed) return; this.closed = true; this.emit('close', why); };
     conn.on('close', () => lost('closed'));
     conn.on('error', () => lost('error'));
+    // heartbeat once a second, whatever the game is doing (spectating, dead, blindfolded seekers send no
+    // movement; without this the host thought they had left after 12 s and dropped them)
     this.timer = setInterval(() => {
       if (performance.now() - this.last > CONFIG.NET.HOST_TIMEOUT) lost('timeout');
+      else this.send({ t: 'hb' });
     }, 1000);
   }
 
   send(msg) {
     if (this.closed || !this.conn.open) return;
-    try { this.conn.send(msg); } catch { /* */ }
+    sendPacked(this.conn, msg);
   }
 
   close() {

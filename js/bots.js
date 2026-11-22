@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=680';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=680';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=680';
-import { propHeight } from './props.js?v=680';
+import { CONFIG } from './config.js?v=700';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=700';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=700';
+import { propHeight } from './props.js?v=700';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
