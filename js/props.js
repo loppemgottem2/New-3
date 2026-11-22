@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=820';
-import { CONFIG } from './config.js?v=820';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=820';
-import { footWorld } from './physics.js?v=820';
+import * as THREE from '../vendor/three.module.min.js?v=840';
+import { CONFIG } from './config.js?v=840';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=840';
+import { footWorld } from './physics.js?v=840';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -283,7 +283,7 @@ function propMaterials(T, type, i = 0) {
     case 'computer': return [new THREE.MeshLambertMaterial({ map: T.plasticDark }), new THREE.MeshBasicMaterial({ map: T.screen })];
     case 'keyboard': return [new THREE.MeshLambertMaterial({ map: T.plasticDark }), new THREE.MeshLambertMaterial({ map: T.keys })];
     case 'pencup': return [new THREE.MeshLambertMaterial({ map: T.metal, color: 0x6f7c8a }), new THREE.MeshLambertMaterial({ color: 0xe0b020 }), new THREE.MeshLambertMaterial({ color: 0x2050c0 }), new THREE.MeshLambertMaterial({ color: 0xc02a2a })];
-    case 'couch': return [new THREE.MeshLambertMaterial({ map: [T.fabricBlue, T.fabricGreen, T.fabricBrown][i % 3] }), new THREE.MeshLambertMaterial({ color: 0x2a1d14 })];
+    case 'couch': return [new THREE.MeshLambertMaterial({ map: [T.fabricBlue, T.fabricGreen, T.fabricBlue][i % 3] }), new THREE.MeshLambertMaterial({ color: 0x2a1d14 })];
     case 'plant': return [new THREE.MeshLambertMaterial({ map: T.terracotta }), new THREE.MeshLambertMaterial({ color: 0x2e2015 }), new THREE.MeshLambertMaterial({ map: T.leaves })];
     case 'whiteboard': return [new THREE.MeshLambertMaterial({ map: T.whiteboard }), new THREE.MeshLambertMaterial({ map: T.metal, color: 0xc8ccd2 })];
     case 'longcounter': case 'shortcounter': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ color: 0xcfc9bd }), new THREE.MeshLambertMaterial({ color: 0x2a201a })];
