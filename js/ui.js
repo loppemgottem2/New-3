@@ -1,6 +1,6 @@
 // HUD, messages, scoreboard and menu screen switching (plain DOM).
-import { CONFIG } from './config.js?v=880';
-import { hexToCss, textColor } from './util.js?v=880';
+import { CONFIG } from './config.js?v=890';
+import { hexToCss, textColor } from './util.js?v=890';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,6 +25,7 @@ export class UI {
     $('menu-bg-shade').classList.toggle('hidden', inGame || name === 'editor');
     $('gearbtn').classList.toggle('hidden', !inGame);
     $('settings').classList.remove('overlay');
+    $('confirm-close').classList.add('hidden');
     document.body.classList.toggle('ingame', inGame);
     if (!inGame) { document.body.classList.remove('blinded', 'spectating'); $('slbtn').classList.add('hidden'); $('anchorbtn').classList.add('hidden'); this.showScoreboard(false); this.toggleInventory(null, false); $('bigmsg').classList.add('hidden'); $('toasts').innerHTML = ''; $('blind').classList.add('hidden'); $('hotbar').classList.add('hidden'); this.lastHud.hb = null; }
   }
