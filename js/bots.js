@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=950';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=950';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=950';
-import { propHeight } from './props.js?v=950';
+import { CONFIG } from './config.js?v=960';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=960';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=960';
+import { propHeight } from './props.js?v=960';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -239,9 +239,10 @@ function thinkSeeker(game, c, b) {
       // farther away they are and the further from where the bot is looking (corner of the eye / heard behind)
       seenNow.add(o.id);
       if ((b.susp.get(o.id) || 0) < 100) {
-        // up close it takes LONGER: they don't expect you right under their nose (and have to look down)
+        // quickest at a middle distance: up close they don't expect you right under their nose (and have to
+        // look down), far away you're harder to make out
         const ang = viewAngle(c, o, 1.0);
-        const need = (0.3 + 0.45 * (1 - b.skill)) * (1 + 3 / Math.max(1, d)) * (1 + ang / (60 * DEG));
+        const need = (0.3 + 0.45 * (1 - b.skill)) * (1 + 3 / Math.max(1, d) + d / 16) * (1 + ang / (60 * DEG));
         const n = (b.notice.get(o.id) || 0) + I / need;
         b.notice.set(o.id, n);
         if (n >= 1) b.susp.set(o.id, 100);
@@ -249,7 +250,7 @@ function thinkSeeker(game, c, b) {
       }
     } else {
       let s = b.susp.get(o.id) || 0;
-      if (!isStill(o)) s += B.MOVE_SUSPICION * I * (0.4 + b.skill) / ((1 + 2 / Math.max(1, d)) * (1 + viewAngle(c, o, propHeight(o.disguise) * 0.5) / (60 * DEG)));   // furniture that moves or turns! (slower to catch right under their nose / out of the corner of the eye)
+      if (!isStill(o)) s += B.MOVE_SUSPICION * I * (0.4 + b.skill) / ((1 + 2 / Math.max(1, d) + d / 20) * (1 + viewAngle(c, o, propHeight(o.disguise) * 0.5) / (60 * DEG)));   // furniture that moves or turns! (slower to catch right under their nose / out of the corner of the eye)
       else if (d < B.CHECK_RANGE && suspects(b, o)) s += B.STARE_SUSPICION * I * (0.2 + b.skill);   // "that chair wasn't there before…"
       b.susp.set(o.id, Math.min(100, s));
     }
@@ -262,7 +263,7 @@ function thinkSeeker(game, c, b) {
     // reacting takes longer if they first have to swing their aim round, and the farther away you are
     const ang = viewAngle(c, spotted, spotted.disguise ? propHeight(spotted.disguise) * 0.5 : 1.0);
     b.state = 'engage'; b.targetId = spotted.id; b.targetProp = null; b.shots = 0; b.settle = 0;
-    b.reactT = reactTime(b) * (0.6 + Math.min(1.4, ang / (45 * DEG))) * (1 + 1.5 / Math.max(1, sd));   // closer = more of a surprise
+    b.reactT = reactTime(b) * (0.6 + Math.min(1.4, ang / (45 * DEG))) * (1 + 1.5 / Math.max(1, sd) + sd / 30);   // up close = a surprise, far = harder to make out
     return;
   }
   if (b.state === 'engage') {
@@ -447,11 +448,11 @@ function act(game, c, b, dt) {
     if (!b.melee) b.knife = false;
     const useKnife = b.knife;
     hold(c, useKnife ? b.melee : 'revolver');
-    // the crosshair has to rest on you for a moment before they pull the trigger: longer the closer
-    // you are (unexpected) and the faster you move (already near the crosshair = this is all the wait there is)
+    // the crosshair has to rest on you for a moment before they pull the trigger: longer up close (unexpected)
+    // and far away (small target), quickest in between, and longer the faster you move (already near the crosshair = this is all the wait there is)
     const onTarget = err < (8 - 5 * b.skill) * DEG;
     b.settle = onTarget ? (b.settle || 0) + dt : Math.max(0, (b.settle || 0) - dt * 2);
-    const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + 2.5 / Math.max(1, d)) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
+    const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + 2.5 / Math.max(1, d) + d / 20) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
       if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
