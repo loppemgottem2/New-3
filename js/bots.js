@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=940';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=940';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=940';
-import { propHeight } from './props.js?v=940';
+import { CONFIG } from './config.js?v=950';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=950';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=950';
+import { propHeight } from './props.js?v=950';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -55,6 +55,14 @@ export function initBrain(c) {
   };
 }
 
+const VFOV_HALF = 32 * DEG;     // bots see 32 degrees below where they look
+// how far (angle) something is from where the bot is looking, sideways and up/down combined
+function viewAngle(c, o, h) {
+  const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz) || 0.01;
+  const yawE = Math.abs(angleDiff(c.yaw, yawTo(dx, dz)));
+  const pitchE = Math.abs(Math.atan2((o.y || 0) + h - (c.y + P.EYE), d) - (c.pitch || 0));
+  return Math.hypot(yawE, pitchE);
+}
 function canSee(game, c, o, maxDist = B.VIEW_DISTANCE) {
   const dx = o.x - c.x, dz = o.z - c.z;
   const d = Math.hypot(dx, dz);
@@ -64,6 +72,9 @@ function canSee(game, c, o, maxDist = B.VIEW_DISTANCE) {
     if (a > (B.FOV_DEG * DEG) / 2) return false;
   }
   const mid = o.disguise ? Math.min(0.5, propHeight(o.disguise) * 0.5) : 0.5;
+  // up / down view: looking straight ahead, something low and close (down by their feet) is out of view
+  const top = (o.y ?? 0) + (o.team ? (o.disguise ? propHeight(o.disguise) : 1.8) : 0.3);
+  if (Math.atan2(top - (c.y + P.EYE), Math.max(0.2, d)) < (c.pitch || 0) - VFOV_HALF) return false;
   if (!hasLOS(game.map, c.x, c.y + P.EYE, c.z, o.x, (o.y ?? 0) + mid, o.z)) return false;
   // people can also hide behind furniture (not for checking furniture itself)
   if (o.team) {
@@ -228,16 +239,17 @@ function thinkSeeker(game, c, b) {
       // farther away they are and the further from where the bot is looking (corner of the eye / heard behind)
       seenNow.add(o.id);
       if ((b.susp.get(o.id) || 0) < 100) {
-        const ang = Math.abs(angleDiff(c.yaw, yawTo(o.x - c.x, o.z - c.z)));
-        const need = (0.3 + 0.45 * (1 - b.skill)) * (1 + d / 18) * (1 + ang / (60 * DEG));
+        // up close it takes LONGER: they don't expect you right under their nose (and have to look down)
+        const ang = viewAngle(c, o, 1.0);
+        const need = (0.3 + 0.45 * (1 - b.skill)) * (1 + 3 / Math.max(1, d)) * (1 + ang / (60 * DEG));
         const n = (b.notice.get(o.id) || 0) + I / need;
         b.notice.set(o.id, n);
         if (n >= 1) b.susp.set(o.id, 100);
-        else if (n >= 0.35 && !b.path) { b.lookYaw = yawTo(o.x - c.x, o.z - c.z); b.lookT = 0.8; }   // "huh?" - turns to look
+        else if (n >= 0.35 && !b.path) { b.lookYaw = yawTo(o.x - c.x, o.z - c.z); b.lookT = 0.8; b.lookPitch = Math.atan2(o.y + 1.0 - (c.y + P.EYE), Math.max(0.3, d)); b.lookPitchT = 0.8; }   // "huh?" - turns to look
       }
     } else {
       let s = b.susp.get(o.id) || 0;
-      if (!isStill(o)) s += B.MOVE_SUSPICION * I * (0.4 + b.skill);               // furniture that moves or turns!
+      if (!isStill(o)) s += B.MOVE_SUSPICION * I * (0.4 + b.skill) / ((1 + 2 / Math.max(1, d)) * (1 + viewAngle(c, o, propHeight(o.disguise) * 0.5) / (60 * DEG)));   // furniture that moves or turns! (slower to catch right under their nose / out of the corner of the eye)
       else if (d < B.CHECK_RANGE && suspects(b, o)) s += B.STARE_SUSPICION * I * (0.2 + b.skill);   // "that chair wasn't there before…"
       b.susp.set(o.id, Math.min(100, s));
     }
@@ -248,9 +260,9 @@ function thinkSeeker(game, c, b) {
 
   if (spotted && b.targetId !== spotted.id) {
     // reacting takes longer if they first have to swing their aim round, and the farther away you are
-    const ang = Math.abs(angleDiff(c.yaw, yawTo(spotted.x - c.x, spotted.z - c.z)));
+    const ang = viewAngle(c, spotted, spotted.disguise ? propHeight(spotted.disguise) * 0.5 : 1.0);
     b.state = 'engage'; b.targetId = spotted.id; b.targetProp = null; b.shots = 0; b.settle = 0;
-    b.reactT = reactTime(b) * (0.6 + Math.min(1.4, ang / (45 * DEG))) + sd / 40;
+    b.reactT = reactTime(b) * (0.6 + Math.min(1.4, ang / (45 * DEG))) * (1 + 1.5 / Math.max(1, sd));   // closer = more of a surprise
     return;
   }
   if (b.state === 'engage') {
@@ -400,7 +412,7 @@ function act(game, c, b, dt) {
     const ease = 1 - Math.exp(-(2.2 + 2.8 * b.skill) * dt);
     const yErr = angleDiff(c.yaw, faceYaw), pErr = facePitch - c.pitch;
     c.yaw = turnToward(c.yaw, faceYaw, Math.min(maxTurn * dt, Math.abs(yErr) * ease + 0.02 * dt));
-    c.pitch += clamp(pErr * ease, -maxTurn * dt, maxTurn * dt);
+    c.pitch += clamp(pErr * ease * 0.6, -maxTurn * 0.5 * dt, maxTurn * 0.5 * dt);   // looking up / down is slower
     b.reactT -= dt;
     const err = Math.abs(angleDiff(c.yaw, faceYaw));
     // knife up close, revolver further away
@@ -435,11 +447,11 @@ function act(game, c, b, dt) {
     if (!b.melee) b.knife = false;
     const useKnife = b.knife;
     hold(c, useKnife ? b.melee : 'revolver');
-    // the crosshair has to rest on you for a moment before they pull the trigger: longer the farther
-    // away you are and the faster you move (already near the crosshair = this is all the wait there is)
+    // the crosshair has to rest on you for a moment before they pull the trigger: longer the closer
+    // you are (unexpected) and the faster you move (already near the crosshair = this is all the wait there is)
     const onTarget = err < (8 - 5 * b.skill) * DEG;
     b.settle = onTarget ? (b.settle || 0) + dt : Math.max(0, (b.settle || 0) - dt * 2);
-    const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + d / 18) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
+    const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + 2.5 / Math.max(1, d)) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
       if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
@@ -488,9 +500,14 @@ function act(game, c, b, dt) {
     if (!b.path && !c.disguise && c.team === 'seeker') {
       // idle seeker: look around
       b.lookT -= dt;
-      if (b.lookT <= 0) { b.lookYaw = c.yaw + rand(-1.6, 1.6) * (1 + b.skill * 0.8); b.lookT = rand(1, 3) * (1 - 0.6 * b.skill); }
+      if (b.lookT <= 0) {
+        b.lookYaw = c.yaw + rand(-1.6, 1.6) * (1 + b.skill * 0.8); b.lookT = rand(1, 3) * (1 - 0.6 * b.skill);
+        // now and then they glance down at the floor around them (that's when they can catch small props down there)
+        if (Math.random() < 0.25 + 0.2 * b.skill) { b.lookPitch = -rand(0.35, 0.8); b.lookPitchT = rand(0.8, 1.6); }
+      }
       c.yaw = turnToward(c.yaw, b.lookYaw, 2.5 * dt);
-      c.pitch *= 0.95;
+      if ((b.lookPitchT = (b.lookPitchT || 0) - dt) > 0) c.pitch += clamp(b.lookPitch - c.pitch, -1.2 * dt, 1.2 * dt);   // glancing down / up, slowly
+      else c.pitch *= 0.95;
     }
   }
 
