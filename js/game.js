@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=700';
-import { CONFIG } from './config.js?v=700';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=700';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=700';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=700';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=700';
-import { Ragdoll } from './ragdoll.js?v=700';
-import { Audio } from './audio.js?v=700';
-import { initBrain, updateBots } from './bots.js?v=700';
+import * as THREE from '../vendor/three.module.min.js?v=710';
+import { CONFIG } from './config.js?v=710';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=710';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=710';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=710';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=710';
+import { Ragdoll } from './ragdoll.js?v=710';
+import { Audio } from './audio.js?v=710';
+import { initBrain, updateBots } from './bots.js?v=710';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -289,12 +289,18 @@ export class Game {
     return out;
   }
 
-  // A player who joins mid-round plays right away: they replace a bot on the team opposite the host
-  // (a bot seeker if the host is a prop, a bot prop if the host is a seeker), standing where that bot was.
+  // A player who joins mid-round plays right away: they replace a bot on the team that needs a real
+  // player most (see below), standing where that bot was.
   // If the round has no bot on that team they take any bot; with no bots at all they watch until next round.
   joinRound(c) {
-    const host = this.me;
-    const want = host && host.team === 'seeker' ? 'prop' : host && host.team === 'prop' ? 'seeker' : (Math.random() < 0.5 ? 'seeker' : 'prop');
+    // which team: if a team has no real players yet, join that one (so a lone host gets someone to play
+    // against); once both teams have real players, join the side with fewer real players (a coin flip
+    // when they're even), so the humans stay balanced
+    const humans = [...this.chars.values()].filter((h) => !h.isBot && h !== c && (h.team === 'seeker' || h.team === 'prop'));
+    const nS = humans.filter((h) => h.team === 'seeker').length, nP = humans.filter((h) => h.team === 'prop').length;
+    const want = nS === 0 && nP === 0 ? (Math.random() < 0.5 ? 'seeker' : 'prop')
+      : nS === 0 ? 'seeker' : nP === 0 ? 'prop'
+      : nS < nP ? 'seeker' : nP < nS ? 'prop' : (Math.random() < 0.5 ? 'seeker' : 'prop');
     const bots = [...this.chars.values()].filter((b) => b.isBot && (b.team === 'seeker' || b.team === 'prop'));
     const pickFrom = (list) => list.filter((b) => b.alive)[0] ? list.filter((b) => b.alive)[Math.floor(Math.random() * list.filter((b) => b.alive).length)] : list[0];
     const b = pickFrom(bots.filter((x) => x.team === want)) || pickFrom(bots);

@@ -2,20 +2,20 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=700';
-import { CONFIG } from './config.js?v=700';
-import { store, makeCode, clamp } from './util.js?v=700';
-import { makeTextures } from './textures.js?v=700';
-import { GameMap, SUN_DIR } from './map.js?v=700';
-import { NavGrid } from './nav.js?v=700';
-import { Input, isTouchDevice } from './input.js?v=700';
-import { UI } from './ui.js?v=700';
-import { Audio } from './audio.js?v=700';
-import { Game } from './game.js?v=700';
-import { PropSystem } from './props.js?v=700';
-import { Culler } from './cull.js?v=700';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=700';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=700';
+import * as THREE from '../vendor/three.module.min.js?v=710';
+import { CONFIG } from './config.js?v=710';
+import { store, makeCode, clamp } from './util.js?v=710';
+import { makeTextures } from './textures.js?v=710';
+import { GameMap, SUN_DIR } from './map.js?v=710';
+import { NavGrid } from './nav.js?v=710';
+import { Input, isTouchDevice } from './input.js?v=710';
+import { UI } from './ui.js?v=710';
+import { Audio } from './audio.js?v=710';
+import { Game } from './game.js?v=710';
+import { PropSystem } from './props.js?v=710';
+import { Culler } from './cull.js?v=710';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=710';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=710';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
