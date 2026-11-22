@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=930';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=930';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=930';
-import { propHeight } from './props.js?v=930';
+import { CONFIG } from './config.js?v=940';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=940';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=940';
+import { propHeight } from './props.js?v=940';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -42,6 +42,7 @@ export function initBrain(c) {
     waitT: rand(0, 2),
     lookT: 0, lookYaw: c.yaw,
     susp: new Map(),             // seekers: suspicion of each disguised prop player
+    notice: new Map(),           // seekers: how far along they are in noticing each T-posing person (1 = seen)
     tested: new Set(),           // seekers: real furniture already tested this round (ids)
     targetId: null,              // seekers: character being attacked
     targetProp: null,            // seekers: real prop being "tested"
@@ -217,13 +218,23 @@ function thinkSeeker(game, c, b) {
   const I = B.THINK_INTERVAL;
   // look for props
   let spotted = null, sd = Infinity;
+  const seenNow = new Set();
   for (const o of game.chars.values()) {
     if (!o.alive || o.team !== 'prop') continue;
     if (!canSee(game, c, o)) continue;
     const d = Math.hypot(o.x - c.x, o.z - c.z);
     if (!o.disguise) {
-      // a T-posing person: obviously a prop
-      b.susp.set(o.id, 100);
+      // a T-posing person: obviously a prop, but it takes a moment to actually notice them. Longer the
+      // farther away they are and the further from where the bot is looking (corner of the eye / heard behind)
+      seenNow.add(o.id);
+      if ((b.susp.get(o.id) || 0) < 100) {
+        const ang = Math.abs(angleDiff(c.yaw, yawTo(o.x - c.x, o.z - c.z)));
+        const need = (0.3 + 0.45 * (1 - b.skill)) * (1 + d / 18) * (1 + ang / (60 * DEG));
+        const n = (b.notice.get(o.id) || 0) + I / need;
+        b.notice.set(o.id, n);
+        if (n >= 1) b.susp.set(o.id, 100);
+        else if (n >= 0.35 && !b.path) { b.lookYaw = yawTo(o.x - c.x, o.z - c.z); b.lookT = 0.8; }   // "huh?" - turns to look
+      }
     } else {
       let s = b.susp.get(o.id) || 0;
       if (!isStill(o)) s += B.MOVE_SUSPICION * I * (0.4 + b.skill);               // furniture that moves or turns!
@@ -233,9 +244,13 @@ function thinkSeeker(game, c, b) {
     if ((b.susp.get(o.id) || 0) >= 100 && d < sd) { sd = d; spotted = o; }
   }
   for (const [id, v] of b.susp) if (v < 100) b.susp.set(id, Math.max(0, v - 2 * I));
+  for (const [id, v] of b.notice) if (!seenNow.has(id)) b.notice.set(id, Math.max(0, v - 0.3 * I));   // out of sight: slowly forget
 
   if (spotted && b.targetId !== spotted.id) {
-    b.state = 'engage'; b.targetId = spotted.id; b.targetProp = null; b.reactT = reactTime(b); b.shots = 0;
+    // reacting takes longer if they first have to swing their aim round, and the farther away you are
+    const ang = Math.abs(angleDiff(c.yaw, yawTo(spotted.x - c.x, spotted.z - c.z)));
+    b.state = 'engage'; b.targetId = spotted.id; b.targetProp = null; b.shots = 0; b.settle = 0;
+    b.reactT = reactTime(b) * (0.6 + Math.min(1.4, ang / (45 * DEG))) + sd / 40;
     return;
   }
   if (b.state === 'engage') {
@@ -267,7 +282,7 @@ function thinkSeeker(game, c, b) {
     if (cands.length) {
       let r = Math.random() * cands.reduce((s, k) => s + k.w, 0);
       const pickd = cands.find((k) => (r -= k.w) <= 0) || cands[0];
-      b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0;
+      b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0; b.settle = 0;
       if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); }
       else { b.targetId = null; b.targetProp = pickd.prop; b.tested.add(pickd.prop.id); }
       return;
@@ -343,7 +358,7 @@ function act(game, c, b, dt) {
         if (atGuess) b.searchT = (b.searchT || 0) + dt;
         if (b.lostT > 3 + 4 * b.skill || b.searchT > 1.2 + b.skill) {
           // lost you: forget it (it has to spot you all over again)
-          b.susp.set(target.id, target.disguise ? 30 : 0);
+          b.susp.set(target.id, target.disguise ? 30 : 0); b.notice.set(target.id, 0.4);
           b.state = 'wander'; b.targetId = null; b.lastSeen = null; b.guess = null; b.path = null; b.waitT = 0;
           b.lookYaw = c.yaw + rand(-2, 2); b.lookT = rand(1, 2);
           moveCharacter(c, { mx: 0, mz: 0, run: false, jump: false }, dt, game.map);
@@ -379,9 +394,13 @@ function act(game, c, b, dt) {
     }
     faceYaw = yawTo(tx - c.x, tz - c.z);
     facePitch = Math.atan2(ty - (c.y + P.EYE), Math.hypot(tx - c.x, tz - c.z) || 0.01);
-    const turn = B.TURN_SPEED * (0.55 + 0.9 * b.skill);
-    c.yaw = turnToward(c.yaw, faceYaw, turn * dt);
-    c.pitch += clamp(facePitch - c.pitch, -turn * dt, turn * dt);
+    // the bot's aim (crosshair) moves over to you: quick at first, slowing down as it closes in,
+    // never snapping. Skilled bots move it faster.
+    const maxTurn = 1.3 + 1.9 * b.skill;                                   // rad/s at most
+    const ease = 1 - Math.exp(-(2.2 + 2.8 * b.skill) * dt);
+    const yErr = angleDiff(c.yaw, faceYaw), pErr = facePitch - c.pitch;
+    c.yaw = turnToward(c.yaw, faceYaw, Math.min(maxTurn * dt, Math.abs(yErr) * ease + 0.02 * dt));
+    c.pitch += clamp(pErr * ease, -maxTurn * dt, maxTurn * dt);
     b.reactT -= dt;
     const err = Math.abs(angleDiff(c.yaw, faceYaw));
     // knife up close, revolver further away
@@ -416,6 +435,11 @@ function act(game, c, b, dt) {
     if (!b.melee) b.knife = false;
     const useKnife = b.knife;
     hold(c, useKnife ? b.melee : 'revolver');
+    // the crosshair has to rest on you for a moment before they pull the trigger: longer the farther
+    // away you are and the faster you move (already near the crosshair = this is all the wait there is)
+    const onTarget = err < (8 - 5 * b.skill) * DEG;
+    b.settle = onTarget ? (b.settle || 0) + dt : Math.max(0, (b.settle || 0) - dt * 2);
+    const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + d / 18) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
       if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
@@ -423,7 +447,7 @@ function act(game, c, b, dt) {
         if (Math.random() < miss) { c.attackCd = W.KNIFE_COOLDOWN; game.emit({ e: 'swing', id: c.id }); }
         else game.hostAction(c, 'attack');
         b.shots++;
-      } else if (!useKnife && weaponOf(c) === 2 && err < (8 - 5 * b.skill) * DEG && d < 45) {
+      } else if (!useKnife && weaponOf(c) === 2 && err < (8 - 5 * b.skill) * DEG && d < 45 && b.settle >= settleNeed) {
         // shot spread grows at longer range, while the bot moves, the faster the target moves,
         // the more erratic it is, and now and then just by bad luck (less often for skilled bots)
         let spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 16) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);

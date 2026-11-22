@@ -4,7 +4,7 @@
 // =====================================================================
 
 export const CONFIG = {
-  VERSION: '1.0.7',
+  VERSION: '1.0.8',
   TITLE: 'FIND THE THINGS',
   SUBTITLE: '',
 
