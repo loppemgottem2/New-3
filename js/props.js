@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=890';
-import { CONFIG } from './config.js?v=890';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=890';
-import { footWorld } from './physics.js?v=890';
+import * as THREE from '../vendor/three.module.min.js?v=900';
+import { CONFIG } from './config.js?v=900';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=900';
+import { footWorld } from './physics.js?v=900';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
@@ -62,7 +62,8 @@ export const PROP_TYPES = {
   // pen / pencil cup with a few pencils sticking out
   pencup:   { mass: 0.12, sound: 'glass', mu: 0.5, parts: [...cyl(0.05, 0.04, 0.05), [0, 0.13, 0, 0.025, 0.04, 0.025]] },
   // two-seat couch: base, cushions, backrest (+z), two arms
-  couch:    { mass: 14, sound: 'soft', mu: 0.8, parts: [[0, 0.22, 0, 1.0, 0.2, 0.45], [0, 0.47, -0.05, 0.86, 0.06, 0.38], [0, 0.62, 0.36, 1.0, 0.3, 0.09], [-0.93, 0.5, 0, 0.07, 0.1, 0.45], [0.93, 0.5, 0, 0.07, 0.1, 0.45]] },
+  bluecouch: { mass: 14, sound: 'soft', mu: 0.8, parts: [[0, 0.22, 0, 1.0, 0.2, 0.45], [0, 0.47, -0.05, 0.86, 0.06, 0.38], [0, 0.62, 0.36, 1.0, 0.3, 0.09], [-0.93, 0.5, 0, 0.07, 0.1, 0.45], [0.93, 0.5, 0, 0.07, 0.1, 0.45]] },
+  get greencouch() { return this.bluecouch; },   // same couch, green fabric (a separate prop)
   // potted plant: pot + leafy top
   plant:    { mass: 2.5, sound: 'soft', mu: 0.6, parts: [...cyl(0.19, 0.19, 0.19), [0, 0.72, 0, 0.3, 0.34, 0.3]] },
   // mobile whiteboard on two legs
@@ -72,7 +73,7 @@ export const PROP_TYPES = {
 };
 
 // names shown to players ("Tap to become: baby doll")
-export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate', longcounter: 'long counter', shortcounter: 'short counter', swivelchair: 'swivel chair', computer: 'desktop computer', pencup: 'pen cup', plant: 'potted plant' };
+export const PROP_NAMES = { babydoll: 'baby doll', takeout: 'takeout box', trashcan: 'trash can', longcrate: 'long crate', longcounter: 'long counter', shortcounter: 'short counter', swivelchair: 'swivel chair', computer: 'desktop computer', pencup: 'pen cup', plant: 'potted plant', bluecouch: 'blue couch', greencouch: 'green couch' };
 export const propName = (type) => PROP_NAMES[type] || type;
 
 // ---------------- shared temps ----------------
@@ -165,7 +166,7 @@ function buildGeometry() {
     { geo: Cyl2(0.005, 0.005, 0.15, 6), mat: 3, m: M4(0.002, 0.118, -0.014, -0.15, 0, 0.04) },
   ]);
   // couch: fabric body, separate seat cushions and back cushions, dark little feet
-  GEO.couch = mergeParts([
+  GEO.bluecouch = GEO.greencouch = mergeParts([
     { geo: Box(1.86, 0.3, 0.86), mat: 0, m: M4(0, 0.21, 0) },
     ...[-0.43, 0.43].map((x) => ({ geo: Box(0.85, 0.13, 0.76), mat: 0, m: M4(x, 0.42, -0.05) })),
     { geo: Box(2.0, 0.6, 0.18), mat: 0, m: M4(0, 0.62, 0.36) },
@@ -283,7 +284,8 @@ function propMaterials(T, type, i = 0) {
     case 'computer': return [new THREE.MeshLambertMaterial({ map: T.plasticDark }), new THREE.MeshBasicMaterial({ map: T.screen })];
     case 'keyboard': return [new THREE.MeshLambertMaterial({ map: T.plasticDark }), new THREE.MeshLambertMaterial({ map: T.keys })];
     case 'pencup': return [new THREE.MeshLambertMaterial({ map: T.metal, color: 0x6f7c8a }), new THREE.MeshLambertMaterial({ color: 0xe0b020 }), new THREE.MeshLambertMaterial({ color: 0x2050c0 }), new THREE.MeshLambertMaterial({ color: 0xc02a2a })];
-    case 'couch': return [new THREE.MeshLambertMaterial({ map: [T.fabricBlue, T.fabricGreen, T.fabricBlue][i % 3] }), new THREE.MeshLambertMaterial({ color: 0x2a1d14 })];
+    case 'bluecouch': return [new THREE.MeshLambertMaterial({ map: T.fabricBlue }), new THREE.MeshLambertMaterial({ color: 0x2a1d14 })];
+    case 'greencouch': return [new THREE.MeshLambertMaterial({ map: T.fabricGreen }), new THREE.MeshLambertMaterial({ color: 0x2a1d14 })];
     case 'plant': return [new THREE.MeshLambertMaterial({ map: T.terracotta }), new THREE.MeshLambertMaterial({ color: 0x2e2015 }), new THREE.MeshLambertMaterial({ map: T.leaves })];
     case 'whiteboard': return [new THREE.MeshLambertMaterial({ map: T.whiteboard }), new THREE.MeshLambertMaterial({ map: T.metal, color: 0xc8ccd2 })];
     case 'longcounter': case 'shortcounter': return [new THREE.MeshLambertMaterial({ map: T.wood }), new THREE.MeshLambertMaterial({ color: 0xcfc9bd }), new THREE.MeshLambertMaterial({ color: 0x2a201a })];

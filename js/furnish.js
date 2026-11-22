@@ -58,8 +58,8 @@ export function furnish() {
   // ------------------------------------------------------------------ old office (carpet)
   // cleared out: a big open lounge / crash space with couches round the walls, mattresses on the floor,
   // cardboard boxes and crates left from the move, a few floor lamps
-  add('couch', 9, 30.3, 0); add('crate', 9, 28.1, 0.15); add('bottle', 8.8, 28.0, 0); add('takeout', 9.3, 28.2, 0.6);
-  add('couch', 5.0, 18, E); add('couch', 22, 5.2, Math.PI); add('couch', 27.2, 24, W + 0.2);
+  add('bluecouch', 9, 30.3, 0); add('crate', 9, 28.1, 0.15); add('bottle', 8.8, 28.0, 0); add('takeout', 9.3, 28.2, 0.6);
+  add('greencouch', 5.0, 18, E); add('bluecouch', 22, 5.2, Math.PI); add('bluecouch', 27.2, 24, W + 0.2);
   add('mattress', 14.5, 12, 0.3); add('mattress', 20.5, 10, 1.4); add('mattress', 24.5, 16.5, 0.15); add('mattress', 12, 22.5, 2.0);
   add('mattress', 12.1, 22.6, 2.05);                                              // two stacked
   add('lamp', 5, 29.6, 0); add('lamp', 29.8, 21.8, 0); add('lamp', 16.5, 6.2, 0); add('lamp', 19.5, 19.5, 1.1, true);
@@ -93,7 +93,7 @@ export function furnish() {
   workstation(9, 60, E, { pens: true });            // the teacher sits facing the class
   add('plant', 5.5, 45.5, 0); add('plant', 5.5, 74.5, 0);
   for (const x of [14.5, 20, 27]) for (const z of [55, 58.8, 62.6, 66.4]) workstation(x, z, W);
-  add('couch', 30.9, 47.5, W); add('table', 28.9, 47.5, Math.PI / 2); add('couch', 30.9, 72.5, W); add('table', 28.9, 72.5, Math.PI / 2);
+  add('bluecouch', 30.9, 47.5, W); add('table', 28.9, 47.5, Math.PI / 2); add('greencouch', 30.9, 72.5, W); add('table', 28.9, 72.5, Math.PI / 2);
   add('plant', 30.8, 45.4, 0); add('plant', 30.8, 74.6, 0); add('plant', 12.5, 45.3, 0); add('plant', 21.5, 45.3, 0);
   add('trashcan', 7, 46, 0); add('lamp', 30.8, 69.8, 0);
 
@@ -108,7 +108,7 @@ export function furnish() {
   // a kitchenette counter, piles of bottles and trash, knocked-over stuff
   add('mattress', 112.5, 47.2, 0); add('mattress', 112.6, 47.3, 0.08); add('mattress', 112.4, 50.2, 0.05);
   add('babydoll', 112.7, 50.25, 0.4);
-  add('couch', 113.8, 64, W); add('crate', 111.3, 64, 0.2); add('bottle', 111.2, 63.9, 0); add('bottle', 111.45, 64.1, 0); add('takeout', 111.2, 64.25, 1.3);
+  add('greencouch', 113.8, 64, W); add('crate', 111.3, 64, 0.2); add('bottle', 111.2, 63.9, 0); add('bottle', 111.45, 64.1, 0); add('takeout', 111.2, 64.25, 1.3);
   add('lamp', 114.5, 67.2, 0); add('lamp', 108, 72.5, 2.1, true);
   add('longcounter', 90.2, 48.5, Math.PI / 2); add('takeout', 90.1, 47.6, 0.4); add('takeout', 90.3, 49.4, 2.0, true); add('bottle', 90.2, 48.8, 0);
   pile('bottle', 96, 70, 7); pile('bottle', 104, 47.5, 5); pile('takeout', 101, 66, 3, 0.4, 0.5);
@@ -121,7 +121,7 @@ export function furnish() {
   for (const x of [10, 19]) tableSet(x, 111.5, 0, 2);
   add('lamp', 5, 110, 0);
   workstation(28.6, 93.5, W);
-  add('couch', 30.6, 110, W); add('lamp', 30.8, 112.6, 0); add('plant', 30.6, 107.5, 0);
+  add('greencouch', 30.6, 110, W); add('lamp', 30.8, 112.6, 0); add('plant', 30.6, 107.5, 0);
   add('plant', 5.2, 89.6, 0); add('plant', 30.8, 89.6, 0); add('plant', 5.2, 114.6, 0); add('trashcan', 27.2, 96.5, 0);
   add('box', 27.5, 107.8, 0.3); add('box', 27.5, 107.8, 0.1);
 
