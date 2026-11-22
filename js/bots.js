@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=990';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=990';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=990';
-import { propHeight } from './props.js?v=990';
+import { CONFIG } from './config.js?v=1000';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1000';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1000';
+import { propHeight } from './props.js?v=1000';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -324,7 +324,8 @@ function markHot(game, x, z, w) {
   hot.push({ x, z, w, t: game.timeLeft });
   if (hot.length > 24) hot.shift();
 }
-// a suspicious room to search: recent finds / kills, or a spot with lots of knocked-over furniture
+// a suspicious room to search: where props were recently found / killed (knocked-over furniture doesn't
+// count: the seekers knock most of it over themselves)
 function pickSuspiciousArea(game, c) {
   const cands = [];
   for (const h of game._botHot || []) {
@@ -332,19 +333,20 @@ function pickSuspiciousArea(game, c) {
     const d = Math.hypot(h.x - c.x, h.z - c.z);
     if (d < 60) cands.push({ x: h.x, z: h.z, w: h.w * 2 });
   }
-  const tipped = game.props.list.filter((q) => !q.removed && 1 - 2 * (q.quat.x * q.quat.x + q.quat.z * q.quat.z) < 0.9);
-  for (const q of tipped) {
-    let n = 0;
-    for (const o of tipped) if (Math.hypot(o.pos.x - q.pos.x, o.pos.z - q.pos.z) < 7) n++;
-    if (n >= 3 && Math.hypot(q.pos.x - c.x, q.pos.z - c.z) < 60) cands.push({ x: q.pos.x, z: q.pos.z, w: n * 0.4 });
-  }
   if (!cands.length) return null;
   let r = Math.random() * cands.reduce((a, k) => a + k.w, 0);
   return cands.find((k) => (r -= k.w) <= 0) || cands[0];
 }
 
+// map areas (about one room each) for keeping track of where the seekers have searched
+const AREA = 16;
+const areaKey = (x, z) => Math.floor(x / AREA) + ',' + Math.floor(z / AREA);
+
 function wanderThink(game, c, b) {
   b.state = 'wander';
+  if (game._botVisited && game._botVisitedRound !== game._roundNo) { game._botVisited.clear(); }
+  game._botVisitedRound = game._roundNo;
+  (game._botVisited || (game._botVisited = new Map())).set(areaKey(c.x, c.z), performance.now() / 1000);   // searched here
   // heading somewhere new: they run (mostly). Searching an area / inspecting furniture up close: they walk,
   // and they slow to a walk for the last few metres to look properly
   const goal = b.path && b.path[b.path.length - 1];
@@ -362,10 +364,10 @@ function wanderThink(game, c, b) {
         return;
       }
       b.area = null;
-      if (Math.random() < 0.25 + 0.25 * b.skill) {
+      if (Math.random() < 0.12 + 0.08 * b.skill) {            // only now and then (a little more likely than other spots)
         const a = pickSuspiciousArea(game, c);
         if (a) {
-          b.area = { x: a.x, z: a.z, until: game.timeLeft - rand(10, 20) };
+          b.area = { x: a.x, z: a.z, until: game.timeLeft - rand(6, 12) };
           const p = game.nav.randomPointNear(a.x, a.z, 1, 6);
           setPath(game, c, b, p.x, p.z);
           b.wanderRun = Math.random() < 0.85;                     // heading over there: run
@@ -373,9 +375,28 @@ function wanderThink(game, c, b) {
           return;
         }
       }
-      // seekers search where props like to hide: next to furniture. Then stop and look around a while.
+      // Priority: cover every room. The map is split into areas; the seekers (all of them together) remember
+      // when each area was last searched and head for the one nobody has checked for the longest (not too far
+      // away), then search next to furniture there, where props like to hide.
       let p = null;
-      if (Math.random() < 0.45 + 0.45 * b.skill) {
+      const visited = game._botVisited || (game._botVisited = new Map()), now = performance.now() / 1000;
+      if (Math.random() < 0.8) {
+        let best = null, bestS = -Infinity;
+        for (let k = 0; k < 14; k++) {
+          const q = game.nav.randomPointNear(c.x, c.z, 8, 70);
+          if (!q) continue;
+          const age = Math.min(120, now - (visited.get(areaKey(q.x, q.z)) ?? -1e9));
+          const sc = age - Math.hypot(q.x - c.x, q.z - c.z) * 0.6 + rand(0, 8);
+          if (sc > bestS) { bestS = sc; best = q; }
+        }
+        if (best) {
+          const ak = areaKey(best.x, best.z);
+          const inArea = game.props.list.filter((q) => !q.removed && areaKey(q.pos.x, q.pos.z) === ak);
+          p = inArea.length && Math.random() < 0.45 + 0.45 * b.skill ? spotNear(game, inArea[(Math.random() * inArea.length) | 0]) : best;
+          visited.set(ak, now);                     // claimed: the other seekers go somewhere else
+        }
+      }
+      if (!p && Math.random() < 0.45 + 0.45 * b.skill) {
         const near = game.props.list.filter((q) => { if (q.removed) return false; const d = Math.hypot(q.pos.x - c.x, q.pos.z - c.z); return d > 6 && d < 45; });
         if (near.length) { const q = near[(Math.random() * near.length) | 0]; p = spotNear(game, q); }
       }
