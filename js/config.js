@@ -4,7 +4,7 @@
 // =====================================================================
 
 export const CONFIG = {
-  VERSION: '1.1.0',
+  VERSION: '1.1.1',
   TITLE: 'FIND THE THINGS',
   SUBTITLE: '',
 
@@ -102,8 +102,8 @@ export const CONFIG = {
     // seeker bots
     MOVE_SUSPICION: 70,     // suspicion per second while watching a piece of "furniture" move (100 = attack it)
     STARE_SUSPICION: 40,    // suspicion per second while a seeker looks at a disguised prop up close (more for skilled seekers)
-    CHECK_RANGE: 8,         // seekers sometimes test furniture this close
-    CHECK_CHANCE: 0.024,    // per think, chance to test a nearby prop (real disguised players are tested more by skilled bots)
+    CHECK_RANGE: 10,        // seekers sometimes test furniture this close
+    CHECK_CHANCE: 0.04,    // per think, chance to test a nearby prop (real disguised players are tested more by skilled bots)
     // prop bots
     HIDE_RANGE: 45,         // how far a prop bot walks to find furniture to copy
     PANIC_RANGE: 3,         // a prop bot may run if a seeker comes this close
