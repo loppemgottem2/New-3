@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=1030';
-import { CONFIG } from './config.js?v=1030';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=1030';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=1030';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=1030';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=1030';
-import { Ragdoll } from './ragdoll.js?v=1030';
-import { Audio } from './audio.js?v=1030';
-import { initBrain, updateBots } from './bots.js?v=1030';
+import * as THREE from '../vendor/three.module.min.js?v=1040';
+import { CONFIG } from './config.js?v=1040';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=1040';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=1040';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=1040';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=1040';
+import { Ragdoll } from './ragdoll.js?v=1040';
+import { Audio } from './audio.js?v=1040';
+import { initBrain, updateBots } from './bots.js?v=1040';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -600,7 +600,8 @@ export class Game {
   damage(target, attacker, amount, cause, impulse) {
     if (!target.alive) return;
     // (bot stats) a seeker that reasoned its way to a still / anchored prop and hit it: a logic find
-    if (attacker && attacker.brain && attacker.brain.logicTarget === target.id) { attacker.brain.logicHits = (attacker.brain.logicHits || 0) + 1; attacker.brain.logicTarget = null; }
+    // (moving props don't count either way: they're easy to find by their movement)
+    if (attacker && attacker.brain && attacker.brain.logicTarget === target.id && (target.anchored || (target.stillT || 0) >= 0.5)) { attacker.brain.logicHits = (attacker.brain.logicHits || 0) + 1; attacker.brain.logicTarget = null; }
     target.hp -= amount;
     if (target.hp <= 0) { target.hp = 0; this.kill(target, attacker, cause, impulse); return; }
     this.emit({ e: 'hit', id: target.id, p: [r2(target.x), r2(target.y + 0.6), r2(target.z)] });
@@ -610,7 +611,7 @@ export class Game {
   // Seekers lose health for attacking real furniture (so they can't just shoot everything)
   wrongProp(c) {
     if (!c.alive || c.team !== 'seeker') return;
-    if (c.brain) c.brain.wrongHits = (c.brain.wrongHits || 0) + 1;   // (bot stats)
+    if (c.brain && c.brain.targetProp) c.brain.wrongHits = (c.brain.wrongHits || 0) + 1;   // (bot stats: a furniture test that was real furniture)
     c.hp -= TM.WRONG_PROP_DAMAGE;
     this.emit({ e: 'msg', text: `−${TM.WRONG_PROP_DAMAGE} HP`, color: '#f66' }, [c.id]);
     if (c.hp <= 0) this.kill(c, null, 'penalty', { x: 0, y: 0.5, z: 0 });
