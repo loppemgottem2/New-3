@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=870';
-import { CONFIG } from './config.js?v=870';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=870';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=870';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=870';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=870';
-import { Ragdoll } from './ragdoll.js?v=870';
-import { Audio } from './audio.js?v=870';
-import { initBrain, updateBots } from './bots.js?v=870';
+import * as THREE from '../vendor/three.module.min.js?v=880';
+import { CONFIG } from './config.js?v=880';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=880';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=880';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=880';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=880';
+import { Ragdoll } from './ragdoll.js?v=880';
+import { Audio } from './audio.js?v=880';
+import { initBrain, updateBots } from './bots.js?v=880';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -1444,9 +1444,29 @@ export class Game {
     if (!screen && this.me && this.me.team === 'prop') {
       const cx = window.innerWidth / 2, cy = window.innerHeight * PROP_AIM_Y, R = PROP_AIM_R;
       for (const [dx, dy] of PROP_AIM_PTS) { const p = this.pickPropAt({ x: cx + dx * R, y: cy + dy * R }); if (p) return p; }
-      return null;
+      return this.nearestPropInReach();
     }
     return this.pickPropAt(screen);
+  }
+  // nothing under the aim ring (easy to miss while running around): the closest furniture within reach
+  // that you can see from your head, preferring things in front of the camera
+  nearestPropInReach() {
+    const me = this.me;
+    const fx = forwardX(this.camYaw), fz = forwardZ(this.camYaw);
+    const hy = me.y + 1.4;
+    let best = null, bestS = Infinity;
+    for (const p of this.props.list) {
+      if (p.removed || p.pos.y < -20) continue;
+      const dx = p.pos.x - me.x, dz = p.pos.z - me.z, d = Math.hypot(dx, dz);
+      if (d > TM.DISGUISE_RANGE + p.r + 0.5) continue;
+      const ahead = d > 1e-3 ? (dx * fx + dz * fz) / d : 1;      // 1 = straight ahead, -1 = behind
+      const sc = d * (2 - ahead);
+      if (sc >= bestS) continue;
+      const ty = p.pos.y + 0.2, dy = ty - hy, L = Math.hypot(dx, dy, dz) || 1e-6;
+      if (raycastMap(this.map, me.x, hy, me.z, dx / L, dy / L, dz / L, L) < L - p.r - 0.1) continue;   // behind a wall
+      best = p; bestS = sc;
+    }
+    return best;
   }
   pickPropAt(screen = null) {
     const me = this.me;

@@ -2,21 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=870';
-import { CONFIG } from './config.js?v=870';
-import { store, makeCode, clamp } from './util.js?v=870';
-import { makeTextures } from './textures.js?v=870';
-import { GameMap, SUN_DIR } from './map.js?v=870';
-import { NavGrid } from './nav.js?v=870';
-import { Input, isTouchDevice } from './input.js?v=870';
-import { UI } from './ui.js?v=870';
-import { Audio } from './audio.js?v=870';
-import { Game } from './game.js?v=870';
-import { PropSystem } from './props.js?v=870';
-import { Culler } from './cull.js?v=870';
-import { LevelCuller } from './levelcull.js?v=870';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=870';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=870';
+import * as THREE from '../vendor/three.module.min.js?v=880';
+import { CONFIG } from './config.js?v=880';
+import { store, makeCode, clamp } from './util.js?v=880';
+import { makeTextures } from './textures.js?v=880';
+import { GameMap, SUN_DIR } from './map.js?v=880';
+import { NavGrid } from './nav.js?v=880';
+import { Input, isTouchDevice } from './input.js?v=880';
+import { UI } from './ui.js?v=880';
+import { Audio } from './audio.js?v=880';
+import { Game } from './game.js?v=880';
+import { PropSystem } from './props.js?v=880';
+import { Culler } from './cull.js?v=880';
+import { LevelCuller } from './levelcull.js?v=880';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=880';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=880';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -295,7 +295,10 @@ function openSettings() {
   else ui.show('settings');
 }
 $('btn-settings').onclick = openSettings;
-$('gearbtn').addEventListener('click', (e) => { e.preventDefault(); openSettings(); });
+// buttons that act on touch-down swallow the 'click' the same tap makes a moment later (it would land on what just opened)
+let swallowClickUntil = 0;
+document.addEventListener('click', (e) => { if (performance.now() < swallowClickUntil) { e.preventDefault(); e.stopPropagation(); } }, { capture: true });
+$('gearbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); swallowClickUntil = performance.now() + 500; openSettings(); });
 $('btn-settings-back').onclick = () => {
   if (game) {
     ui.openOverlay(false); input.setActive(true);
@@ -428,8 +431,8 @@ $('code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') join
 $('btn-return').onclick = () => ui.show('menu');
 
 // X button: in game -> die/spectate -> menu. In menu -> leave the game.
-$('xbtn').addEventListener('click', (e) => {
-  e.preventDefault();
+$('xbtn').addEventListener('pointerdown', (e) => {   // pointerdown: works while another finger is on the joystick (phones skip 'click' then)
+  e.preventDefault(); e.stopPropagation(); swallowClickUntil = performance.now() + 500;
   if (game) { if (ui.overlayOpen) { ui.openOverlay(false); input.setActive(true); } input.press('x'); return; }
   leaveWholeGame();
 });
