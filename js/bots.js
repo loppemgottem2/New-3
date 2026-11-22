@@ -315,40 +315,51 @@ function thinkSeeker(game, c, b) {
 }
 
 // ---------------------------------------------------------------------
-//  How out of place does a piece of furniture look? (seekers reason about what they see)
-//  - another piece of the same kind nearby / other furniture around it: looks normal
-//  - alone, far from other furniture: odd
-//  - does it belong there? takeout / bottles / keyboards / computers / pen cups go ON tables and desks
-//    (one of those on the floor is very odd), chairs go by tables and desks, swivel chairs by desks,
-//    crates / boxes / barrels with other storage, the doll by the beds... plants, lamps, bins and
-//    couches can be anywhere (hallways, corners)
-//  Returns a weight: ~0.1 (totally normal) ... ~6 (really out of place)
+//  "Does that belong there?" Seekers reason about what they can see, like a person would, by asking a few
+//  questions about a piece of furniture and adding up how suspicious it is:
+//   - Is there another one of these right next to it / other furniture around it? (normal)  Is it all alone? (odd)
+//   - What is it standing on? A beer or takeout belongs on a table, desk, counter or crate - not on a
+//     mattress or a couch, and not just on the floor. A keyboard / computer / pen cup goes on a desk or table.
+//   - Is it somewhere that makes sense? Chairs go by tables and desks, swivel chairs by desks, crates and
+//     barrels with other storage, the doll by the beds...
+//   - Is this a hallway / empty space? Plants, bins, lamps and boxes are fine there; a chair, desk,
+//     table, couch or mattress standing in a corridor isn't.
+//  Returns a suspicion value: ~0.1 (totally normal) ... ~6 (that really doesn't belong there)
 // ---------------------------------------------------------------------
-const ON_TOP = new Set(['bottle', 'takeout', 'keyboard', 'computer', 'pencup']);
+const ON_TOP = { bottle: ['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'longcrate', 'barrel'],
+  takeout: ['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'longcrate'],
+  keyboard: ['desk', 'table'], computer: ['desk', 'table'], pencup: ['desk', 'table'] };
 const STORAGE = ['box', 'crate', 'longcrate', 'barrel'];
 const BELONGS = {
-  chair: [['table', 'desk'], 2.6], swivelchair: [['desk'], 2.6], keyboard: [['desk', 'table'], 1.6], computer: [['desk', 'table'], 1.6],
-  pencup: [['desk', 'table'], 1.6], bottle: [['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'bluecouch', 'greencouch', 'mattress'], 2.0],
-  takeout: [['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'bluecouch', 'greencouch', 'mattress'], 2.0],
+  chair: [['table', 'desk'], 2.6], swivelchair: [['desk'], 2.6],
   box: [STORAGE, 6], crate: [STORAGE, 6], longcrate: [STORAGE, 6], barrel: [STORAGE, 6],
   mattress: [['mattress', 'bluecouch', 'greencouch', 'babydoll'], 6], babydoll: [['mattress', 'bluecouch', 'greencouch'], 4],
   whiteboard: [['desk', 'table'], 8], table: [['chair', 'swivelchair', 'bluecouch', 'greencouch'], 3], desk: [['chair', 'swivelchair', 'computer'], 3],
 };
+const HALLWAY_OK = new Set(['plant', 'trashcan', 'lamp', 'box', 'barrel', 'bottle', 'takeout']);
 function oddness(game, type, x, y, z, self = null) {
-  let same = 0, around = 0, fits = !BELONGS[type];
+  let same = 0, around = 0, near5 = 0, fits = !BELONGS[type], under = null;
   const want = BELONGS[type];
   for (const q of game.props.list) {
     if (q === self || q.removed) continue;
     const d = Math.hypot(q.pos.x - x, q.pos.z - z);
     if (d < 4 && q.type === type) same++;
     if (d < 2.5) around++;
+    if (d < 5) near5++;
     if (want && !fits && d < want[1] && want[0].includes(q.type)) fits = true;
+    if (y > 0.25 && d < q.r + 0.1 && Math.abs(q.top - y) < 0.25) under = q;     // what it's standing on
+  }
+  // "What is it on?" for things that belong on top of something
+  if (ON_TOP[type]) {
+    if (y < 0.25) return 4.5 * (around === 0 ? 1.3 : 1);                     // a beer / takeout / keyboard on the floor
+    if (under && !ON_TOP[type].includes(under.type)) return 3.5;               // a beer on a mattress, a keyboard on a couch...
+    return same > 0 || around >= 2 ? 0.2 : 0.6;
   }
   let w = 1;
-  if (ON_TOP.has(type) && y < 0.3) return 4.5 * (around === 0 ? 1.3 : 1);   // a takeout box / keyboard / bottle just sitting on the floor
-  w *= same > 0 ? 0.3 : 1.5;                    // its twin is right there: normal
+  w *= same > 0 ? 0.3 : 1.5;                    // "there's another one right there": normal
   w *= around >= 2 ? 0.7 : around === 0 ? 1.5 : 1;
-  w *= fits ? 0.5 : 2.2;
+  w *= fits ? 0.5 : 2.2;                        // "does it go with what's around it?"
+  if (near5 <= 1 && !HALLWAY_OK.has(type)) w *= 2.5;   // "a chair standing in the hallway?"
   return w;
 }
 
@@ -583,6 +594,9 @@ function act(game, c, b, dt) {
       // (clumsy bots more than skilled ones, who prefer the gun)
       b.knife = (held === 1 || held === 3) && Math.random() < 0.15 + 0.3 * (1 - b.skill);
       b.melee = held === 3 ? 'crowbar' : held === 1 ? 'knife' : (Math.random() < 0.5 ? 'crowbar' : 'knife');
+      // now and then they decide to throw the knife / crowbar at it instead
+      b.throwPlan = Math.random() < (tp ? 0.06 : 0.12);
+      if (b.throwPlan) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
       // aiming the revolver at something small takes longer (a keyboard is much harder to line up than a person)
       const size = tp ? propHeight(tp.type) : target.disguise ? propHeight(target.disguise) : 1.8;
       b.reactT = Math.max(b.reactT, 0) + clamp((0.9 - size) / 0.9, 0, 1) * (1.0 - 0.45 * b.skill) * rand(0.8, 1.2);
@@ -593,7 +607,7 @@ function act(game, c, b, dt) {
       // and then it's the knife or the crowbar, 50/50
       if (Math.random() < 0.08 + 0.3 * (1 - b.skill)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
     }
-    if (b.knife && !pro && d > 6) b.knife = false;
+    if (b.knife && !pro && d > 6 && !b.throwPlan) b.knife = false;
     // (fall back to the other melee weapon if that one isn't in hand any more, e.g. it was thrown)
     if (b.melee === 'crowbar' && !c.hasCrowbar) b.melee = 'knife';
     if (b.melee !== 'crowbar' && !c.hasKnife) b.melee = c.hasCrowbar ? 'crowbar' : null;
@@ -606,7 +620,10 @@ function act(game, c, b, dt) {
     b.settle = onTarget ? (b.settle || 0) + dt : Math.max(0, (b.settle || 0) - dt * 2);
     const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + 2.5 / Math.max(1, d) + d / 20) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
-      if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
+      if (b.throwPlan && useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && d > 2.5 && d < 10 && err < 6 * DEG && b.settle >= settleNeed) {
+        // throw it (then back to the revolver; they can pick it up again later)
+        game.hostAction(c, 'throw'); b.shots++; b.throwPlan = false; b.knife = false;
+      } else if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
         const miss = target && !tp ? Math.min(0.75, (target.speed || 0) * (0.09 - 0.04 * b.skill) + b.trk.jerk * 0.03 * (1.2 - 0.6 * b.skill)) : 0;
         if (Math.random() < miss) { c.attackCd = W.KNIFE_COOLDOWN; game.emit({ e: 'swing', id: c.id }); }
@@ -821,3 +838,4 @@ function followPath(game, c, b) {
   return { x: (dx / d) * k, z: (dz / d) * k };
 }
 
+export { oddness };   // (used by tests)
