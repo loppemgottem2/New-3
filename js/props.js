@@ -10,10 +10,10 @@
 //  To add a new prop: add an entry to PROP_TYPES (collision parts) and to
 //  buildGeometry() (what it looks like), then give it a letter in map.js.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=940';
-import { CONFIG } from './config.js?v=940';
-import { CELL, CEIL_H, WALL_H } from './map.js?v=940';
-import { footWorld } from './physics.js?v=940';
+import * as THREE from '../vendor/three.module.min.js?v=950';
+import { CONFIG } from './config.js?v=950';
+import { CELL, CEIL_H, WALL_H } from './map.js?v=950';
+import { footWorld } from './physics.js?v=950';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const GRAV = 18;
