@@ -19,9 +19,9 @@
 //  Indoor floors get a ceiling with lights automatically (every 3rd cell).
 //  Keep the outer border made of '#'. All rows must be the same length.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=760';
-import { fbm } from './textures.js?v=760';
-import { furnish, DARK_ROOMS } from './furnish.js?v=760';
+import * as THREE from '../vendor/three.module.min.js?v=820';
+import { fbm } from './textures.js?v=820';
+import { furnish, DARK_ROOMS } from './furnish.js?v=820';
 
 export const CELL = 2;          // meters per character
 export const WALL_H = 6;        // wall height
@@ -630,9 +630,10 @@ export class GameMap {
         (L.off ? dark : panel).flat(L.x - 0.64, L.z - 0.3, L.x + 0.64, L.z + 0.3, CEIL_H - 0.075);
       }
       const pm = new THREE.Mesh(panel.geometry(), new THREE.MeshBasicMaterial({ color: 0xfff6e2, toneMapped: false }));
+      pm.name = 'light-panel';
       group.add(pm);
       // switched-off lights: a dull grey panel (lit only by whatever light reaches the ceiling)
-      if (dark.pos.length) group.add(new THREE.Mesh(dark.geometry(), new THREE.MeshBasicMaterial({ color: 0x34342f, vertexColors: true })));
+      if (dark.pos.length) { const dm = new THREE.Mesh(dark.geometry(), new THREE.MeshBasicMaterial({ color: 0x34342f, vertexColors: true })); dm.name = 'light-panel-off'; group.add(dm); }
     }
 
     // ---- solid backing: every wall, pillar, shelf, counter and the roof slab is a closed box on the inside ----
