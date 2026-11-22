@@ -2,21 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=900';
-import { CONFIG } from './config.js?v=900';
-import { store, makeCode, clamp } from './util.js?v=900';
-import { makeTextures } from './textures.js?v=900';
-import { GameMap, SUN_DIR } from './map.js?v=900';
-import { NavGrid } from './nav.js?v=900';
-import { Input, isTouchDevice } from './input.js?v=900';
-import { UI } from './ui.js?v=900';
-import { Audio } from './audio.js?v=900';
-import { Game } from './game.js?v=900';
-import { PropSystem } from './props.js?v=900';
-import { Culler } from './cull.js?v=900';
-import { LevelCuller } from './levelcull.js?v=900';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=900';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=900';
+import * as THREE from '../vendor/three.module.min.js?v=910';
+import { CONFIG } from './config.js?v=910';
+import { store, makeCode, clamp } from './util.js?v=910';
+import { makeTextures } from './textures.js?v=910';
+import { GameMap, SUN_DIR } from './map.js?v=910';
+import { NavGrid } from './nav.js?v=910';
+import { Input, isTouchDevice } from './input.js?v=910';
+import { UI } from './ui.js?v=910';
+import { Audio } from './audio.js?v=910';
+import { Game } from './game.js?v=910';
+import { PropSystem } from './props.js?v=910';
+import { Culler } from './cull.js?v=910';
+import { LevelCuller } from './levelcull.js?v=910';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=910';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=910';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -418,6 +418,20 @@ $('rotate-ok').onclick = () => { rotateDismissed = true; checkRotate(); };
 
 document.addEventListener('pointerdown', () => Audio.unlock(), { capture: true });
 document.addEventListener('touchstart', () => Audio.unlock(), { capture: true, passive: true });
+// every UI button / menu control makes a little select tick when pressed (back / close / no ones a bit lower).
+// Gameplay buttons that already make their own sound (jump, attack, throw) stay as they are.
+const UI_PRESS = 'button, .btn, .tab, .tbtn, .hb-slot, .inv-slot, .sw, select, input[type=checkbox], input[type=range], .set-row, #tapplay';
+const UI_BACK = /-back$|cancel|-no$|^xbtn$|^inv-x$|^sb-x$/;
+const isBack = (el) => UI_BACK.test(el.id || '') || el.classList.contains('close-x') || el.classList.contains('inv-x');
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target?.closest?.(UI_PRESS);
+  if (!el || el.disabled) return;
+  if (el.matches('[data-btn="jump"], [data-btn="attack"], [data-btn="throw"]')) return;
+  if (el.matches('.set-row') && !el.querySelector('input[type=checkbox], select')) return;   // sliders tick on their own
+  Audio.uiSelect(isBack(el));
+}, { capture: true });
+// keyboard (Enter / Space on a focused button) makes the same tick
+document.addEventListener('click', (e) => { const el = e.detail === 0 && e.target?.closest?.('button, .btn, .tab'); if (el) Audio.uiSelect(isBack(el)); }, { capture: true });
 
 $('btn-quick').onclick = () => quickPlay();
 $('btn-browser').onclick = () => { ui.show('browser'); refreshBrowser(); };
