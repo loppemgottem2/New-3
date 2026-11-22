@@ -599,6 +599,8 @@ export class Game {
   // A seeker hits a prop player: take health off, die at 0
   damage(target, attacker, amount, cause, impulse) {
     if (!target.alive) return;
+    // (bot stats) a seeker that reasoned its way to a still / anchored prop and hit it: a logic find
+    if (attacker && attacker.brain && attacker.brain.logicTarget === target.id) { attacker.brain.logicHits = (attacker.brain.logicHits || 0) + 1; attacker.brain.logicTarget = null; }
     target.hp -= amount;
     if (target.hp <= 0) { target.hp = 0; this.kill(target, attacker, cause, impulse); return; }
     this.emit({ e: 'hit', id: target.id, p: [r2(target.x), r2(target.y + 0.6), r2(target.z)] });
@@ -608,6 +610,7 @@ export class Game {
   // Seekers lose health for attacking real furniture (so they can't just shoot everything)
   wrongProp(c) {
     if (!c.alive || c.team !== 'seeker') return;
+    if (c.brain) c.brain.wrongHits = (c.brain.wrongHits || 0) + 1;   // (bot stats)
     c.hp -= TM.WRONG_PROP_DAMAGE;
     this.emit({ e: 'msg', text: `−${TM.WRONG_PROP_DAMAGE} HP`, color: '#f66' }, [c.id]);
     if (c.hp <= 0) this.kill(c, null, 'penalty', { x: 0, y: 0.5, z: 0 });

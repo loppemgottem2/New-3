@@ -313,7 +313,7 @@ function thinkSeeker(game, c, b) {
       let r = Math.random() * cands.reduce((s, k) => s + k.w ** pw, 0);   // the odder, the much likelier
       const pickd = cands.find((k) => (r -= k.w ** pw) <= 0) || cands[0];
       b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0; b.settle = 0;
-      if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); }
+      if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); b.logicTarget = isStill(pickd.ch) ? pickd.ch.id : null; }
       else { b.targetId = null; b.targetProp = pickd.prop; b.tested.add(pickd.prop.id); }
       return;
     }
