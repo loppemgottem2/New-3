@@ -151,11 +151,12 @@ input[type=range] { padding: 0; accent-color: var(--accent-2); }
 .tbtn.down { background: rgba(255,255,255,0.35); }
 .tbtn.on { background: rgba(68,170,255,0.45); border-color: #8cf; }
 .tbtn.big { width: 92px; height: 92px; font-size: 16px; background: rgba(160,20,20,0.5); border-color: rgba(255,120,120,0.7); }
-#tb-attack { right: calc(26px + var(--sa-r)); bottom: calc(100px + var(--sa-b)); }
-#tb-next { right: calc(38px + var(--sa-r)); bottom: calc(112px + var(--sa-b)); }
-#tb-jump { right: calc(122px + var(--sa-r)); bottom: calc(20px + var(--sa-b)); width: 116px; height: 116px; font-size: 18px; }
-#tb-throw { right: calc(132px + var(--sa-r)); bottom: calc(150px + var(--sa-b)); }
-#tb-run { left: calc(42px + var(--sa-l)); bottom: calc(156px + var(--sa-b)); width: 88px; height: 88px; font-size: 15px; }
+#tb-attack { right: calc(226px + var(--sa-r)); bottom: calc(104px + var(--sa-b)); }
+#tb-next { right: calc(239px + var(--sa-r)); bottom: calc(117px + var(--sa-b)); }
+/* jump mirrors the joystick: same size area, same height, same distance from the edge (centre 140px in, 96px up) */
+#tb-jump { right: calc(72px + var(--sa-r)); bottom: calc(28px + var(--sa-b)); width: 136px; height: 136px; font-size: 20px; }
+#tb-throw { right: calc(107px + var(--sa-r)); bottom: calc(176px + var(--sa-b)); }
+#tb-run { left: calc(221px + var(--sa-l)); bottom: calc(96px + var(--sa-b)); width: 108px; height: 108px; font-size: 17px; }
 #tb-score { right: calc(66px + var(--sa-r)); top: calc(10px + var(--sa-t)); width: 44px; height: 44px; border-radius: 4px; font-size: 20px; }
 .touch-hint { position: absolute; bottom: calc(6px + var(--sa-b)); left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.35); pointer-events: none; }
 
@@ -236,11 +237,11 @@ body:not(.touch) #gearbtn { right: calc(62px + var(--sa-r)); }
 .tbtn { transform: scale(var(--btn-scale)); }
 .tbtn.small { width: 40px; height: 40px; font-size: 20px; border-radius: 8px; }
 /* left-handed: mirror the button layout */
-body.lefty #tb-attack { right: auto; left: calc(26px + var(--sa-l)); }
-body.lefty #tb-next { right: auto; left: calc(38px + var(--sa-l)); }
-body.lefty #tb-jump { right: auto; left: calc(122px + var(--sa-l)); }
-body.lefty #tb-throw { right: auto; left: calc(132px + var(--sa-l)); }
-body.lefty #tb-run { left: auto; right: calc(42px + var(--sa-r)); }
+body.lefty #tb-attack { right: auto; left: calc(226px + var(--sa-l)); }
+body.lefty #tb-next { right: auto; left: calc(239px + var(--sa-l)); }
+body.lefty #tb-jump { right: auto; left: calc(72px + var(--sa-l)); }
+body.lefty #tb-throw { right: auto; left: calc(107px + var(--sa-l)); }
+body.lefty #tb-run { left: auto; right: calc(221px + var(--sa-r)); }
 
 /* HUD scale + crosshair styles */
 #hud-id, #hud-timer, #hud-look, #hud-spec, #toasts { zoom: var(--hud-scale); }
