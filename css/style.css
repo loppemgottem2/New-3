@@ -99,6 +99,15 @@ input[type=range] { padding: 0; accent-color: var(--accent-2); }
   display: flex; align-items: center; justify-content: center; touch-action: manipulation;
 }
 #xbtn:active { background: #e53935; }
+/* "Closing game: are you sure?" popup (red X on the menus) — above everything, dims what's behind */
+#confirm-close {
+  position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center;
+  padding: calc(16px + var(--sa-t)) calc(16px + var(--sa-r)) calc(16px + var(--sa-b)) calc(16px + var(--sa-l));
+  background: rgba(0, 0, 0, 0.55); touch-action: manipulation;
+}
+.confirm-panel { width: min(320px, 100%); text-align: center; gap: 12px; background: #1c1c1e; }
+.confirm-panel h2 { margin: 0; }
+.confirm-panel .row { margin-top: 4px; }
 
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; text-shadow: 0 1px 3px #000, 0 0 2px #000; }

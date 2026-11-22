@@ -104,6 +104,6 @@ then open http://localhost:8000
 
 Third-party libraries (MIT licensed) are bundled in `vendor/`: three.js r170 and PeerJS 1.5.4.
 
-Cache tip: every file is loaded with the same `?v=NNN` tag (in `index.html` and every `import` line). When you publish a change, bump that number everywhere (search and replace `?v=880`) so phones load all the new files together instead of mixing old and new ones.
+Cache tip: every file is loaded with the same `?v=NNN` tag (in `index.html` and every `import` line). When you publish a change, bump that number everywhere (search and replace `?v=890`) so phones load all the new files together instead of mixing old and new ones.
 
 Tip: open the browser console and type `GMM.game` to inspect the running match.

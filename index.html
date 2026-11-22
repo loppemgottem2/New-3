@@ -11,7 +11,7 @@
   <title>Find the Things</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=880">
+  <link rel="stylesheet" href="css/style.css?v=890">
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -135,6 +135,18 @@
     </div>
   </div>
 
+  <!-- ===================== CLOSE GAME? (red X on the menus) ===================== -->
+  <div id="confirm-close" class="hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-close-title">
+    <div class="panel confirm-panel">
+      <h2 id="confirm-close-title">Closing game</h2>
+      <p class="muted">Are you sure?</p>
+      <div class="row">
+        <button id="btn-close-no" class="btn small">No</button>
+        <button id="btn-close-yes" class="btn small primary">Yes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== HUD ===================== -->
   <div id="hud" class="hidden">
     <div id="hud-timer"></div>
@@ -205,10 +217,10 @@
   <div id="rotate" class="hidden"><div>⟳</div>Rotate your phone sideways for the best experience<button id="rotate-ok" class="btn small">Play anyway</button></div>
 
   <!-- version (bottom-right on the start screen and menus) and FPS counter (top-right) -->
-  <div id="verbadge"><span id="ver-n">v1.0.2</span><span id="ver-info"></span></div>
+  <div id="verbadge"><span id="ver-n">v1.0.3</span><span id="ver-info"></span></div>
   <div id="fps" class="hidden"></div>
 
   <script src="vendor/peerjs.min.js"></script>
-  <script type="module" src="js/main.js?v=880"></script>
+  <script type="module" src="js/main.js?v=890"></script>
 </body>
 </html>

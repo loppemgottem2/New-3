@@ -2,21 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=880';
-import { CONFIG } from './config.js?v=880';
-import { store, makeCode, clamp } from './util.js?v=880';
-import { makeTextures } from './textures.js?v=880';
-import { GameMap, SUN_DIR } from './map.js?v=880';
-import { NavGrid } from './nav.js?v=880';
-import { Input, isTouchDevice } from './input.js?v=880';
-import { UI } from './ui.js?v=880';
-import { Audio } from './audio.js?v=880';
-import { Game } from './game.js?v=880';
-import { PropSystem } from './props.js?v=880';
-import { Culler } from './cull.js?v=880';
-import { LevelCuller } from './levelcull.js?v=880';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=880';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=880';
+import * as THREE from '../vendor/three.module.min.js?v=890';
+import { CONFIG } from './config.js?v=890';
+import { store, makeCode, clamp } from './util.js?v=890';
+import { makeTextures } from './textures.js?v=890';
+import { GameMap, SUN_DIR } from './map.js?v=890';
+import { NavGrid } from './nav.js?v=890';
+import { Input, isTouchDevice } from './input.js?v=890';
+import { UI } from './ui.js?v=890';
+import { Audio } from './audio.js?v=890';
+import { Game } from './game.js?v=890';
+import { PropSystem } from './props.js?v=890';
+import { Culler } from './cull.js?v=890';
+import { LevelCuller } from './levelcull.js?v=890';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=890';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=890';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -297,8 +297,11 @@ function openSettings() {
 $('btn-settings').onclick = openSettings;
 // buttons that act on touch-down swallow the 'click' the same tap makes a moment later (it would land on what just opened)
 let swallowClickUntil = 0;
+let swallowOnUp = false;   // a long press: keep swallowing until the finger lifts
+document.addEventListener('pointerup', () => { if (swallowOnUp) { swallowOnUp = false; swallowClickUntil = Math.max(swallowClickUntil, performance.now() + 400); } }, { capture: true });
+document.addEventListener('pointercancel', () => { swallowOnUp = false; }, { capture: true });
 document.addEventListener('click', (e) => { if (performance.now() < swallowClickUntil) { e.preventDefault(); e.stopPropagation(); } }, { capture: true });
-$('gearbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); swallowClickUntil = performance.now() + 500; openSettings(); });
+$('gearbtn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); swallowClickUntil = performance.now() + 500; swallowOnUp = true; openSettings(); });
 $('btn-settings-back').onclick = () => {
   if (game) {
     ui.openOverlay(false); input.setActive(true);
@@ -432,10 +435,18 @@ $('btn-return').onclick = () => ui.show('menu');
 
 // X button: in game -> die/spectate -> menu. In menu -> leave the game.
 $('xbtn').addEventListener('pointerdown', (e) => {   // pointerdown: works while another finger is on the joystick (phones skip 'click' then)
-  e.preventDefault(); e.stopPropagation(); swallowClickUntil = performance.now() + 500;
+  e.preventDefault(); e.stopPropagation(); swallowClickUntil = performance.now() + 500; swallowOnUp = true;
   if (game) { if (ui.overlayOpen) { ui.openOverlay(false); input.setActive(true); } input.press('x'); return; }
-  leaveWholeGame();
+  showCloseConfirm(true);   // on the menus: ask first, so one stray tap doesn't close the game
 });
+function showCloseConfirm(on) {
+  $('confirm-close').classList.toggle('hidden', !on);
+}
+$('btn-close-no').onclick = () => showCloseConfirm(false);
+$('btn-close-yes').onclick = () => { showCloseConfirm(false); leaveWholeGame(); };
+// tapping the dark area around the box = No
+$('confirm-close').addEventListener('click', (e) => { if (e.target === e.currentTarget) showCloseConfirm(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('confirm-close').classList.contains('hidden')) { e.preventDefault(); showCloseConfirm(false); } });
 function leaveWholeGame() {
   ui.show('left');
   try { window.close(); } catch { /* browsers only allow this for script-opened tabs */ }
