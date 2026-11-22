@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=1000';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1000';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1000';
-import { propHeight } from './props.js?v=1000';
+import { CONFIG } from './config.js?v=1030';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1030';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1030';
+import { propHeight } from './props.js?v=1030';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -33,7 +33,7 @@ function hold(c, item) {
 }
 
 export function initBrain(c) {
-  const skill = Math.random(); // 0 = clumsy, 1 = expert (re-rolled every round)
+  const skill = 0.5;           // every bot plays at the same, medium skill
   return {
     skill,
     state: 'wander',
@@ -43,6 +43,8 @@ export function initBrain(c) {
     lookT: 0, lookYaw: c.yaw,
     susp: new Map(),             // seekers: suspicion of each disguised prop player
     notice: new Map(),           // seekers: how far along they are in noticing each T-posing person (1 = seen)
+    g: c.team === 'seeker' && evo.on ? mutateGenome(GENOME, evo.sigma) : GENOME,   // how this seeker weighs its reasoning
+    kills: 0,
     tested: new Set(),           // seekers: real furniture already tested this round (ids)
     targetId: null,              // seekers: character being attacked
     targetProp: null,            // seekers: real prop being "tested"
@@ -281,32 +283,138 @@ function thinkSeeker(game, c, b) {
   // now and then, test a nearby piece of furniture
   // low health: skilled seekers stop guessing. Careless ones (low skill) keep testing furniture
   // and can end up killing themselves with the penalty.
-  const careful = b.skill > 0.6 && c.hp <= TM.WRONG_PROP_DAMAGE * (1 + 4 * b.skill);
-  if (!careful && Math.random() < B.CHECK_CHANCE) {
+  // "Can I afford to be wrong?" The lower their health, the more out of place something has to look
+  // before they'll risk testing it (but now and then they still gamble, and can die from it)
+  const hpLeft = c.hp / TM.WRONG_PROP_DAMAGE;                 // wrong guesses they can still survive
+  const minOdd = hpLeft <= 2 ? 2.5 : hpLeft <= 4 ? 1.2 : 0;
+  if (Math.random() < B.CHECK_CHANCE * b.g.checkMul) {
     const cands = [];
     for (const p of game.props.list) {
       if (p.removed || b.tested.has(p.id)) continue;                // never tests the same piece twice
       // fallen over / on its side / upside down: a player can't do that, so it must be real furniture
       const q = p.quat; if (1 - 2 * (q.x * q.x + q.z * q.z) < 0.9) continue;
       const d = Math.hypot(p.pos.x - c.x, p.pos.z - c.z);
-      if (d < B.CHECK_RANGE && canSee(game, c, { x: p.pos.x, y: p.y, z: p.pos.z })) cands.push({ prop: p, w: 1 });
+      if (d < B.CHECK_RANGE && canSee(game, c, { x: p.pos.x, y: p.y, z: p.pos.z })) cands.push({ prop: p, w: oddness(game, p.type, p.pos.x, p.y, p.pos.z, p, b.g) });
     }
     for (const o of game.chars.values()) {
       if (!o.alive || o.team !== 'prop' || !o.disguise) continue;
-      if (isStill(o) && !suspects(b, o)) continue;               // a still prop it isn't suspicious of: leave it alone
+      const odd = oddness(game, o.disguise, o.x, o.y, o.z, null, b.g);
+      // a still prop it isn't suspicious of: leave it alone (unless it looks really out of place)
+      if (isStill(o) && !suspects(b, o) && odd < 1.5) continue;
       const d = Math.hypot(o.x - c.x, o.z - c.z);
-      if (d < B.CHECK_RANGE && canSee(game, c, o)) cands.push({ ch: o, w: 1 + 6 * b.skill * b.skill });
+      if (d < B.CHECK_RANGE && canSee(game, c, o)) cands.push({ ch: o, w: odd });
     }
+    // nothing here looks out of place: usually don't bother testing anything (sometimes they still do)
+    const maxW = cands.reduce((m, k) => Math.max(m, k.w), 0);
+    if (cands.length && maxW < b.g.boring && Math.random() < 0.75) cands.length = 0;
+    if (cands.length && maxW < minOdd && Math.random() < 0.9) cands.length = 0;   // too risky for how hurt they are
     if (cands.length) {
-      let r = Math.random() * cands.reduce((s, k) => s + k.w, 0);
-      const pickd = cands.find((k) => (r -= k.w) <= 0) || cands[0];
+      const pw = b.g.pick;
+      let r = Math.random() * cands.reduce((s, k) => s + k.w ** pw, 0);   // the odder, the much likelier
+      const pickd = cands.find((k) => (r -= k.w ** pw) <= 0) || cands[0];
       b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0; b.settle = 0;
-      if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); }
+      if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); b.logicTarget = isStill(pickd.ch) ? pickd.ch.id : null; }
       else { b.targetId = null; b.targetProp = pickd.prop; b.tested.add(pickd.prop.id); }
       return;
     }
   }
   wanderThink(game, c, b);
+}
+
+// ---------------------------------------------------------------------
+//  "Does that belong there?" Seekers reason about what they can see, like a person would, by asking a few
+//  questions about a piece of furniture and adding up how suspicious it is:
+//   - Is there another one of these right next to it / other furniture around it? (normal)  Is it all alone? (odd)
+//   - What is it standing on? A beer or takeout belongs on a table, desk, counter or crate - not on a
+//     mattress or a couch, and not just on the floor. A keyboard / computer / pen cup goes on a desk or table.
+//   - Is it somewhere that makes sense? Chairs go by tables and desks, swivel chairs by desks, crates and
+//     barrels with other storage, the doll by the beds...
+//   - Is this a hallway / empty space? Plants, bins, lamps and boxes are fine there; a chair, desk,
+//     table, couch or mattress standing in a corridor isn't.
+//  Returns a suspicion value: ~0.1 (totally normal) ... ~6 (that really doesn't belong there)
+// ---------------------------------------------------------------------
+const ON_TOP = { bottle: ['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'longcrate', 'barrel'],
+  takeout: ['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'longcrate'],
+  keyboard: ['desk', 'table'], computer: ['desk', 'table'], pencup: ['desk', 'table'] };
+const STORAGE = ['box', 'crate', 'longcrate', 'barrel'];
+const BELONGS = {
+  chair: [['table', 'desk'], 2.6], swivelchair: [['desk'], 2.6],
+  box: [STORAGE, 6], crate: [STORAGE, 6], longcrate: [STORAGE, 6], barrel: [STORAGE, 6],
+  mattress: [['mattress', 'bluecouch', 'greencouch', 'babydoll'], 6], babydoll: [['mattress', 'bluecouch', 'greencouch'], 4],
+  whiteboard: [['desk', 'table'], 8], table: [['chair', 'swivelchair', 'bluecouch', 'greencouch'], 3], desk: [['chair', 'swivelchair', 'computer'], 3],
+};
+const HALLWAY_OK = new Set(['plant', 'trashcan', 'lamp', 'box', 'barrel', 'bottle', 'takeout']);
+// "Do two of these right next to each other make sense?" Chairs round a table, crates stacked together,
+// bottles on a table: yes. Two couches touching, two whiteboards, two lamps or bins side by side, two
+// computers on one spot, two creepy dolls: no. [distance under which a pair looks wrong]
+const BAD_PAIR = { bluecouch: 2.6, greencouch: 2.6, whiteboard: 3, lamp: 1.6, trashcan: 1.4, computer: 0.6, keyboard: 0.4,
+  pencup: 0.4, babydoll: 6, plant: 1.0, mattress: 0.5, table: 0.4, desk: 0.3 };
+
+// The seekers' "thinking weights": how much each question counts. Tuned by evolution: every round each bot
+// seeker thought with a slightly varied copy, the one with the most logic finds (hitting a still / anchored prop
+// it picked by reasoning) and fewest wrong-furniture hits became the default, until the seekers won a round
+// (round 11). These are the winner's weights.
+export const GENOME = {
+  twinNear: 1.209,      // another one of the same kind nearby: looks normal (multiplier)
+  alone: 0.75,         // nothing around it at all
+  crowded: 0.339,       // plenty of furniture around it
+  fits: 0.267,          // goes with what's around it (chairs by tables...)
+  misfit: 2.896,        // doesn't go with anything around it
+  hallway: 0.605,       // a chair / desk / couch... standing in an empty corridor
+  onFloor: 4.734,       // a beer / takeout / keyboard on the floor
+  wrongTop: 1.144,      // standing on something it doesn't belong on (a beer on a mattress)
+  spacing: 1.135,       // much closer to a twin than the others of its kind in the room are to each other
+  badPair: 6.666,       // a duplicate right next to it where that makes no sense
+  pick: 3.043,          // how strongly they go for the oddest thing (1 = proportional, higher = only the oddest)
+  boring: 1.201,        // if nothing looks odder than this, they usually don't test anything
+  checkMul: 1.358,      // how often they consider testing something
+};
+export const evo = { on: false, sigma: 0.25 };      // (tests) every seeker gets a mutated copy of GENOME
+function mutateGenome(g, sigma) {
+  const o = {};
+  for (const k in g) { const n = Math.sqrt(-2 * Math.log(Math.random() || 1e-9)) * Math.cos(2 * Math.PI * Math.random()); o[k] = g[k] * Math.exp(n * sigma); }
+  return o;
+}
+
+function oddness(game, type, x, y, z, self = null, g = GENOME) {
+  let same = 0, around = 0, near5 = 0, fits = !BELONGS[type], under = null, nearestTwin = Infinity;
+  const want = BELONGS[type], ak = areaKey(x, z), roomTwins = [];
+  for (const q of game.props.list) {
+    if (q === self || q.removed) continue;
+    const d = Math.hypot(q.pos.x - x, q.pos.z - z);
+    if (q.type === type) {
+      if (d < 4) same++;
+      if (Math.abs(q.y - y) < 0.4) nearestTwin = Math.min(nearestTwin, d);
+      if (areaKey(q.pos.x, q.pos.z) === ak) roomTwins.push(q);
+    }
+    if (d < 2.5) around++;
+    if (d < 5) near5++;
+    if (want && !fits && d < want[1] && want[0].includes(q.type)) fits = true;
+    if (y > 0.25 && d < q.r + 0.1 && Math.abs(q.top - y) < 0.25) under = q;     // what it's standing on
+  }
+  // "What is it on?" for things that belong on top of something
+  if (ON_TOP[type]) {
+    if (y < 0.25) return g.onFloor * (around === 0 ? 1.3 : 1);                // a beer / takeout / keyboard on the floor
+    if (under && !ON_TOP[type].includes(under.type)) return g.wrongTop;        // a beer on a mattress, a keyboard on a couch...
+    if (BAD_PAIR[type] && nearestTwin < BAD_PAIR[type]) return g.badPair * 0.8;
+    return same > 0 || around >= 2 ? 0.2 : 0.6;
+  }
+  let w = 1;
+  w *= same > 0 ? g.twinNear : g.alone;         // "is there another one of these around?"
+  w *= around >= 2 ? g.crowded : around === 0 ? g.alone : 1;
+  w *= fits ? g.fits : g.misfit;                // "does it go with what's around it?"
+  if (near5 <= 1 && !HALLWAY_OK.has(type)) w *= g.hallway;   // "a chair standing in the hallway?"
+  // "Two of these right next to each other... does that make sense?"
+  if (BAD_PAIR[type] && nearestTwin < BAD_PAIR[type]) w = Math.max(w, 1) * g.badPair;
+  // "The tables in this room are all ~4 m apart, so why is this one 1.5 m from the next?" Compare how close it
+  // is to its nearest twin with how the others of its kind in the room are spaced from each other.
+  if (roomTwins.length >= 2 && nearestTwin < Infinity) {
+    const gaps = roomTwins.map((q) => { let m = Infinity; for (const o of roomTwins) if (o !== q) m = Math.min(m, Math.hypot(o.pos.x - q.pos.x, o.pos.z - q.pos.z)); return m; })
+      .filter((v) => v < Infinity).sort((p1, p2) => p1 - p2);
+    const typical = gaps[gaps.length >> 1];
+    if (typical && nearestTwin < typical * 0.6 && typical - nearestTwin > 0.5) w = Math.max(w, 1) * g.spacing;
+  }
+  return w;
 }
 
 // does this seeker find that still prop suspicious right now? (decided at random, re-decided now and then)
@@ -392,7 +500,15 @@ function wanderThink(game, c, b) {
         if (best) {
           const ak = areaKey(best.x, best.z);
           const inArea = game.props.list.filter((q) => !q.removed && areaKey(q.pos.x, q.pos.z) === ak);
-          p = inArea.length && Math.random() < 0.45 + 0.45 * b.skill ? spotNear(game, inArea[(Math.random() * inArea.length) | 0]) : best;
+          let pick = null;
+          if (inArea.length && Math.random() < 0.45 + 0.45 * b.skill) {
+            // go and look at whatever looks most out of place there (real furniture or a disguised player)
+            const odds = inArea.map((q) => ({ x: q.pos.x, z: q.pos.z, w: oddness(game, q.type, q.pos.x, q.y, q.pos.z, q, b.g) }));
+            for (const o of game.chars.values()) if (o.alive && o.disguise && areaKey(o.x, o.z) === ak) odds.push({ x: o.x, z: o.z, w: oddness(game, o.disguise, o.x, o.y, o.z, null, b.g) });
+            let rr = Math.random() * odds.reduce((a2, k) => a2 + k.w ** b.g.pick, 0);
+            pick = odds.find((k) => (rr -= k.w ** b.g.pick) <= 0) || odds[0];
+          }
+          p = pick ? spotNear(game, { pos: { x: pick.x, z: pick.z }, r: 0.4 }) : best;
           visited.set(ak, now);                     // claimed: the other seekers go somewhere else
         }
       }
@@ -532,6 +648,9 @@ function act(game, c, b, dt) {
       // (clumsy bots more than skilled ones, who prefer the gun)
       b.knife = (held === 1 || held === 3) && Math.random() < 0.15 + 0.3 * (1 - b.skill);
       b.melee = held === 3 ? 'crowbar' : held === 1 ? 'knife' : (Math.random() < 0.5 ? 'crowbar' : 'knife');
+      // now and then they decide to throw the knife / crowbar at it instead
+      b.throwPlan = Math.random() < (tp ? 0.06 : 0.12);
+      if (b.throwPlan) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
       // aiming the revolver at something small takes longer (a keyboard is much harder to line up than a person)
       const size = tp ? propHeight(tp.type) : target.disguise ? propHeight(target.disguise) : 1.8;
       b.reactT = Math.max(b.reactT, 0) + clamp((0.9 - size) / 0.9, 0, 1) * (1.0 - 0.45 * b.skill) * rand(0.8, 1.2);
@@ -542,7 +661,7 @@ function act(game, c, b, dt) {
       // and then it's the knife or the crowbar, 50/50
       if (Math.random() < 0.08 + 0.3 * (1 - b.skill)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
     }
-    if (b.knife && !pro && d > 6) b.knife = false;
+    if (b.knife && !pro && d > 6 && !b.throwPlan) b.knife = false;
     // (fall back to the other melee weapon if that one isn't in hand any more, e.g. it was thrown)
     if (b.melee === 'crowbar' && !c.hasCrowbar) b.melee = 'knife';
     if (b.melee !== 'crowbar' && !c.hasKnife) b.melee = c.hasCrowbar ? 'crowbar' : null;
@@ -555,7 +674,10 @@ function act(game, c, b, dt) {
     b.settle = onTarget ? (b.settle || 0) + dt : Math.max(0, (b.settle || 0) - dt * 2);
     const settleNeed = (0.12 + 0.3 * (1 - b.skill)) * (1 + 2.5 / Math.max(1, d) + d / 20) * (target && !tp ? 1 + Math.min(1.5, (target.speed || 0) / 4) : 1) * (b.shots > 0 ? 0.5 : 1);
     if (visible && !blocked && b.reactT <= 0 && c.attackCd <= 0 && game.phase === 'play') {
-      if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
+      if (b.throwPlan && useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && d > 2.5 && d < 10 && err < 6 * DEG && b.settle >= settleNeed) {
+        // throw it (then back to the revolver; they can pick it up again later)
+        game.hostAction(c, 'throw'); b.shots++; b.throwPlan = false; b.knife = false;
+      } else if (useKnife && weaponOf(c) === (b.melee === 'crowbar' ? 3 : 1) && err < 30 * DEG && d < W.KNIFE_RANGE * 0.95) {
         // a moving, dodging target is hard to stab: sometimes the swing just misses
         const miss = target && !tp ? Math.min(0.75, (target.speed || 0) * (0.09 - 0.04 * b.skill) + b.trk.jerk * 0.03 * (1.2 - 0.6 * b.skill)) : 0;
         if (Math.random() < miss) { c.attackCd = W.KNIFE_COOLDOWN; game.emit({ e: 'swing', id: c.id }); }
@@ -770,3 +892,4 @@ function followPath(game, c, b) {
   return { x: (dx / d) * k, z: (dz / d) * k };
 }
 
+export { oddness };   // (used by tests)
