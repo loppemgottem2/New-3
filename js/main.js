@@ -2,20 +2,20 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=720';
-import { CONFIG } from './config.js?v=720';
-import { store, makeCode, clamp } from './util.js?v=720';
-import { makeTextures } from './textures.js?v=720';
-import { GameMap, SUN_DIR } from './map.js?v=720';
-import { NavGrid } from './nav.js?v=720';
-import { Input, isTouchDevice } from './input.js?v=720';
-import { UI } from './ui.js?v=720';
-import { Audio } from './audio.js?v=720';
-import { Game } from './game.js?v=720';
-import { PropSystem } from './props.js?v=720';
-import { Culler } from './cull.js?v=720';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=720';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=720';
+import * as THREE from '../vendor/three.module.min.js?v=760';
+import { CONFIG } from './config.js?v=760';
+import { store, makeCode, clamp } from './util.js?v=760';
+import { makeTextures } from './textures.js?v=760';
+import { GameMap, SUN_DIR } from './map.js?v=760';
+import { NavGrid } from './nav.js?v=760';
+import { Input, isTouchDevice } from './input.js?v=760';
+import { UI } from './ui.js?v=760';
+import { Audio } from './audio.js?v=760';
+import { Game } from './game.js?v=760';
+import { PropSystem } from './props.js?v=760';
+import { Culler } from './cull.js?v=760';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=760';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=760';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -64,6 +64,7 @@ const SCHEMA = [
   { tab: 'Graphics', key: 'viewDist', label: 'View distance', type: 'range', min: 50, max: 250, step: 10, fmt: (v) => `${v} m` },
   { tab: 'Graphics', key: 'blood', label: 'Blood', note: 'blood splatter and drops when a prop is hit', type: 'check' },
   { tab: 'Graphics', key: 'shadows', label: 'Shadows', note: 'people and furniture cast shadows under the ceiling lights', type: 'check' },
+  { tab: 'Graphics', key: 'maxMarks', label: 'Bullet holes / blood marks', note: 'how many stay on the walls each round (fewer = faster)', type: 'range', min: 50, max: 500, step: 50, fmt: (v) => `${v}` },
   { tab: 'Graphics', key: 'fog', label: 'Fog', type: 'check' },
   { tab: 'Graphics', key: 'glow', label: 'Light glow', type: 'check' },
   { tab: 'Graphics', key: 'antialias', label: 'Smooth edges (anti-aliasing)', note: 'applies after reloading the page', type: 'check' },
@@ -766,6 +767,7 @@ function startGame(mode, net, opts) {
 // ---------------- skip drawing things hidden behind walls ----------------
 let culler = null;
 const cullItems = [];
+const cullFrom = new THREE.Vector3(), cullFwd = new THREE.Vector3();
 function cullHidden() {
   if (!map) return;
   if (!culler) culler = new Culler(map);
@@ -785,7 +787,22 @@ function cullHidden() {
     it.r = c.disguise ? (c.shapeR || 0.5) : 0.9; it.h = c.disguise ? Math.max(0.2, c.shapeH || 0.5) : 1.85;
     cullItems.push(it);
   }
-  culler.apply(camera.position, cullItems);
+  // bullet holes, cuts, blood: low priority (most are in other rooms during a long round)
+  if (game) for (const dc of game.decals) {
+    const it = dc._cull || (dc._cull = { obj: dc, low: true, x: dc.wx, y: dc.wy - 0.1, z: dc.wz, r: dc.r || 0.3, h: 0.2,
+      set: (v) => { dc.m.visible = v && (!dc.blood || game.bloodShown); } });
+    cullItems.push(it);
+  }
+  // rays start at the camera, unless the camera is in / against a wall (third person in a tight spot):
+  // then from the player's head, so things don't vanish just because the camera touched a wall
+  let from = camera.position;
+  const cp = camera.position, inWall = (x, z) => map.heightAt(x, z) > cp.y - 0.05;
+  if (game && game.me && game.me.alive && (inWall(cp.x, cp.z) || inWall(cp.x + 0.3, cp.z) || inWall(cp.x - 0.3, cp.z) || inWall(cp.x, cp.z + 0.3) || inWall(cp.x, cp.z - 0.3))) {
+    const me = game.me; cullFrom.set(me.rx ?? me.x, (me.ry ?? me.y) + 1.5, me.rz ?? me.z); from = cullFrom;
+  }
+  camera.getWorldDirection(cullFwd);
+  const halfV = (camera.fov * Math.PI / 180) / 2, halfH = Math.atan(Math.tan(halfV) * camera.aspect);
+  culler.apply(from, cullItems, cullFwd, Math.hypot(halfV, halfH));
 }
 
 // ---------------- main loop ----------------
