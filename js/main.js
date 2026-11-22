@@ -2,21 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=1000';
-import { CONFIG } from './config.js?v=1000';
-import { store, makeCode, clamp } from './util.js?v=1000';
-import { makeTextures } from './textures.js?v=1000';
-import { GameMap, SUN_DIR } from './map.js?v=1000';
-import { NavGrid } from './nav.js?v=1000';
-import { Input, isTouchDevice } from './input.js?v=1000';
-import { UI } from './ui.js?v=1000';
-import { Audio } from './audio.js?v=1000';
-import { Game } from './game.js?v=1000';
-import { PropSystem } from './props.js?v=1000';
-import { Culler } from './cull.js?v=1000';
-import { LevelCuller } from './levelcull.js?v=1000';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=1000';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=1000';
+import * as THREE from '../vendor/three.module.min.js?v=1010';
+import { CONFIG } from './config.js?v=1010';
+import { store, makeCode, clamp } from './util.js?v=1010';
+import { makeTextures } from './textures.js?v=1010';
+import { GameMap, SUN_DIR } from './map.js?v=1010';
+import { NavGrid } from './nav.js?v=1010';
+import { Input, isTouchDevice } from './input.js?v=1010';
+import { UI } from './ui.js?v=1010';
+import { Audio } from './audio.js?v=1010';
+import { Game } from './game.js?v=1010';
+import { PropSystem } from './props.js?v=1010';
+import { Culler } from './cull.js?v=1010';
+import { LevelCuller } from './levelcull.js?v=1010';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=1010';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=1010';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)

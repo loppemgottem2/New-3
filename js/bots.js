@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=1000';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1000';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1000';
-import { propHeight } from './props.js?v=1000';
+import { CONFIG } from './config.js?v=1010';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1010';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1010';
+import { propHeight } from './props.js?v=1010';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -33,7 +33,7 @@ function hold(c, item) {
 }
 
 export function initBrain(c) {
-  const skill = Math.random(); // 0 = clumsy, 1 = expert (re-rolled every round)
+  const skill = 0.5;           // every bot plays at the same, medium skill
   return {
     skill,
     state: 'wander',
@@ -289,17 +289,22 @@ function thinkSeeker(game, c, b) {
       // fallen over / on its side / upside down: a player can't do that, so it must be real furniture
       const q = p.quat; if (1 - 2 * (q.x * q.x + q.z * q.z) < 0.9) continue;
       const d = Math.hypot(p.pos.x - c.x, p.pos.z - c.z);
-      if (d < B.CHECK_RANGE && canSee(game, c, { x: p.pos.x, y: p.y, z: p.pos.z })) cands.push({ prop: p, w: 1 });
+      if (d < B.CHECK_RANGE && canSee(game, c, { x: p.pos.x, y: p.y, z: p.pos.z })) cands.push({ prop: p, w: oddness(game, p.type, p.pos.x, p.y, p.pos.z, p) });
     }
     for (const o of game.chars.values()) {
       if (!o.alive || o.team !== 'prop' || !o.disguise) continue;
-      if (isStill(o) && !suspects(b, o)) continue;               // a still prop it isn't suspicious of: leave it alone
+      const odd = oddness(game, o.disguise, o.x, o.y, o.z);
+      // a still prop it isn't suspicious of: leave it alone (unless it looks really out of place)
+      if (isStill(o) && !suspects(b, o) && odd < 1.5) continue;
       const d = Math.hypot(o.x - c.x, o.z - c.z);
-      if (d < B.CHECK_RANGE && canSee(game, c, o)) cands.push({ ch: o, w: 1 + 6 * b.skill * b.skill });
+      if (d < B.CHECK_RANGE && canSee(game, c, o)) cands.push({ ch: o, w: odd });
     }
+    // nothing here looks out of place: usually don't bother testing anything (sometimes they still do)
+    const maxW = cands.reduce((m, k) => Math.max(m, k.w), 0);
+    if (cands.length && maxW < 0.6 && Math.random() < 0.75) cands.length = 0;
     if (cands.length) {
-      let r = Math.random() * cands.reduce((s, k) => s + k.w, 0);
-      const pickd = cands.find((k) => (r -= k.w) <= 0) || cands[0];
+      let r = Math.random() * cands.reduce((s, k) => s + k.w * k.w, 0);   // the odder, the much likelier
+      const pickd = cands.find((k) => (r -= k.w * k.w) <= 0) || cands[0];
       b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0; b.settle = 0;
       if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); }
       else { b.targetId = null; b.targetProp = pickd.prop; b.tested.add(pickd.prop.id); }
@@ -307,6 +312,44 @@ function thinkSeeker(game, c, b) {
     }
   }
   wanderThink(game, c, b);
+}
+
+// ---------------------------------------------------------------------
+//  How out of place does a piece of furniture look? (seekers reason about what they see)
+//  - another piece of the same kind nearby / other furniture around it: looks normal
+//  - alone, far from other furniture: odd
+//  - does it belong there? takeout / bottles / keyboards / computers / pen cups go ON tables and desks
+//    (one of those on the floor is very odd), chairs go by tables and desks, swivel chairs by desks,
+//    crates / boxes / barrels with other storage, the doll by the beds... plants, lamps, bins and
+//    couches can be anywhere (hallways, corners)
+//  Returns a weight: ~0.1 (totally normal) ... ~6 (really out of place)
+// ---------------------------------------------------------------------
+const ON_TOP = new Set(['bottle', 'takeout', 'keyboard', 'computer', 'pencup']);
+const STORAGE = ['box', 'crate', 'longcrate', 'barrel'];
+const BELONGS = {
+  chair: [['table', 'desk'], 2.6], swivelchair: [['desk'], 2.6], keyboard: [['desk', 'table'], 1.6], computer: [['desk', 'table'], 1.6],
+  pencup: [['desk', 'table'], 1.6], bottle: [['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'bluecouch', 'greencouch', 'mattress'], 2.0],
+  takeout: [['table', 'desk', 'longcounter', 'shortcounter', 'crate', 'bluecouch', 'greencouch', 'mattress'], 2.0],
+  box: [STORAGE, 6], crate: [STORAGE, 6], longcrate: [STORAGE, 6], barrel: [STORAGE, 6],
+  mattress: [['mattress', 'bluecouch', 'greencouch', 'babydoll'], 6], babydoll: [['mattress', 'bluecouch', 'greencouch'], 4],
+  whiteboard: [['desk', 'table'], 8], table: [['chair', 'swivelchair', 'bluecouch', 'greencouch'], 3], desk: [['chair', 'swivelchair', 'computer'], 3],
+};
+function oddness(game, type, x, y, z, self = null) {
+  let same = 0, around = 0, fits = !BELONGS[type];
+  const want = BELONGS[type];
+  for (const q of game.props.list) {
+    if (q === self || q.removed) continue;
+    const d = Math.hypot(q.pos.x - x, q.pos.z - z);
+    if (d < 4 && q.type === type) same++;
+    if (d < 2.5) around++;
+    if (want && !fits && d < want[1] && want[0].includes(q.type)) fits = true;
+  }
+  let w = 1;
+  if (ON_TOP.has(type) && y < 0.3) return 4.5 * (around === 0 ? 1.3 : 1);   // a takeout box / keyboard / bottle just sitting on the floor
+  w *= same > 0 ? 0.3 : 1.5;                    // its twin is right there: normal
+  w *= around >= 2 ? 0.7 : around === 0 ? 1.5 : 1;
+  w *= fits ? 0.5 : 2.2;
+  return w;
 }
 
 // does this seeker find that still prop suspicious right now? (decided at random, re-decided now and then)
@@ -392,7 +435,15 @@ function wanderThink(game, c, b) {
         if (best) {
           const ak = areaKey(best.x, best.z);
           const inArea = game.props.list.filter((q) => !q.removed && areaKey(q.pos.x, q.pos.z) === ak);
-          p = inArea.length && Math.random() < 0.45 + 0.45 * b.skill ? spotNear(game, inArea[(Math.random() * inArea.length) | 0]) : best;
+          let pick = null;
+          if (inArea.length && Math.random() < 0.45 + 0.45 * b.skill) {
+            // go and look at whatever looks most out of place there (real furniture or a disguised player)
+            const odds = inArea.map((q) => ({ x: q.pos.x, z: q.pos.z, w: oddness(game, q.type, q.pos.x, q.y, q.pos.z, q) }));
+            for (const o of game.chars.values()) if (o.alive && o.disguise && areaKey(o.x, o.z) === ak) odds.push({ x: o.x, z: o.z, w: oddness(game, o.disguise, o.x, o.y, o.z) });
+            let rr = Math.random() * odds.reduce((a2, k) => a2 + k.w * k.w, 0);
+            pick = odds.find((k) => (rr -= k.w * k.w) <= 0) || odds[0];
+          }
+          p = pick ? spotNear(game, { pos: { x: pick.x, z: pick.z }, r: 0.4 }) : best;
           visited.set(ak, now);                     // claimed: the other seekers go somewhere else
         }
       }
