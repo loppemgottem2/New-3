@@ -2,21 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=890';
-import { CONFIG } from './config.js?v=890';
-import { store, makeCode, clamp } from './util.js?v=890';
-import { makeTextures } from './textures.js?v=890';
-import { GameMap, SUN_DIR } from './map.js?v=890';
-import { NavGrid } from './nav.js?v=890';
-import { Input, isTouchDevice } from './input.js?v=890';
-import { UI } from './ui.js?v=890';
-import { Audio } from './audio.js?v=890';
-import { Game } from './game.js?v=890';
-import { PropSystem } from './props.js?v=890';
-import { Culler } from './cull.js?v=890';
-import { LevelCuller } from './levelcull.js?v=890';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=890';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=890';
+import * as THREE from '../vendor/three.module.min.js?v=900';
+import { CONFIG } from './config.js?v=900';
+import { store, makeCode, clamp } from './util.js?v=900';
+import { makeTextures } from './textures.js?v=900';
+import { GameMap, SUN_DIR } from './map.js?v=900';
+import { NavGrid } from './nav.js?v=900';
+import { Input, isTouchDevice } from './input.js?v=900';
+import { UI } from './ui.js?v=900';
+import { Audio } from './audio.js?v=900';
+import { Game } from './game.js?v=900';
+import { PropSystem } from './props.js?v=900';
+import { Culler } from './cull.js?v=900';
+import { LevelCuller } from './levelcull.js?v=900';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=900';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=900';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
