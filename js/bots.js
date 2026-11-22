@@ -281,8 +281,11 @@ function thinkSeeker(game, c, b) {
   // now and then, test a nearby piece of furniture
   // low health: skilled seekers stop guessing. Careless ones (low skill) keep testing furniture
   // and can end up killing themselves with the penalty.
-  const careful = b.skill > 0.6 && c.hp <= TM.WRONG_PROP_DAMAGE * (1 + 4 * b.skill);
-  if (!careful && Math.random() < B.CHECK_CHANCE) {
+  // "Can I afford to be wrong?" The lower their health, the more out of place something has to look
+  // before they'll risk testing it (but now and then they still gamble, and can die from it)
+  const hpLeft = c.hp / TM.WRONG_PROP_DAMAGE;                 // wrong guesses they can still survive
+  const minOdd = hpLeft <= 2 ? 2.5 : hpLeft <= 4 ? 1.2 : 0;
+  if (Math.random() < B.CHECK_CHANCE) {
     const cands = [];
     for (const p of game.props.list) {
       if (p.removed || b.tested.has(p.id)) continue;                // never tests the same piece twice
@@ -302,6 +305,7 @@ function thinkSeeker(game, c, b) {
     // nothing here looks out of place: usually don't bother testing anything (sometimes they still do)
     const maxW = cands.reduce((m, k) => Math.max(m, k.w), 0);
     if (cands.length && maxW < 0.6 && Math.random() < 0.75) cands.length = 0;
+    if (cands.length && maxW < minOdd && Math.random() < 0.9) cands.length = 0;   // too risky for how hurt they are
     if (cands.length) {
       let r = Math.random() * cands.reduce((s, k) => s + k.w * k.w, 0);   // the odder, the much likelier
       const pickd = cands.find((k) => (r -= k.w * k.w) <= 0) || cands[0];
