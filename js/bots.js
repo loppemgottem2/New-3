@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=920';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=920';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=920';
-import { propHeight } from './props.js?v=920';
+import { CONFIG } from './config.js?v=930';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=930';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=930';
+import { propHeight } from './props.js?v=930';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -42,6 +42,7 @@ export function initBrain(c) {
     waitT: rand(0, 2),
     lookT: 0, lookYaw: c.yaw,
     susp: new Map(),             // seekers: suspicion of each disguised prop player
+    tested: new Set(),           // seekers: real furniture already tested this round (ids)
     targetId: null,              // seekers: character being attacked
     targetProp: null,            // seekers: real prop being "tested"
     reactT: 0, shots: 0,
@@ -251,7 +252,9 @@ function thinkSeeker(game, c, b) {
   if (!careful && Math.random() < B.CHECK_CHANCE) {
     const cands = [];
     for (const p of game.props.list) {
-      if (p.removed) continue;
+      if (p.removed || b.tested.has(p.id)) continue;                // never tests the same piece twice
+      // fallen over / on its side / upside down: a player can't do that, so it must be real furniture
+      const q = p.quat; if (1 - 2 * (q.x * q.x + q.z * q.z) < 0.9) continue;
       const d = Math.hypot(p.pos.x - c.x, p.pos.z - c.z);
       if (d < B.CHECK_RANGE && canSee(game, c, { x: p.pos.x, y: p.y, z: p.pos.z })) cands.push({ prop: p, w: 1 });
     }
@@ -266,9 +269,7 @@ function thinkSeeker(game, c, b) {
       const pickd = cands.find((k) => (r -= k.w) <= 0) || cands[0];
       b.state = 'engage'; b.reactT = reactTime(b); b.shots = 0;
       if (pickd.ch) { b.targetId = pickd.ch.id; b.targetProp = null; b.susp.set(pickd.ch.id, 100); }
-      else { b.targetId = null; b.targetProp = pickd.prop; }
-      // careless seekers hit / shoot the same thing a few times to be sure
-      b.testHits = Math.random() < 0.55 - 0.4 * b.skill ? (Math.random() < 0.5 ? 2 : 3) : 1;
+      else { b.targetId = null; b.targetProp = pickd.prop; b.tested.add(pickd.prop.id); }
       return;
     }
   }
@@ -394,19 +395,19 @@ function act(game, c, b, dt) {
       b.wKey = key; b.closeRolled = false;
       // already holding a melee weapon (knife or crowbar): maybe keep using it
       const held = weaponOf(c);
-      const randomMelee = () => (Math.random() < 0.5 ? 'crowbar' : 'knife');   // knife or crowbar, 50/50
-      if (tp) {
-        // testing a piece of furniture: often walk up and whack it with the crowbar or knife instead of shooting
-        b.knife = Math.random() < 0.45; b.melee = randomMelee();
-      } else {
-        b.knife = (held === 1 || held === 3) && Math.random() < 0.25 + 0.45 * b.skill;
-        b.melee = held === 3 ? 'crowbar' : held === 1 ? 'knife' : randomMelee();
-      }
+      // the revolver is the main weapon. A bot already holding a melee weapon might keep using it
+      // (clumsy bots more than skilled ones, who prefer the gun)
+      b.knife = (held === 1 || held === 3) && Math.random() < 0.15 + 0.3 * (1 - b.skill);
+      b.melee = held === 3 ? 'crowbar' : held === 1 ? 'knife' : (Math.random() < 0.5 ? 'crowbar' : 'knife');
+      // aiming the revolver at something small takes longer (a keyboard is much harder to line up than a person)
+      const size = tp ? propHeight(tp.type) : target.disguise ? propHeight(target.disguise) : 1.8;
+      b.reactT = Math.max(b.reactT, 0) + clamp((0.9 - size) / 0.9, 0, 1) * (1.0 - 0.45 * b.skill) * rand(0.8, 1.2);
     }
     if (!b.knife && !b.closeRolled && d < W.KNIFE_RANGE * 1.2) {
       b.closeRolled = true;
-      // a prop right next to them: pros often go melee, everyone else now and then
-      if (Math.random() < (pro ? 0.3 + (b.skill - 0.7) : 0.25)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
+      // a prop right next to them: now and then they go melee (skilled bots mostly stick to the gun),
+      // and then it's the knife or the crowbar, 50/50
+      if (Math.random() < 0.08 + 0.3 * (1 - b.skill)) { b.knife = true; b.melee = Math.random() < 0.5 ? 'crowbar' : 'knife'; }
     }
     if (b.knife && !pro && d > 6) b.knife = false;
     // (fall back to the other melee weapon if that one isn't in hand any more, e.g. it was thrown)
@@ -425,7 +426,7 @@ function act(game, c, b, dt) {
       } else if (!useKnife && weaponOf(c) === 2 && err < (8 - 5 * b.skill) * DEG && d < 45) {
         // shot spread grows at longer range, while the bot moves, the faster the target moves,
         // the more erratic it is, and now and then just by bad luck (less often for skilled bots)
-        let spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 25) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);
+        let spread = B.AIM_SPREAD_DEG * DEG * (2.0 - 1.6 * b.skill) * rand(0.8, 1.2) * (1 + d / 16) * (c.speed > 1 ? 1.6 - 0.4 * b.skill : 1);
         if (target && !tp) {
           const fast = Math.max(0, (target.speed || 0) - 3) / 3.6;                           // 0 at walking, 1 at full sprint, more when faster
           spread *= 1 + fast * fast * (1.6 - 0.6 * b.skill);                                  // mainly really fast targets
@@ -434,7 +435,7 @@ function act(game, c, b, dt) {
         if (Math.random() < 0.08 - 0.05 * b.skill) spread *= rand(1.6, 2.4);              // an occasional bad shot
         game.gunAttack(c, spread); b.shots++;
       }
-      if (tp && b.shots >= (b.testHits || 1)) { b.targetProp = null; b.state = 'wander'; }   // tested it, move on
+      if (tp && b.shots > 0) { b.targetProp = null; b.state = 'wander'; }   // tested it once, move on
     }
     // positioning: get closer if far / no sight
     if (!sees && Math.hypot(realX - c.x, realZ - c.z) < 1.3) {
