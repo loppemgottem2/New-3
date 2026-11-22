@@ -2,21 +2,21 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=820';
-import { CONFIG } from './config.js?v=820';
-import { store, makeCode, clamp } from './util.js?v=820';
-import { makeTextures } from './textures.js?v=820';
-import { GameMap, SUN_DIR } from './map.js?v=820';
-import { NavGrid } from './nav.js?v=820';
-import { Input, isTouchDevice } from './input.js?v=820';
-import { UI } from './ui.js?v=820';
-import { Audio } from './audio.js?v=820';
-import { Game } from './game.js?v=820';
-import { PropSystem } from './props.js?v=820';
-import { Culler } from './cull.js?v=820';
-import { LevelCuller } from './levelcull.js?v=820';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=820';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=820';
+import * as THREE from '../vendor/three.module.min.js?v=840';
+import { CONFIG } from './config.js?v=840';
+import { store, makeCode, clamp } from './util.js?v=840';
+import { makeTextures } from './textures.js?v=840';
+import { GameMap, SUN_DIR } from './map.js?v=840';
+import { NavGrid } from './nav.js?v=840';
+import { Input, isTouchDevice } from './input.js?v=840';
+import { UI } from './ui.js?v=840';
+import { Audio } from './audio.js?v=840';
+import { Game } from './game.js?v=840';
+import { PropSystem } from './props.js?v=840';
+import { Culler } from './cull.js?v=840';
+import { LevelCuller } from './levelcull.js?v=840';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=840';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=840';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -66,7 +66,6 @@ const SCHEMA = [
   { tab: 'Graphics', key: 'blood', label: 'Blood', note: 'blood splatter and drops when a prop is hit', type: 'check' },
   { tab: 'Graphics', key: 'shadows', label: 'Shadows', note: 'people and furniture cast shadows under the ceiling lights', type: 'check' },
   { tab: 'Graphics', key: 'maxMarks', label: 'Bullet holes / blood marks', note: 'how many stay on the walls each round (fewer = faster)', type: 'range', min: 50, max: 500, step: 50, fmt: (v) => `${v}` },
-  { tab: 'Graphics', key: 'fog', label: 'Fog', type: 'check' },
   { tab: 'Graphics', key: 'glow', label: 'Light glow', type: 'check' },
   { tab: 'Graphics', key: 'antialias', label: 'Smooth edges (anti-aliasing)', note: 'applies after reloading the page', type: 'check' },
   { tab: 'Audio', key: 'volume', label: 'Master volume', type: 'range', min: 0, max: 1.5, step: 0.05, fmt: pct },
@@ -87,7 +86,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 const scene = new THREE.Scene();
 const fog = new THREE.Fog(0xb9c9d8, 40, 140);
-scene.fog = fog;
+scene.fog = null;
 const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.05, 400);
 scene.add(camera);
 
@@ -217,8 +216,8 @@ function applyAll() {
   const pr = clamp(Math.min(window.devicePixelRatio || 1, 2) * settings.renderScale, 0.35, 2.5);
   renderer.setPixelRatio(pr);
   fog.near = settings.viewDist * 0.3; fog.far = settings.viewDist;
-  scene.fog = settings.fog ? fog : null;
-  camera.far = settings.viewDist + 60;
+  scene.fog = null;          // no fog
+  camera.far = Math.max(200, settings.viewDist + 60);   // no fog, so always see across the whole map
   camera.fov = settings.fov;
   if (glow) glow.visible = !!settings.glow;
   setDynLights(+settings.dynLights || 0);

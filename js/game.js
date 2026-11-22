@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=820';
-import { CONFIG } from './config.js?v=820';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=820';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=820';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=820';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=820';
-import { Ragdoll } from './ragdoll.js?v=820';
-import { Audio } from './audio.js?v=820';
-import { initBrain, updateBots } from './bots.js?v=820';
+import * as THREE from '../vendor/three.module.min.js?v=840';
+import { CONFIG } from './config.js?v=840';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=840';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=840';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=840';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=840';
+import { Ragdoll } from './ragdoll.js?v=840';
+import { Audio } from './audio.js?v=840';
+import { initBrain, updateBots } from './bots.js?v=840';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -1438,7 +1438,17 @@ export class Game {
   }
 
   // which real prop is under the crosshair (or under a tap on the screen)?
+  // Props aim with a big ring a bit below the middle of the screen (where your body is), always shown.
+  // Anything inside the ring counts: the middle first, then points around it (closest to the centre wins).
   pickProp(screen = null) {
+    if (!screen && this.me && this.me.team === 'prop') {
+      const cx = window.innerWidth / 2, cy = window.innerHeight * PROP_AIM_Y, R = PROP_AIM_R;
+      for (const [dx, dy] of PROP_AIM_PTS) { const p = this.pickPropAt({ x: cx + dx * R, y: cy + dy * R }); if (p) return p; }
+      return null;
+    }
+    return this.pickPropAt(screen);
+  }
+  pickPropAt(screen = null) {
     const me = this.me;
     const { o, d } = this.screenRay(screen);
     const reach = TM.DISGUISE_RANGE + (this._camActualDist || 0) + 1;
@@ -1470,7 +1480,7 @@ export class Game {
     this.camPitch = clamp(this.camPitch - inp.lookDY, -1.5, 1.5);
     if ((!this.freeCam() || !me.alive) && !me.anchored) { me.yaw = this.camYaw; me.pitch = this.camPitch; }
     // where an attack goes: shift lock = the crosshair; free camera = the tapped / clicked spot
-    const point = !this.freeCam() ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
+    const point = !this.freeCam() || me.team === 'prop' ? null : (inp.tap || inp.point || (inp.attackHeld && !this.ui.isTouch ? this.ui.input?.mouse : null) || null);
 
     if (inp.anchor) this.toggleAnchor();
     if (!me.alive || me.anchored) {
@@ -1767,7 +1777,8 @@ export class Game {
     // who am I looking at? (ray from the camera through the crosshair)
     let look = null;
     // shift lock: what the crosshair points at; free camera: what the mouse hovers (nothing on phones)
-    const hover = !this.freeCam() ? null : this.ui.isTouch ? false : (this.ui.input?.mouse || false);
+    // (props always aim with their ring, so they get the "become" label on phones too)
+    const hover = !this.freeCam() || me.team === 'prop' ? null : this.ui.isTouch ? false : (this.ui.input?.mouse || false);
     if (me.alive && hover !== false) {
       const { o: cp, d } = this.screenRay(hover);
       const wall = raycastMap(this.map, cp.x, cp.y, cp.z, d.x, d.y, d.z, 14 + (this._camActualDist || 0));
@@ -1782,7 +1793,7 @@ export class Game {
       if (look) look = { nick: look.nick, color: look.color };
       if (!look && me.team === 'prop') {
         this._pickT = (this._pickT || 0) - dt;
-        if (this._pickT <= 0) { this._pickT = 0.1; this._pick = this.pickProp(hover); }
+        if (this._pickT <= 0) { this._pickT = 0.1; this._pick = this.pickProp(null); }
         if (this._pick && !me.anchored) look = { nick: `${this.ui.isTouch ? 'Tap' : 'Click'} to become: ${propName(this._pick.type)}`, color: 0xffffff };
       }
       if (!look) {
@@ -1800,7 +1811,7 @@ export class Game {
       hotbar: me.hotbar, backpack: me.backpack, slot: me.slot, hp: me.hp, maxHp: me.maxHp, disguise: me.disguise ? propName(me.disguise) : null,
       propsLeft: this.countAlive('prop'), seekersLeft: this.countAlive('seeker'),
       blind: me.alive && me.team === 'seeker' && this.phase === 'pre',
-      shiftLock: this.shiftLock, crosshair: !this.freeCam() && !me.anchored, anchored: !!me.anchored,
+      shiftLock: this.shiftLock, crosshair: (!this.freeCam() || me.team === 'prop') && !me.anchored, propAim: me.team === 'prop' && !me.anchored, anchored: !!me.anchored,
       server: this.serverLabel, code: this.code, players: this.chars.size,
       deathT: this.deathT, third: this.thirdPerson(),
     });
@@ -1855,6 +1866,11 @@ const BODY_FOOT = [
 // a human prop: the same body plus its T-posed arms (at shoulder height)
 const TPOSE_FOOT = [...BODY_FOOT,
   ...[0.42, 0.56, 0.7, 0.82].flatMap((x) => [x, -x]).map((x) => ({ x, z: 0, r: 0.075, y0: 1.28, y1: 1.5 }))];
+
+// the props' aiming ring: how far down the screen (0 top .. 1 bottom), its radius in pixels, and the
+// spots inside it that are tried (centre first, then a ring halfway out, then the edge)
+const PROP_AIM_Y = 0.6, PROP_AIM_R = 34;
+const PROP_AIM_PTS = [[0, 0], ...[0.5, 1].flatMap((r) => [0, 1, 2, 3, 4, 5, 6, 7].map((k) => [Math.cos(k * Math.PI / 4) * r, Math.sin(k * Math.PI / 4) * r]))];
 
 let DROP_TEX = null;   // round blood-drop sprite, shared by every game
 

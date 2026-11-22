@@ -250,6 +250,10 @@ body.lefty #tb-run { left: auto; right: calc(42px + var(--sa-r)); }
 #crosshair.cross::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
 #crosshair.circle { width: calc(var(--cross, 4px) * 3); height: calc(var(--cross, 4px) * 3); background: none; border: 2px solid rgba(255,255,255,0.85); }
 #crosshair.none { display: none !important; }
+/* props aim with a big ring a little below the middle of the screen (over their body) */
+#crosshair.propring, #crosshair.none.propring { display: block; top: 60%; width: 68px !important; height: 68px !important; background: none; border: 2px solid rgba(255,255,255,0.85); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(0,0,0,0.45); }
+#crosshair.propring::before { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: rgba(255,255,255,0.9); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); }
+#crosshair.propring::after { display: none; }
 #hud-role.prop { color: #5cb8ff; font-weight: bold; }
 #settings .panel > .row:last-child { position: sticky; bottom: -18px; background: var(--panel); padding: 8px 0 4px; margin-bottom: -8px; }
 .editor-panel { gap: 6px; }
