@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=680';
-import { CONFIG } from './config.js?v=680';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=680';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=680';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=680';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=680';
-import { Ragdoll } from './ragdoll.js?v=680';
-import { Audio } from './audio.js?v=680';
-import { initBrain, updateBots } from './bots.js?v=680';
+import * as THREE from '../vendor/three.module.min.js?v=700';
+import { CONFIG } from './config.js?v=700';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=700';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=700';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=700';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=700';
+import { Ragdoll } from './ragdoll.js?v=700';
+import { Audio } from './audio.js?v=700';
+import { initBrain, updateBots } from './bots.js?v=700';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -289,6 +289,33 @@ export class Game {
     return out;
   }
 
+  // A player who joins mid-round plays right away: they replace a bot on the team opposite the host
+  // (a bot seeker if the host is a prop, a bot prop if the host is a seeker), standing where that bot was.
+  // If the round has no bot on that team they take any bot; with no bots at all they watch until next round.
+  joinRound(c) {
+    const host = this.me;
+    const want = host && host.team === 'seeker' ? 'prop' : host && host.team === 'prop' ? 'seeker' : (Math.random() < 0.5 ? 'seeker' : 'prop');
+    const bots = [...this.chars.values()].filter((b) => b.isBot && (b.team === 'seeker' || b.team === 'prop'));
+    const pickFrom = (list) => list.filter((b) => b.alive)[0] ? list.filter((b) => b.alive)[Math.floor(Math.random() * list.filter((b) => b.alive).length)] : list[0];
+    const b = pickFrom(bots.filter((x) => x.team === want)) || pickFrom(bots);
+    if (!b) return;
+    const seeker = b.team === 'seeker';
+    c.team = b.team; c.color = CONFIG.TEAM_COLORS[c.team];
+    c.hasKnife = seeker; c.hasGun = seeker; c.hasCrowbar = seeker;
+    c.hotbar = new Array(INV.HOTBAR).fill(null); c.backpack = new Array(INV.BACKPACK).fill(null);
+    if (seeker) INV.START.forEach((it, k) => { if (k < INV.HOTBAR) c.hotbar[k] = it; else c.backpack[k - INV.HOTBAR] = it; });
+    c.slot = -1; c.lastSlot = 0;
+    c.hp = c.maxHp = seeker ? TM.SEEKER_HP : TM.PROP_HUMAN_HP;
+    c.disguise = null; c.morphCd = 0; c.anchored = false; c.attackCd = 0;
+    c.alive = true; c.spectator = false; c.stamina = P.STAMINA_MAX; c.exhausted = false;
+    c.x = b.x; c.y = b.alive ? b.y : 0; c.z = b.z; c.vx = c.vy = c.vz = 0; c.yaw = b.yaw; c.pitch = 0;
+    c.rx = c.x; c.ry = c.y; c.rz = c.z; c.ryaw = c.yaw;
+    c.spawnAt = performance.now();
+    this.removeChar(b.id);
+    this.emit({ e: 'spawn', x: r2(c.x), y: r2(c.y), z: r2(c.z), yaw: r2(c.yaw) }, [c.id]);
+    this.emit({ e: 'team', team: c.team }, [c.id]);
+  }
+
   endRound(winner, reason = '') {
     if (this.phase !== 'play' && this.phase !== 'pre') return;
     this.phase = 'post';
@@ -392,11 +419,12 @@ export class Game {
       const c = this.addChar(newChar(this.nextId++, nick, false, m.ap));
       c.cid = cid;
       this.cidToId.set(cid, c.id);
-      // the new player spectates until next round; a bot leaves at round end
       this.net.send(cid, {
         t: 'welcome', id: c.id, roster: this.roster(), phase: this.phase, tl: r2(this.timeLeft),
         server: this.serverLabel, code: this.code, props: this.props.fullState(), blood: this.bloodLog,
       });
+      // joining in the middle of a round: take over a bot on the other team from the host
+      if (this.phase === 'pre' || this.phase === 'play') this.joinRound(c);
       this.emit({ e: 'roster', list: this.roster() });
       this.emit({ e: 'msg', text: `${nick} joined the server`, color: '#9ad' });
       if (this.phase === 'waiting') this.timeLeft = Math.min(this.timeLeft, 2);
@@ -1510,8 +1538,9 @@ export class Game {
     }
     const wasGround = me.onGround;
     moveCharacter(me, { mx, mz, run: inp.run, jump: inp.jump && !frozen, wallClimb: me.team === 'prop' }, dt, this.map);
-    if (me.landed > 5) { Audio.land(null, me.landed); this.shake = Math.min(0.3, me.landed * 0.02); }
-    if (wasGround && !me.onGround && me.vy > 0) Audio.jump(null);
+    const floorType = this.map.floorTypeAt(me.x, me.z);
+    if (me.landed > 5) { Audio.land(null, me.landed, floorType); this.shake = Math.min(0.3, me.landed * 0.02); }
+    if (wasGround && !me.onGround && me.vy > 0) Audio.jump(null, floorType);
 
     // don't walk through other people or furniture (soft, so the host can push props)
     for (const o of this.chars.values()) {

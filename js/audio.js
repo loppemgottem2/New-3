@@ -96,47 +96,65 @@ export const Audio = {
     this._tone(d, 70, 0.35, 1.0, 'sine', 0, 35);
     this._noise(d, 0.25, 300, 1, 'lowpass', 0.8);
   },
-  // Footstep matched to the floor. surface = 'tile','wood','carpet','concrete','grass','asphalt','dirty'
+  // a scatter of tiny grains (crunching gravel / grit): n short noise ticks over `spread` seconds
+  _grains(dest, n, spread, fLo, fHi, gain, t0 = 0) {
+    for (let k = 0; k < n; k++) {
+      const t = t0 + (k / n) * spread + Math.random() * (spread / n);
+      this._noise(dest, 0.01 + Math.random() * 0.014, fLo + Math.random() * (fHi - fLo), 2.2, 'bandpass', gain * (1 - (k / n) * 0.55) * (0.6 + Math.random() * 0.6), t);
+    }
+  },
+  // Footstep matched to the floor: a heel strike then the toe, made of shaped noise (no beeping tones).
+  // surface = 'tile','wood','carpet','concrete','grass','asphalt','dirty'
   step(pos, loud = 0.6, surface = 'tile', vol = 1) {
     if (!ctx) return;
     const d = this._out(pos, 4);
-    const g = loud * vol * (pos ? 1.3 : 0.9);
-    const vary = 0.9 + Math.random() * 0.2;
+    const g = loud * vol * (pos ? 1.15 : 0.7);
+    const v = 0.9 + Math.random() * 0.2;
+    const toe = 0.05 + Math.random() * 0.025;
     switch (surface) {
       case 'grass':
-        // soft crunchy rustle: high, airy noise with a slow-ish attack and no knock
-        this._env(d, 'highpass', 2600 * vary, 0.5, g * 0.55, 0.025, 0.16);
-        this._env(d, 'bandpass', 5200 * vary, 0.8, g * 0.3, 0.04, 0.12, 0.03);
-        this._noise(d, 0.08, 300, 0.7, 'lowpass', g * 0.25);
+        // soft blades brushing: a muffled heel and an airy rustle, no click at all
+        this._noise(d, 0.07, 260 * v, 0.7, 'lowpass', g * 0.35);
+        this._env(d, 'bandpass', 3200 * v, 0.6, g * 0.22, 0.02, 0.14);
+        this._env(d, 'highpass', 5000 * v, 0.5, g * 0.1, 0.03, 0.1, toe);
         break;
       case 'carpet':
-        this._noise(d, 0.09, 380 * vary, 0.7, 'lowpass', g * 0.8);
-        this._tone(d, 65 * vary, 0.08, g * 0.35, 'sine');
+        // dull and quiet
+        this._noise(d, 0.08, 320 * v, 0.7, 'lowpass', g * 0.55);
+        this._noise(d, 0.06, 260 * v, 0.7, 'lowpass', g * 0.3, toe);
         break;
       case 'wood':
-        // hollow boards: low knock + a little creak
-        this._tone(d, 160 * vary, 0.1, g * 0.7, 'triangle', 0, 95);
-        this._noise(d, 0.07, 900 * vary, 1.6, 'bandpass', g * 0.55);
-        if (Math.random() < 0.15) this._tone(d, 420 + Math.random() * 200, 0.12, g * 0.08, 'sawtooth', 0.02, 380);
+        // hollow boards: a knock with some body, then the toe
+        this._noise(d, 0.09, 420 * v, 3, 'bandpass', g * 0.7);
+        this._noise(d, 0.05, 180 * v, 1, 'lowpass', g * 0.45);
+        this._noise(d, 0.06, 520 * v, 3, 'bandpass', g * 0.35, toe);
         break;
-      case 'concrete': case 'asphalt':
-        // gritty scuff on hard ground
-        this._noise(d, 0.06, 1500 * vary, 1.1, 'bandpass', g * 0.75);
-        this._noise(d, 0.05, 3200, 0.9, 'highpass', g * 0.25, 0.012);
-        this._tone(d, 85 * vary, 0.06, g * 0.45, 'sine');
+      case 'asphalt':
+        // gravelly outdoor ground: heel thud + a scatter of little stones crunching under the shoe
+        this._noise(d, 0.06, 240 * v, 0.8, 'lowpass', g * 0.5);
+        this._grains(d, 7, 0.09, 1800, 4200, g * 0.16, 0.005);
+        this._grains(d, 4, 0.06, 1500, 3500, g * 0.1, toe);
         break;
-      default: // tile: a firm, short "tock" (no hiss)
-        this._noise(d, 0.04, 1100 * vary, 1.2, 'lowpass', g * 0.8);
-        this._tone(d, 210 * vary, 0.05, g * 0.45, 'triangle', 0, 150);
-        this._tone(d, 95, 0.06, g * 0.35, 'sine');
+      case 'concrete':
+        // hard stone floor: a dry, gritty scuff (heel, then toe), a touch of grit on top
+        this._noise(d, 0.05, 700 * v, 1.2, 'bandpass', g * 0.55);
+        this._noise(d, 0.05, 200 * v, 0.8, 'lowpass', g * 0.4);
+        this._grains(d, 3, 0.05, 2500, 4500, g * 0.07, 0.01);
+        this._noise(d, 0.045, 900 * v, 1.2, 'bandpass', g * 0.3, toe);
+        break;
+      default: // tile (and the trashed room): a crisp heel click and a lighter toe click
+        this._noise(d, 0.03, 1700 * v, 1.8, 'bandpass', g * 0.5);
+        this._noise(d, 0.05, 220 * v, 0.8, 'lowpass', g * 0.4);
+        this._noise(d, 0.025, 2000 * v, 1.8, 'bandpass', g * 0.28, toe);
         break;
     }
   },
   // filtered noise with a soft attack (rustles)
-  _env(dest, type, freq, q, gain, attack, dur, t0 = 0) {
+  _env(dest, type, freq, q, gain, attack, dur, t0 = 0, sweepTo = null) {
     const now = ctx.currentTime + t0;
     const src = ctx.createBufferSource(); src.buffer = noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, now + dur);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(gain, now + attack);
@@ -144,18 +162,25 @@ export const Audio = {
     src.connect(f); f.connect(g); g.connect(dest);
     src.start(now, Math.random() * 0.5); src.stop(now + dur + 0.05);
   },
-  jump(pos) {
+  // jumping: the shoes push off the floor (a short scuff) and the clothes swish; no pitched "breath"
+  jump(pos, surface = 'tile') {
     if (!ctx) return;
     const d = this._out(pos, 4);
-    this._noise(d, 0.18, 700, 1.2, 'bandpass', 0.55, 0, 1600); // cloth whoosh
-    this._tone(d, 180, 0.12, 0.25, 'sine', 0, 140);              // little breath
+    const g = pos ? 0.8 : 0.55;
+    if (surface === 'grass') this._env(d, 'bandpass', 2800, 0.6, g * 0.22, 0.01, 0.12);
+    else if (surface === 'asphalt') { this._noise(d, 0.05, 260, 0.8, 'lowpass', g * 0.35); this._grains(d, 5, 0.06, 1800, 4000, g * 0.12); }
+    else if (surface === 'carpet') this._noise(d, 0.06, 300, 0.7, 'lowpass', g * 0.35);
+    else this._noise(d, 0.04, surface === 'wood' ? 450 : 900, 1.4, 'bandpass', g * 0.4);
+    this._env(d, 'bandpass', 1100, 0.7, g * 0.16, 0.03, 0.2, 0.01, 600);   // cloth swish
   },
-  land(pos, impact = 8) {
+  // landing: a body thud that gets heavier with the fall, plus a firm footstep on that floor
+  land(pos, impact = 8, surface = 'tile') {
     if (!ctx) return;
     const d = this._out(pos, 4);
-    const k = Math.min(1.6, impact / 7);
-    this._tone(d, 75, 0.22, 0.9 * k, 'sine', 0, 38);
-    this._noise(d, 0.16, 450, 1, 'lowpass', 0.9 * k);
+    const k = Math.min(1.4, impact / 8);
+    this._noise(d, 0.14, 180, 0.8, 'lowpass', 0.75 * k);
+    this._tone(d, 70, 0.12, 0.35 * k, 'sine', 0, 45);
+    this.step(pos, 0.9 * k, surface);
   },
   prop(pos, kind = 'wood', v = 0.5) {
     if (!ctx) return;
@@ -174,15 +199,15 @@ export const Audio = {
   },
   pickup() {
     if (!ctx) return;
-    this._tone(master, 880, 0.1, 0.45, 'square'); this._tone(master, 1320, 0.15, 0.4, 'square', 0.08);
+    this._tone(master, 660, 0.12, 0.3, 'triangle'); this._tone(master, 990, 0.18, 0.25, 'triangle', 0.08);
   },
   gunReady() {
     if (!ctx) return;
-    this._tone(master, 660, 0.12, 0.3, 'square'); this._tone(master, 990, 0.12, 0.3, 'square', 0.1); this._tone(master, 1320, 0.25, 0.3, 'square', 0.2);
+    this._tone(master, 523, 0.14, 0.25, 'triangle'); this._tone(master, 659, 0.14, 0.25, 'triangle', 0.1); this._tone(master, 784, 0.3, 0.25, 'triangle', 0.2);
   },
   roundStart(seeker) {
     if (!ctx) return;
-    if (seeker) { this._tone(master, 110, 1.2, 0.5, 'sawtooth', 0, 55); this._tone(master, 116, 1.2, 0.3, 'sawtooth'); }
+    if (seeker) { this._tone(master, 110, 1.2, 0.45, 'triangle', 0, 55); this._tone(master, 82, 1.3, 0.35, 'sine'); }
     else { this._tone(master, 330, 0.5, 0.3, 'triangle'); this._tone(master, 440, 0.6, 0.3, 'triangle', 0.15); }
   },
   roundEnd(good) {
@@ -193,12 +218,12 @@ export const Audio = {
   scream(pos) {
     if (!ctx) return;
     const d = this._out(pos, 4);
-    const base = 500 + Math.random() * 300;
-    this._tone(d, base, 0.6, 0.35, 'sawtooth', 0, base * 0.6);
-    this._noise(d, 0.5, base * 2, 3, 'bandpass', 0.2);
+    const base = 330 + Math.random() * 160;
+    this._tone(d, base, 0.55, 0.28, 'triangle', 0, base * 0.65);
+    this._noise(d, 0.45, base * 2.2, 2.5, 'bandpass', 0.14);
   },
   click() {
     if (!ctx) return;
-    this._tone(master, 1200, 0.04, 0.15, 'square');
+    this._tone(master, 900, 0.04, 0.12, 'sine');
   },
 };

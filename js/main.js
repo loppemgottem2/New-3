@@ -2,19 +2,20 @@
 //  MAIN.JS — starts everything: renderer, map, menus, settings,
 //  character editor, matchmaking and the main loop.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=680';
-import { CONFIG } from './config.js?v=680';
-import { store, makeCode, clamp } from './util.js?v=680';
-import { makeTextures } from './textures.js?v=680';
-import { GameMap, SUN_DIR } from './map.js?v=680';
-import { NavGrid } from './nav.js?v=680';
-import { Input, isTouchDevice } from './input.js?v=680';
-import { UI } from './ui.js?v=680';
-import { Audio } from './audio.js?v=680';
-import { Game } from './game.js?v=680';
-import { PropSystem } from './props.js?v=680';
-import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=680';
-import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=680';
+import * as THREE from '../vendor/three.module.min.js?v=700';
+import { CONFIG } from './config.js?v=700';
+import { store, makeCode, clamp } from './util.js?v=700';
+import { makeTextures } from './textures.js?v=700';
+import { GameMap, SUN_DIR } from './map.js?v=700';
+import { NavGrid } from './nav.js?v=700';
+import { Input, isTouchDevice } from './input.js?v=700';
+import { UI } from './ui.js?v=700';
+import { Audio } from './audio.js?v=700';
+import { Game } from './game.js?v=700';
+import { PropSystem } from './props.js?v=700';
+import { Culler } from './cull.js?v=700';
+import { CharacterModel, DEFAULT_LOOK, randomLook, sanitizeLook, FACES, WHITE_SKIN, BLOB_SHADOWS } from './character.js?v=700';
+import { NetHost, NetClient, probePublicServers, publicId, privateId, netAvailable, LOCAL_MODE } from './net.js?v=700';
 
 const $ = (id) => document.getElementById(id);
 let game = null; // the current match (null while in the menu)
@@ -747,9 +748,45 @@ function startGame(mode, net, opts) {
 }
 
 // If the host hides the tab, keep the server ticking (browsers pause requestAnimationFrame)
-setInterval(() => {
-  if (document.hidden && game && game.isHost) step(0.05, true);
-}, 50);
+// A hosting tab keeps running the game while it's hidden (phone screen off, another tab open).
+// Browsers slow normal timers in hidden tabs down to once a second or even once a minute, which made
+// the players who joined think the host had left; a tiny worker's timer keeps ticking at full speed.
+{
+  let lastBg = performance.now();
+  const bgTick = () => {
+    const now = performance.now(), dt = Math.min(0.1, (now - lastBg) / 1000); lastBg = now;
+    if (document.hidden && game && game.isHost) step(dt, true);
+  };
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 50);'], { type: 'text/javascript' })));
+    w.onmessage = bgTick;
+  } catch { setInterval(bgTick, 50); }
+}
+
+// ---------------- skip drawing things hidden behind walls ----------------
+let culler = null;
+const cullItems = [];
+function cullHidden() {
+  if (!map) return;
+  if (!culler) culler = new Culler(map);
+  cullItems.length = 0;
+  const props = game ? game.props.list : menuProps ? menuProps.list : [];
+  // (one reusable entry per object, so nothing new is made every frame)
+  for (const p of props) {
+    if (p.pos.y < -20) continue;                                  // taken away this round
+    const it = p._cull || (p._cull = { obj: p, set: (v) => { p.mesh.visible = v; } });
+    it.x = p.pos.x; it.y = p.y; it.z = p.pos.z; it.r = p.r; it.h = p.h;
+    cullItems.push(it);
+  }
+  if (game) for (const c of game.chars.values()) {
+    if (!c.alive || c === game.me) continue;
+    const it = c._cull || (c._cull = { obj: c, set: (v) => { if (!v) { c.model.root.visible = false; c.model.blob.visible = false; if (c.dmesh) c.dmesh.mesh.visible = false; } } });
+    it.x = c.rx; it.y = c.ry; it.z = c.rz;
+    it.r = c.disguise ? (c.shapeR || 0.5) : 0.9; it.h = c.disguise ? Math.max(0.2, c.shapeH || 0.5) : 1.85;
+    cullItems.push(it);
+  }
+  culler.apply(camera.position, cullItems);
+}
 
 // ---------------- main loop ----------------
 let last = performance.now();
@@ -799,6 +836,7 @@ function frame(now) {
     input.read();
   }
   updateDynLights(dt);
+  cullHidden();
   if (skyDome) { skyDome.position.copy(camera.position); skyDome.position.y -= camera.far * 0.06; skyDome.scale.setScalar(camera.far * 0.9); }
   renderer.render(scene, camera);
   if (settings.fps) {
