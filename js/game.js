@@ -9,15 +9,15 @@
 //  The HOST decides everything important (teams, hits, deaths, pickups,
 //  rounds). Clients only send their own movement and button presses.
 // =====================================================================
-import * as THREE from '../vendor/three.module.min.js?v=990';
-import { CONFIG } from './config.js?v=990';
-import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=990';
-import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=990';
-import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=990';
-import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=990';
-import { Ragdoll } from './ragdoll.js?v=990';
-import { Audio } from './audio.js?v=990';
-import { initBrain, updateBots } from './bots.js?v=990';
+import * as THREE from '../vendor/three.module.min.js?v=1000';
+import { CONFIG } from './config.js?v=1000';
+import { clamp, shuffle, pick, dirFromAngles, forwardX, forwardZ, turnToward, textColor, wrapAngle, DEG, rand } from './util.js?v=1000';
+import { moveCharacter, separateCharacters, footOverlap, raycastMap, rayVsCharacter, rayVsCapsules, rayCapsuleIndex, hasLOS, groundHeight, pushOutOfProps } from './physics.js?v=1000';
+import { CharacterModel, ViewModel, makeKnifeMesh, makeCrowbarMesh, randomLook, sanitizeLook } from './character.js?v=1000';
+import { PropSystem, PROP_LIST, DisguiseMesh, propHeight, propShape, propFoot, rayVsPropShape, propName } from './props.js?v=1000';
+import { Ragdoll } from './ragdoll.js?v=1000';
+import { Audio } from './audio.js?v=1000';
+import { initBrain, updateBots } from './bots.js?v=1000';
 
 const P = CONFIG.PLAYER;
 const W = CONFIG.WEAPONS;
@@ -219,6 +219,7 @@ export class Game {
 
   startRound() {
     this.ensureBots();
+    this._roundNo = (this._roundNo || 0) + 1; this._botHot = [];   // bots' memory of searched areas / finds is per round
     const all = [...this.chars.values()];
     if (all.length < 2) { this.phase = 'waiting'; this.timeLeft = 2; return; }
     this.emit({ e: 'reset' });
