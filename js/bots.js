@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=960';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=960';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=960';
-import { propHeight } from './props.js?v=960';
+import { CONFIG } from './config.js?v=970';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=970';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=970';
+import { propHeight } from './props.js?v=970';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -193,7 +193,7 @@ function thinkProp(game, c, b) {
       // clumsy props panic when a seeker gets close (and moving furniture gets noticed)
       const panic = td < B.PANIC_RANGE * (1.6 - b.skill) && Math.random() < (1 - b.skill) * 0.25;
       if (panic) {
-        b.state = 'flee';
+        b.state = 'flee'; b.climbTry = Math.random() < 0.5;
         const p = game.nav.randomPointNear(c.x, c.z, 10, 26);
         setPath(game, c, b, p.x, p.z);
       }
@@ -212,7 +212,8 @@ function thinkProp(game, c, b) {
     if (b.hideProp) { const s = spotNear(game, b.hideProp); setPath(game, c, b, s.x, s.z); }
     else { const p = game.nav.randomPointNear(c.x, c.z, 4, 20); setPath(game, c, b, p.x, p.z); }
   }
-  b.run = game.phase === 'pre' && game.timeLeft < 12;
+  if (b.hideRun === undefined) b.hideRun = Math.random() < 0.35;
+  b.run = (game.phase === 'pre' && game.timeLeft < 12) || b.hideRun;
   const late = game.phase === 'play' || game.timeLeft < 3;
   if (!b.path || (late && b.hideProp && Math.hypot(b.hideProp.pos.x - c.x, b.hideProp.pos.z - c.z) < TM.DISGUISE_RANGE)) {
     b.path = null;
@@ -260,6 +261,9 @@ function thinkSeeker(game, c, b) {
   for (const [id, v] of b.notice) if (!seenNow.has(id)) b.notice.set(id, Math.max(0, v - 0.3 * I));   // out of sight: slowly forget
 
   if (spotted && b.targetId !== spotted.id) {
+    markHot(game, spotted.x, spotted.z, 1);                    // a prop was found here: worth searching around later
+    b.chaseRun = Math.random() < 0.45;                         // sometimes they sprint after you
+    b.circled = 0; b.lastBearing = undefined; b.behindLimit = 1 + ((Math.random() * 3) | 0) + b.skill * 1.5;   // skilled ones are harder to shake
     // reacting takes longer if they first have to swing their aim round, and the farther away you are
     const ang = viewAngle(c, spotted, spotted.disguise ? propHeight(spotted.disguise) * 0.5 : 1.0);
     b.state = 'engage'; b.targetId = spotted.id; b.targetProp = null; b.shots = 0; b.settle = 0;
@@ -269,6 +273,7 @@ function thinkSeeker(game, c, b) {
   if (b.state === 'engage') {
     const t = game.chars.get(b.targetId);
     if (b.targetProp) return;                                  // finishing a furniture test
+    if (t && !t.alive) markHot(game, t.x, t.z, 2);           // killed one here: there may be more
     if (!t || !t.alive || (b.susp.get(t.id) || 0) < 60) { b.state = 'wander'; b.targetId = null; }
     return;
   }
@@ -276,7 +281,7 @@ function thinkSeeker(game, c, b) {
   // now and then, test a nearby piece of furniture
   // low health: skilled seekers stop guessing. Careless ones (low skill) keep testing furniture
   // and can end up killing themselves with the penalty.
-  const careful = b.skill > 0.45 && c.hp <= TM.WRONG_PROP_DAMAGE * (1 + 4 * b.skill);
+  const careful = b.skill > 0.6 && c.hp <= TM.WRONG_PROP_DAMAGE * (1 + 4 * b.skill);
   if (!careful && Math.random() < B.CHECK_CHANCE) {
     const cands = [];
     for (const p of game.props.list) {
@@ -313,12 +318,56 @@ function suspects(b, o) {
   return r.sus;
 }
 
+// places worth searching: where props were found / killed (shared by every seeker bot, fades after ~90 s)
+function markHot(game, x, z, w) {
+  const hot = game._botHot || (game._botHot = []);
+  hot.push({ x, z, w, t: game.timeLeft });
+  if (hot.length > 24) hot.shift();
+}
+// a suspicious room to search: recent finds / kills, or a spot with lots of knocked-over furniture
+function pickSuspiciousArea(game, c) {
+  const cands = [];
+  for (const h of game._botHot || []) {
+    if (h.t - game.timeLeft > 90) continue;
+    const d = Math.hypot(h.x - c.x, h.z - c.z);
+    if (d < 60) cands.push({ x: h.x, z: h.z, w: h.w * 2 });
+  }
+  const tipped = game.props.list.filter((q) => !q.removed && 1 - 2 * (q.quat.x * q.quat.x + q.quat.z * q.quat.z) < 0.9);
+  for (const q of tipped) {
+    let n = 0;
+    for (const o of tipped) if (Math.hypot(o.pos.x - q.pos.x, o.pos.z - q.pos.z) < 7) n++;
+    if (n >= 3 && Math.hypot(q.pos.x - c.x, q.pos.z - c.z) < 60) cands.push({ x: q.pos.x, z: q.pos.z, w: n * 0.4 });
+  }
+  if (!cands.length) return null;
+  let r = Math.random() * cands.reduce((a, k) => a + k.w, 0);
+  return cands.find((k) => (r -= k.w) <= 0) || cands[0];
+}
+
 function wanderThink(game, c, b) {
-  b.run = false;
   b.state = 'wander';
+  b.run = !!b.path && !!b.wanderRun;                       // some walks through the rooms are at a run
   if (!b.path) {
     b.waitT -= B.THINK_INTERVAL;
     if (b.waitT <= 0) {
+      b.wanderRun = Math.random() < 0.25;
+      // a suspicious room: keep searching around it for a while (longer stops, looking around)
+      if (b.area && game.timeLeft > b.area.until) {
+        const p = game.nav.randomPointNear(b.area.x, b.area.z, 1.5, 8);
+        setPath(game, c, b, p.x, p.z);
+        b.waitT = rand(2.5, 5.5);
+        return;
+      }
+      b.area = null;
+      if (Math.random() < 0.25 + 0.25 * b.skill) {
+        const a = pickSuspiciousArea(game, c);
+        if (a) {
+          b.area = { x: a.x, z: a.z, until: game.timeLeft - rand(10, 20) };
+          const p = game.nav.randomPointNear(a.x, a.z, 1, 6);
+          setPath(game, c, b, p.x, p.z);
+          b.waitT = rand(3, 6);
+          return;
+        }
+      }
       // seekers search where props like to hide: next to furniture. Then stop and look around a while.
       let p = null;
       if (Math.random() < 0.45 + 0.45 * b.skill) {
@@ -379,6 +428,30 @@ function act(game, c, b, dt) {
         }
       }
     }
+    // ----- running round them: circle them (or keep getting behind them) up close 1-3 times (random) and
+    // they can lose you: "where did they go?" -----
+    if (target && !tp && sees && b.behindLimit) {
+      const bd = Math.hypot(target.x - c.x, target.z - c.z);
+      const bearing = yawTo(target.x - c.x, target.z - c.z);
+      if (bd < 7 && b.lastBearing !== undefined) {
+        const off = Math.abs(angleDiff(c.yaw, bearing));
+        // how far round them you went (counts double while you're off to the side / behind their aim)
+        b.circled = (b.circled || 0) + Math.abs(angleDiff(b.lastBearing, bearing)) * (off > 40 * DEG ? 1.5 : 1) / (2 * Math.PI);
+      }
+      b.lastBearing = bd < 7 ? bearing : undefined;
+      if ((b.circled || 0) >= b.behindLimit) {
+        if (Math.random() < 0.7 - 0.4 * b.skill) {
+          b.susp.set(target.id, target.disguise ? 30 : 0); b.notice.set(target.id, 0.2);
+          b.state = 'wander'; b.targetId = null; b.lastSeen = null; b.guess = null; b.area = null; b.circled = 0;
+          const p = game.nav.randomPointNear(c.x, c.z, 3, 10);
+          setPath(game, c, b, p.x, p.z); b.waitT = rand(1, 3);
+          b.lookYaw = c.yaw + rand(-1.5, 1.5); b.lookT = rand(0.8, 1.6);
+          moveCharacter(c, { mx: 0, mz: 0, run: false, jump: false }, dt, game.map);
+          return;
+        }
+        b.behindLimit = (b.circled || 0) + 1 + ((Math.random() * 2) | 0);    // kept track this time
+      }
+    }
     // Tracking: the bot aims at where it THINKS the target is. That point trails behind the real one,
     // catching up faster for skilled bots. Fast, jumpy, zig-zag movement leaves it behind -> misses.
     const key = tp ? 'p' + tp.id : 'c' + target.id;
@@ -409,7 +482,7 @@ function act(game, c, b, dt) {
     facePitch = Math.atan2(ty - (c.y + P.EYE), Math.hypot(tx - c.x, tz - c.z) || 0.01);
     // the bot's aim (crosshair) moves over to you: quick at first, slowing down as it closes in,
     // never snapping. Skilled bots move it faster.
-    const maxTurn = 1.3 + 1.9 * b.skill;                                   // rad/s at most
+    const maxTurn = (1.3 + 1.9 * b.skill) * Math.min(1, 0.55 + d / 8);      // rad/s at most (spinning round to follow someone right next to them is slower)
     const ease = 1 - Math.exp(-(2.2 + 2.8 * b.skill) * dt);
     const yErr = angleDiff(c.yaw, faceYaw), pErr = facePitch - c.pitch;
     c.yaw = turnToward(c.yaw, faceYaw, Math.min(maxTurn * dt, Math.abs(yErr) * ease + 0.02 * dt));
@@ -486,10 +559,10 @@ function act(game, c, b, dt) {
       if (!b.path || b.repathT <= 0) setPath(game, c, b, realX, realZ);
       const v = followPath(game, c, b);
       mx = v.x; mz = v.z;
-      b.run = useKnife ? pro && d > 2.5 : d > 10;
+      b.run = (useKnife ? pro && d > 2.5 : d > 10) || (!!b.chaseRun && !tp && d > 3);
     } else if (useKnife && d > 1.2) {
       mx = dx / d; mz = dz / d; b.path = null;          // knife: pros run them down, everyone else walks in
-      b.run = pro && d > 2.5;
+      b.run = (pro || !!b.chaseRun) && d > 2.5;
     } else b.path = null;                               // gun: hold position and shoot
     // give up on a furniture test that takes too long
     b.engageT = tp ? (b.engageT || 0) + dt : 0;     // (only furniture tests time out; people are chased until lost)
@@ -598,10 +671,43 @@ function act(game, c, b, dt) {
     const dd = Math.hypot(target.x - c.x, target.z - c.z);
     if (target.y - c.y > 0.3 && dd < 2.6 && c.onGround) b.jump = true;
   }
-  if (c.onGround && b.run && b.state === 'flee' && !c.disguise && Math.random() < B.JUMPINESS * dt) b.jump = true;
+  // startled props (fleeing) jump around a lot more
+  if (c.onGround && b.state === 'flee' && !c.disguise && Math.random() < B.JUMPINESS * 3 * dt) b.jump = true;
+  // prop bots on the move now and then just hold jump for a bit (bunny hops; against a wall it climbs it)
+  if (c.team === 'prop' && !c.disguise && (b.state === 'hide' || b.state === 'flee') && (mx || mz)) {
+    if (!(b.holdJumpT > 0) && Math.random() < dt * (b.state === 'flee' ? 0.5 : 0.12)) b.holdJumpT = rand(0.4, 1.6);
+    // and hold run for a while at random
+    if (!(b.holdRunT > 0) && Math.random() < dt * 0.15) b.holdRunT = rand(1, 4);
+  }
+  if (b.holdJumpT > 0) { b.holdJumpT -= dt; b.jump = true; }
+  if (b.holdRunT > 0) { b.holdRunT -= dt; if (c.team === 'prop' && !c.disguise) b.run = true; }
   if (c.onGround && b.state === 'wander' && b.path && Math.random() < 0.04 * dt) b.jump = true;
+  // prop bots on the move: wander in wavy / zig-zag lines instead of straight, and now and then climb a wall
+  if (c.team === 'prop' && !c.disguise && (mx || mz) && (b.state === 'hide' || b.state === 'flee')) {
+    if (b.zig === undefined) { b.zig = Math.random() < 0.7 ? rand(0.25, 0.75) : 0; b.zigF = rand(1.2, 3.2); b.zigP = rand(0, 6); }
+    if (b.zig) {
+      b.zigP += dt * b.zigF * (b.run ? 1.6 : 1);
+      const w = Math.sin(b.zigP) * b.zig, px = -mz, pz = mx;
+      const nx = mx + px * w, nz = mz + pz * w;
+      if (circleFree(game.map, c.x + nx * 0.6, c.z + nz * 0.6, P.RADIUS)) { const l = Math.hypot(nx, nz) || 1; mx = nx / l; mz = nz / l; }
+    }
+    // climbing: running into a wall, keep jumping up it for a bit (fleeing props, or just for fun while hiding)
+    if (!(b.climbT > 0) && ((b.state === 'flee' && b.climbTry && Math.random() < dt * 3) || Math.random() < dt * 0.04)) {
+      // a wall close by? run into it and climb it (holding jump against the wall)
+      const a0 = Math.random() * Math.PI * 2;
+      search: for (const reach of [1.1, 2.0]) for (let k = 0; k < 8; k++) {
+        const a = a0 + k * Math.PI / 4, dx = Math.sin(a), dz = Math.cos(a);
+        if (!circleFree(game.map, c.x + dx * reach, c.z + dz * reach, P.RADIUS)) { b.climbT = rand(1.2, 2.8); b.climbDir = { x: dx, z: dz }; break search; }
+      }
+    }
+  }
+  if (b.climbT > 0) {
+    b.climbT -= dt;
+    mx = b.climbDir.x; mz = b.climbDir.z; b.jump = true;
+    if (b.climbT <= 0) b.climbTry = Math.random() < 0.3;
+  }
   if (frozen) { mx = 0; mz = 0; b.jump = false; c.yaw = yaw0; c.pitch = pitch0; }
-  moveCharacter(c, { mx, mz, run: b.run, jump: b.jump }, dt, game.map);
+  moveCharacter(c, { mx, mz, run: b.run, jump: b.jump, wallClimb: c.team === 'prop' }, dt, game.map);
   b.jump = false;
 
   // ----- stuck detection -----
