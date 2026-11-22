@@ -11,10 +11,10 @@
 //  revolver (real furniture costs them health, so skilled seekers pick
 //  better and stop guessing when they are low).
 // =====================================================================
-import { CONFIG } from './config.js?v=1020';
-import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1020';
-import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1020';
-import { propHeight } from './props.js?v=1020';
+import { CONFIG } from './config.js?v=1030';
+import { rand, clamp, angleDiff, turnToward, yawTo, DEG } from './util.js?v=1030';
+import { moveCharacter, hasLOS, circleFree } from './physics.js?v=1030';
+import { propHeight } from './props.js?v=1030';
 
 const B = CONFIG.BOTS;
 const P = CONFIG.PLAYER;
@@ -350,22 +350,24 @@ const HALLWAY_OK = new Set(['plant', 'trashcan', 'lamp', 'box', 'barrel', 'bottl
 const BAD_PAIR = { bluecouch: 2.6, greencouch: 2.6, whiteboard: 3, lamp: 1.6, trashcan: 1.4, computer: 0.6, keyboard: 0.4,
   pencup: 0.4, babydoll: 6, plant: 1.0, mattress: 0.5, table: 0.4, desk: 0.3 };
 
-// The seekers' "thinking weights": how much each question counts. These were tuned by letting the bot
-// seekers evolve over many rounds (the best prop-finder's weights become everyone's), see GENOME_NOTES.
+// The seekers' "thinking weights": how much each question counts. Tuned by evolution: every round each bot
+// seeker thought with a slightly varied copy, the one with the most logic finds (hitting a still / anchored prop
+// it picked by reasoning) and fewest wrong-furniture hits became the default, until the seekers won a round
+// (round 11). These are the winner's weights.
 export const GENOME = {
-  twinNear: 0.3,      // another one of the same kind nearby: looks normal (multiplier)
-  alone: 1.5,         // nothing around it at all
-  crowded: 0.7,       // plenty of furniture around it
-  fits: 0.5,          // goes with what's around it (chairs by tables...)
-  misfit: 2.2,        // doesn't go with anything around it
-  hallway: 2.5,       // a chair / desk / couch... standing in an empty corridor
-  onFloor: 4.5,       // a beer / takeout / keyboard on the floor
-  wrongTop: 3.5,      // standing on something it doesn't belong on (a beer on a mattress)
-  spacing: 2.4,       // much closer to a twin than the others of its kind in the room are to each other
-  badPair: 3.0,       // a duplicate right next to it where that makes no sense
-  pick: 2.0,          // how strongly they go for the oddest thing (1 = proportional, higher = only the oddest)
-  boring: 0.6,        // if nothing looks odder than this, they usually don't test anything
-  checkMul: 1.0,      // how often they consider testing something
+  twinNear: 1.209,      // another one of the same kind nearby: looks normal (multiplier)
+  alone: 0.75,         // nothing around it at all
+  crowded: 0.339,       // plenty of furniture around it
+  fits: 0.267,          // goes with what's around it (chairs by tables...)
+  misfit: 2.896,        // doesn't go with anything around it
+  hallway: 0.605,       // a chair / desk / couch... standing in an empty corridor
+  onFloor: 4.734,       // a beer / takeout / keyboard on the floor
+  wrongTop: 1.144,      // standing on something it doesn't belong on (a beer on a mattress)
+  spacing: 1.135,       // much closer to a twin than the others of its kind in the room are to each other
+  badPair: 6.666,       // a duplicate right next to it where that makes no sense
+  pick: 3.043,          // how strongly they go for the oddest thing (1 = proportional, higher = only the oddest)
+  boring: 1.201,        // if nothing looks odder than this, they usually don't test anything
+  checkMul: 1.358,      // how often they consider testing something
 };
 export const evo = { on: false, sigma: 0.25 };      // (tests) every seeker gets a mutated copy of GENOME
 function mutateGenome(g, sigma) {
